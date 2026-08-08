@@ -70,6 +70,10 @@ class Game {
     }
     this.attackerId = starter;
     this.defenderId = this.players.find((p) => p !== starter);
+    // Snapshot the defender's hand size *before* any attacks are thrown this
+    // round — this is what caps how many attack cards can go down (up to 6),
+    // not their hand size after they've already spent cards defending.
+    this.roundStartHandSize = this.hands[this.defenderId].length;
   }
 
   other(playerId) {
@@ -119,8 +123,8 @@ class Game {
         return { error: 'Card rank must already be on the table' };
       }
     }
-    const defenderHandSize = this.hands[this.defenderId].length;
-    if (this.table.length >= MAX_TABLE_SLOTS || this.table.length >= defenderHandSize + this._takenCountGuard()) {
+    const cap = Math.min(MAX_TABLE_SLOTS, this.roundStartHandSize);
+    if (this.table.length >= cap) {
       return { error: 'Table is full' };
     }
 
@@ -128,12 +132,6 @@ class Game {
     this.table.push({ attack: card, defend: null });
     this.log.push(`${playerId} attacks with ${card.rank} of ${card.suit}`);
     return { ok: true };
-  }
-
-  _takenCountGuard() {
-    // Defender can never be asked to defend more cards than they originally could hold;
-    // simple guard for MVP (no extra bots), kept at 0.
-    return 0;
   }
 
   defend(playerId, cardId, slotIndex) {
@@ -174,6 +172,7 @@ class Game {
     const prevDefender = this.defenderId;
     this.attackerId = prevDefender;
     this.defenderId = this.other(prevDefender);
+    this.roundStartHandSize = this.hands[this.defenderId].length;
 
     return this._checkGameEnd() || { ok: true };
   }
@@ -193,6 +192,7 @@ class Game {
 
     this._refillHands(this.attackerId, this.defenderId);
     // Attacker stays the same, defender (who took) stays defender
+    this.roundStartHandSize = this.hands[this.defenderId].length;
     return this._checkGameEnd() || { ok: true };
   }
 
