@@ -110,22 +110,22 @@ class Game {
   // --- Actions ---
 
   attack(playerId, cardId) {
-    if (this.status !== 'active') return { error: 'Game is over' };
-    if (playerId !== this.attackerId) return { error: 'Not your turn to attack' };
+    if (this.status !== 'active') return { error: 'Spēle ir beigusies' };
+    if (playerId !== this.attackerId) return { error: 'Nav tava kārta uzbrukt' };
     const hand = this.hands[playerId];
     const card = hand.find((c) => c.id === cardId);
-    if (!card) return { error: 'Card not in hand' };
+    if (!card) return { error: 'Kārts nav tavā rokā' };
 
     const isFirstCard = this.table.length === 0;
     if (!isFirstCard) {
       const ranks = this.ranksOnTable();
       if (!ranks.has(card.rank)) {
-        return { error: 'Card rank must already be on the table' };
+        return { error: 'Šis rangs vēl nav uz galda' };
       }
     }
     const cap = Math.min(MAX_TABLE_SLOTS, this.roundStartHandSize);
     if (this.table.length >= cap) {
-      return { error: 'Table is full' };
+      return { error: 'Uz galda vairs nav vietas' };
     }
 
     this.removeFromHand(playerId, cardId);
@@ -135,14 +135,14 @@ class Game {
   }
 
   defend(playerId, cardId, slotIndex) {
-    if (this.status !== 'active') return { error: 'Game is over' };
-    if (playerId !== this.defenderId) return { error: 'Not your turn to defend' };
+    if (this.status !== 'active') return { error: 'Spēle ir beigusies' };
+    if (playerId !== this.defenderId) return { error: 'Nav tava kārta aizsargāties' };
     const slot = this.table[slotIndex];
-    if (!slot || slot.defend) return { error: 'Invalid slot' };
+    if (!slot || slot.defend) return { error: 'Nederīga vieta' };
     const hand = this.hands[playerId];
     const card = hand.find((c) => c.id === cardId);
-    if (!card) return { error: 'Card not in hand' };
-    if (!this.beats(slot.attack, card)) return { error: 'That card cannot beat the attack card' };
+    if (!card) return { error: 'Kārts nav tavā rokā' };
+    if (!this.beats(slot.attack, card)) return { error: 'Šī kārts nevar sist uzbrukuma kārti' };
 
     this.removeFromHand(playerId, cardId);
     slot.defend = card;
@@ -156,10 +156,10 @@ class Game {
 
   // Attacker declares no more cards to add -> successful defense, cards go to discard
   passTurn(playerId) {
-    if (this.status !== 'active') return { error: 'Game is over' };
-    if (playerId !== this.attackerId) return { error: 'Only the attacker can end the attack' };
-    if (this.table.length === 0) return { error: 'No cards on the table yet' };
-    if (this.openSlots() > 0) return { error: 'Defender still has undefended cards' };
+    if (this.status !== 'active') return { error: 'Spēle ir beigusies' };
+    if (playerId !== this.attackerId) return { error: 'Tikai uzbrucējs var beigt uzbrukumu' };
+    if (this.table.length === 0) return { error: 'Uz galda vēl nav kāršu' };
+    if (this.openSlots() > 0) return { error: 'Aizstāvim vēl ir neaizsargātas kārtis' };
 
     for (const slot of this.table) {
       this.discard.push(slot.attack, slot.defend);
@@ -179,9 +179,9 @@ class Game {
 
   // Defender gives up on this round and takes all table cards into hand
   takeCards(playerId) {
-    if (this.status !== 'active') return { error: 'Game is over' };
-    if (playerId !== this.defenderId) return { error: 'Only the defender can take cards' };
-    if (this.table.length === 0) return { error: 'No cards on the table' };
+    if (this.status !== 'active') return { error: 'Spēle ir beigusies' };
+    if (playerId !== this.defenderId) return { error: 'Tikai aizstāvis var ņemt kārtis' };
+    if (this.table.length === 0) return { error: 'Uz galda nav kāršu' };
 
     for (const slot of this.table) {
       this.hands[playerId].push(slot.attack);

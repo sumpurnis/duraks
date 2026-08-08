@@ -2,8 +2,10 @@
 
 const RANKS_ORDER = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 const RANK_VALUE = Object.fromEntries(RANKS_ORDER.map((r, i) => [r, i + 2]));
-const SUIT_SYMBOL = { clubs: '♣', diamonds: '♦', hearts: '♥', spades: '♠' };
-const SUIT_COLOR = { clubs: 'black', diamonds: 'red', hearts: 'red', spades: 'black' };
+
+function cardFaceClass(card) {
+  return `card-face card-face-${card.rank}-${card.suit}`;
+}
 const USER_KEY = 'duraks_username';
 const PASS_KEY = 'duraks_password'; // MVP-simple auth — see note in chat reply about the tradeoff
 const DRAG_THRESHOLD_PX = 6;
@@ -309,12 +311,9 @@ function render(state) {
 
 function cardChip(card) {
   const span = document.createElement('span');
-  span.className = 'card mini ' + SUIT_COLOR[card.suit];
+  span.className = `card mini ${cardFaceClass(card)}`;
   span.style.position = 'static';
   span.style.transform = 'none';
-  span.style.display = 'inline-flex';
-  span.style.flexDirection = 'column';
-  span.innerHTML = `<span class="rank">${card.rank}</span><span class="suit">${SUIT_SYMBOL[card.suit]}</span>`;
   return span;
 }
 
@@ -355,14 +354,12 @@ function renderTable(state) {
     slotDiv.className = 'slot';
 
     const atk = document.createElement('div');
-    atk.className = `card mini ${SUIT_COLOR[slot.attack.suit]}`;
-    atk.innerHTML = `<span class="rank">${slot.attack.rank}</span><span class="suit">${SUIT_SYMBOL[slot.attack.suit]}</span>`;
+    atk.className = `card mini ${cardFaceClass(slot.attack)}`;
     slotDiv.appendChild(atk);
 
     if (slot.defend) {
       const def = document.createElement('div');
-      def.className = `card mini defend-offset ${SUIT_COLOR[slot.defend.suit]}`;
-      def.innerHTML = `<span class="rank">${slot.defend.rank}</span><span class="suit">${SUIT_SYMBOL[slot.defend.suit]}</span>`;
+      def.className = `card mini defend-offset ${cardFaceClass(slot.defend)}`;
       slotDiv.appendChild(def);
     } else if (state.yourRole === 'defender' && state.status === 'active') {
       slotDiv.dataset.open = 'true';
@@ -400,20 +397,23 @@ function renderHand(state) {
 
   state.hand.forEach((card) => {
     const div = document.createElement('div');
-    div.className = `card ${SUIT_COLOR[card.suit]}`;
-    div.innerHTML = `<span class="rank">${card.rank}</span><span class="suit">${SUIT_SYMBOL[card.suit]}</span>`;
+    div.className = `card ${cardFaceClass(card)}`;
 
     let kind = null;
     if (canAttack && (state.table.length === 0 || ranksOnTable.has(card.rank))) {
       kind = 'attack';
-    } else if (canDefend && state.table.some((s) => !s.defend && cardBeats(s.attack, card, state.trumpSuit))) {
+    } else if (canDefend) {
+      // Every card in the defender's hand stays fully visible and selectable,
+      // same as the attacker's — whether a specific card can actually beat an
+      // open attack is checked at drop/select time (cardBeats) and by the
+      // server, not by dimming cards out of the hand up front.
       kind = 'defend';
     }
+    div.classList.add('playable');
     if (!kind) div.classList.add('disabled');
 
     if (card.id === selectedCardId) {
-      div.style.outline = '3px solid var(--gold-bright)';
-      div.style.transform = 'translateY(-10px)';
+      div.classList.add('selected');
     }
 
     if (kind) attachCardInteraction(div, card, kind);

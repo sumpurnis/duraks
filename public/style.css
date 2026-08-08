@@ -198,15 +198,15 @@ html, body {
 .table-slots {
   display: flex;
   flex-wrap: wrap;
-  gap: 21px;
+  gap: 34px;
   justify-content: center;
-  max-width: 640px;
+  max-width: 960px;
 }
 
 .slot {
   position: relative;
-  width: 93px;
-  height: 135px;
+  width: 186px;
+  height: 270px;
 }
 
 .action-row {
@@ -224,44 +224,62 @@ html, body {
 }
 .hand-cards {
   display: flex;
-  gap: -10px;
+  gap: 0;
   justify-content: center;
   flex-wrap: wrap;
-  min-height: 96px;
+  min-height: 190px;
 }
 
 /* Playing card */
 
 .card {
-  width: 58px;
-  height: 84px;
+  width: 116px;
+  height: 168px;
   background: var(--cream);
-  border-radius: 7px;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
   font-weight: bold;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.4);
   cursor: pointer;
   user-select: none;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
-  margin-left: -14px;
+  margin-left: -64px;
   border: 1px solid rgba(0,0,0,0.15);
 }
 .card:first-child { margin-left: 0; }
-.card:hover { transform: translateY(-10px); box-shadow: 0 6px 14px rgba(0,0,0,0.5); z-index: 5; }
-.card.red { color: var(--red); }
-.card.black { color: var(--ink); }
-.card .rank { font-size: 1.1rem; line-height: 1; }
-.card .suit { font-size: 1.4rem; line-height: 1; }
-.card.disabled { opacity: 0.45; cursor: not-allowed; }
-.card.disabled:hover { transform: none; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+.card:hover { transform: translateY(-16px); box-shadow: 0 10px 20px rgba(0,0,0,0.5); z-index: 5; }
+.card.disabled { cursor: not-allowed; }
+
+.card.selected {
+  outline: 3px solid var(--gold-bright);
+  transform: translateY(-10px);
+  z-index: 4;
+}
+.card.selected:hover { transform: translateY(-16px); z-index: 5; }
+
+.card.playable {
+  animation: card-ready-glow 1.8s ease-in-out infinite;
+}
+.card.playable:hover {
+  animation-play-state: paused;
+  filter: none;
+}
+@keyframes card-ready-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 0 rgba(226, 195, 116, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(226, 195, 116, 0.75));
+  }
+}
 
 .card.mini {
-  width: 62px;
-  height: 90px;
+  width: 124px;
+  height: 180px;
   position: absolute;
   top: 50%;
   left: 50%;
@@ -269,12 +287,12 @@ html, body {
   cursor: default;
 }
 .card.mini.defend-offset {
-  transform: translate(calc(-50% + 14px), calc(-50% + 14px));
+  transform: translate(calc(-50% + 28px), calc(-50% + 28px));
 }
 .card-back {
-  width: 62px;
-  height: 90px;
-  border-radius: 7px;
+  width: 124px;
+  height: 180px;
+  border-radius: 12px;
   background: repeating-linear-gradient(45deg, #7a1f1f, #7a1f1f 6px, #601818 6px, #601818 12px);
   border: 2px solid var(--gold);
 }
@@ -598,7 +616,6 @@ html, body {
 
 /* ---------- Rematch ---------- */
 
-#rematchArea, #rematchIncoming { margin-top: 18px; }
 .rematch-choice-row {
   display: flex;
   gap: 10px;
@@ -607,8 +624,66 @@ html, body {
 .rematch-choice-row .btn { flex: 1; }
 
 @media (max-width: 420px) {
-  .card { width: 48px; height: 70px; }
-  .card .suit { font-size: 1.1rem; }
-  .card.mini, .card-back { width: 52px; height: 76px; }
-  .slot { width: 78px; height: 114px; }
+  .card { width: 96px; height: 140px; margin-left: -54px; }
+  .card.mini, .card-back { width: 104px; height: 152px; }
+  .slot { width: 156px; height: 228px; }
 }
+/* Auto-generated card-face sprite positions (13 ranks x 4 suits) */
+.card-face {
+  background-image: url("/images/cards-sprite.png");
+  background-repeat: no-repeat;
+  background-size: 1300% 400%;
+}
+
+.card-face-2-hearts { background-position: 0.0% 0.0%; }
+.card-face-3-hearts { background-position: 8.3333% 0.0%; }
+.card-face-4-hearts { background-position: 16.6667% 0.0%; }
+.card-face-5-hearts { background-position: 25.0% 0.0%; }
+.card-face-6-hearts { background-position: 33.3333% 0.0%; }
+.card-face-7-hearts { background-position: 41.6667% 0.0%; }
+.card-face-8-hearts { background-position: 50.0% 0.0%; }
+.card-face-9-hearts { background-position: 58.3333% 0.0%; }
+.card-face-10-hearts { background-position: 66.6667% 0.0%; }
+.card-face-J-hearts { background-position: 75.0% 0.0%; }
+.card-face-Q-hearts { background-position: 83.3333% 0.0%; }
+.card-face-K-hearts { background-position: 91.6667% 0.0%; }
+.card-face-A-hearts { background-position: 100.0% 0.0%; }
+.card-face-2-diamonds { background-position: 0.0% 33.3333%; }
+.card-face-3-diamonds { background-position: 8.3333% 33.3333%; }
+.card-face-4-diamonds { background-position: 16.6667% 33.3333%; }
+.card-face-5-diamonds { background-position: 25.0% 33.3333%; }
+.card-face-6-diamonds { background-position: 33.3333% 33.3333%; }
+.card-face-7-diamonds { background-position: 41.6667% 33.3333%; }
+.card-face-8-diamonds { background-position: 50.0% 33.3333%; }
+.card-face-9-diamonds { background-position: 58.3333% 33.3333%; }
+.card-face-10-diamonds { background-position: 66.6667% 33.3333%; }
+.card-face-J-diamonds { background-position: 75.0% 33.3333%; }
+.card-face-Q-diamonds { background-position: 83.3333% 33.3333%; }
+.card-face-K-diamonds { background-position: 91.6667% 33.3333%; }
+.card-face-A-diamonds { background-position: 100.0% 33.3333%; }
+.card-face-2-clubs { background-position: 0.0% 66.6667%; }
+.card-face-3-clubs { background-position: 8.3333% 66.6667%; }
+.card-face-4-clubs { background-position: 16.6667% 66.6667%; }
+.card-face-5-clubs { background-position: 25.0% 66.6667%; }
+.card-face-6-clubs { background-position: 33.3333% 66.6667%; }
+.card-face-7-clubs { background-position: 41.6667% 66.6667%; }
+.card-face-8-clubs { background-position: 50.0% 66.6667%; }
+.card-face-9-clubs { background-position: 58.3333% 66.6667%; }
+.card-face-10-clubs { background-position: 66.6667% 66.6667%; }
+.card-face-J-clubs { background-position: 75.0% 66.6667%; }
+.card-face-Q-clubs { background-position: 83.3333% 66.6667%; }
+.card-face-K-clubs { background-position: 91.6667% 66.6667%; }
+.card-face-A-clubs { background-position: 100.0% 66.6667%; }
+.card-face-2-spades { background-position: 0.0% 100.0%; }
+.card-face-3-spades { background-position: 8.3333% 100.0%; }
+.card-face-4-spades { background-position: 16.6667% 100.0%; }
+.card-face-5-spades { background-position: 25.0% 100.0%; }
+.card-face-6-spades { background-position: 33.3333% 100.0%; }
+.card-face-7-spades { background-position: 41.6667% 100.0%; }
+.card-face-8-spades { background-position: 50.0% 100.0%; }
+.card-face-9-spades { background-position: 58.3333% 100.0%; }
+.card-face-10-spades { background-position: 66.6667% 100.0%; }
+.card-face-J-spades { background-position: 75.0% 100.0%; }
+.card-face-Q-spades { background-position: 83.3333% 100.0%; }
+.card-face-K-spades { background-position: 91.6667% 100.0%; }
+.card-face-A-spades { background-position: 100.0% 100.0%; }
