@@ -23,6 +23,7 @@ let lastState = null;
 let authMode = null; // 'login' | 'register'
 let chatOpen = false;
 let unreadChat = 0;
+let vsAI = false;
 
 const urlParams = new URLSearchParams(window.location.search);
 const urlRoomCode = (urlParams.get('room') || '').toUpperCase() || null;
@@ -151,9 +152,18 @@ function escapeHtml(s) {
 
 // ================= Lobby / rooms =================
 
-el('createBtn').addEventListener('click', () => socket.emit('createRoom'));
+el('createBtn').addEventListener('click', () => {
+  vsAI = false;
+  socket.emit('createRoom');
+});
+
+el('playVsAiBtn').addEventListener('click', () => {
+  vsAI = true;
+  socket.emit('playVsAI');
+});
 
 el('joinBtn').addEventListener('click', () => {
+  vsAI = false;
   const code = el('codeInput').value.trim().toUpperCase();
   if (!code) return showLobbyError('Ievadi istabas kodu');
   socket.emit('joinRoom', { code });
@@ -197,7 +207,11 @@ socket.on('gameStarted', ({ names }) => {
   el('gameOverModal').classList.add('hidden');
   el('connectionBanner').classList.add('hidden');
   resetRematchUI();
-  history.replaceState(null, '', `?room=${el('roomCode').textContent || urlRoomCode || ''}`);
+  if (vsAI) {
+    history.replaceState(null, '', window.location.pathname);
+  } else {
+    history.replaceState(null, '', `?room=${el('roomCode').textContent || urlRoomCode || ''}`);
+  }
   el('myName').textContent = names[myId] || myUsername || 'Tu';
   const oppId = Object.keys(names).find((id) => id !== myId);
   el('opponentName').textContent = names[oppId] || 'Pretinieks';
@@ -575,7 +589,9 @@ el('myName').addEventListener('click', () => {
   if (myId) socket.emit('getProfile', { username: myId });
 });
 el('opponentName').addEventListener('click', () => {
-  if (lastState && lastState.opponent) socket.emit('getProfile', { username: lastState.opponent });
+  if (!lastState || !lastState.opponent) return;
+  if (vsAI) return showToast('Datoram nav profila statistikas');
+  socket.emit('getProfile', { username: lastState.opponent });
 });
 
 socket.on('profileData', ({ username: name, stats }) => {
@@ -652,6 +668,7 @@ socket.on('returnToLobby', () => {
   unreadChat = 0;
   updateChatBadge();
   lastState = null;
+  vsAI = false;
   history.replaceState(null, '', window.location.pathname);
   socket.emit('listOpenRooms');
   showToast('Atgriezies sākuma lapā');

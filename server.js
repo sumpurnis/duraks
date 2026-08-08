@@ -6,6 +6,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { Game } = require('./server/game');
 const users = require('./server/users');
+const { chooseMove } = require('./server/ai');
 
 const app = express();
 const server = http.createServer(app);
@@ -15,6 +16,8 @@ const MOVE_TIMEOUT_MS = 60000;
 const DISCONNECT_GRACE_MS = 30000;
 const ROOM_CLEANUP_MS = 5 * 60 * 1000;
 const LOBBY_ROOM = 'lobby';
+const AI_ID = 'Dators 🤖';
+const AI_MOVE_DELAY_MS = [500, 1100]; // randomized range, feels less instant/robotic
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -52,6 +55,7 @@ function armMoveTimer(code) {
   if (!room || !room.game) return;
   clearMoveTimer(room);
   if (room.game.status !== 'active') return;
+  if (room.vsAI) return;
   if (room.players.some((p) => !p.connected)) return;
 
   const pending = room.game.pendingActor();
@@ -70,6 +74,7 @@ function armMoveTimer(code) {
 function recordNormalResult(room) {
   if (room.statsRecorded) return;
   room.statsRecorded = true;
+  if (room.vsAI) return;
   const { winnerId, durakId, draw } = room.game;
   if (!draw) {
     if (winnerId) users.recordResult(winnerId, true, false);
@@ -92,11 +97,14 @@ function endByForfeit(room, loserUsername, reason) {
 
   if (!room.statsRecorded) {
     room.statsRecorded = true;
-    if (winnerUsername) users.recordResult(winnerUsername, true, true);
-    users.recordResult(loserUsername, false, true);
+    if (!room.vsAI) {
+      if (winnerUsername) users.recordResult(winnerUsername, true, true);
+      users.recordResult(loserUsername, false, true);
+    }
   }
 
   clearMoveTimer(room);
+  if (room.aiTimer) clearTimeout(room.aiTimer);
   room.endReason = reason;
   broadcastState(room.code);
   scheduleRoomCleanup(room);
@@ -121,6 +129,36 @@ function broadcastState(code) {
     });
   }
   armMoveTimer(code);
+}
+
+// ---------- AI opponent ("Spēlēt pret datoru") ----------
+
+function maybeTriggerAI(room) {
+  if (!room.vsAI || !room.game || room.game.status !== 'active') return;
+  const pending = room.game.pendingActor();
+  if (!pending || pending.playerId !== AI_ID) return;
+
+  const delay = AI_MOVE_DELAY_MS[0] + Math.random() * (AI_MOVE_DELAY_MS[1] - AI_MOVE_DELAY_MS[0]);
+  room.aiTimer = setTimeout(() => performAIMove(room.code), delay);
+}
+
+function performAIMove(code) {
+  const room = rooms.get(code);
+  if (!room || !room.game || room.game.status !== 'active') return;
+
+  const move = chooseMove(room.game, AI_ID);
+  if (!move) return;
+
+  let result;
+  if (move.type === 'attack') result = room.game.attack(AI_ID, move.cardId);
+  else if (move.type === 'defend') result = room.game.defend(AI_ID, move.cardId, move.slotIndex);
+  else if (move.type === 'pass') result = room.game.passTurn(AI_ID);
+  else if (move.type === 'take') result = room.game.takeCards(AI_ID);
+  if (!result || result.error) return; // shouldn't happen — AI only picks legal moves
+
+  finishIfGameOver(room);
+  broadcastState(code);
+  maybeTriggerAI(room); // AI may owe another action (e.g. defend a second open slot)
 }
 
 function sendError(socket, message) {
@@ -198,6 +236,37 @@ io.on('connection', (socket) => {
     broadcastOpenRooms();
   });
 
+  socket.on('playVsAI', () => {
+    if (!username) return sendError(socket, 'Vispirms ielogojies');
+    const code = makeRoomCode();
+    playerId = username;
+    joinedCode = code;
+    rooms.set(code, {
+      code,
+      createdAt: Date.now(),
+      players: [
+        { username, socketId: socket.id, connected: true },
+        { username: AI_ID, socketId: null, connected: false },
+      ],
+      game: null,
+      timer: null,
+      aiTimer: null,
+      turnToken: 0,
+      rematchVotes: {},
+      statsRecorded: false,
+      endReason: null,
+      vsAI: true,
+    });
+    const room = rooms.get(code);
+    socket.join(code);
+    socket.leave(LOBBY_ROOM);
+
+    room.game = new Game(room.players.map((p) => p.username));
+    socket.emit('gameStarted', { names: namesFor(room) });
+    broadcastState(code);
+    maybeTriggerAI(room);
+  });
+
   socket.on('joinRoom', ({ code }) => {
     if (!username) return sendError(socket, 'Vispirms ielogojies');
     const room = rooms.get(code);
@@ -255,6 +324,7 @@ io.on('connection', (socket) => {
     if (result.error) return sendError(socket, result.error);
     finishIfGameOver(room);
     broadcastState(joinedCode);
+    maybeTriggerAI(room);
   });
 
   socket.on('defend', ({ cardId, slotIndex }) => {
@@ -264,6 +334,7 @@ io.on('connection', (socket) => {
     if (result.error) return sendError(socket, result.error);
     finishIfGameOver(room);
     broadcastState(joinedCode);
+    maybeTriggerAI(room);
   });
 
   socket.on('passTurn', () => {
@@ -273,6 +344,7 @@ io.on('connection', (socket) => {
     if (result.error) return sendError(socket, result.error);
     finishIfGameOver(room);
     broadcastState(joinedCode);
+    maybeTriggerAI(room);
   });
 
   socket.on('takeCards', () => {
@@ -282,6 +354,7 @@ io.on('connection', (socket) => {
     if (result.error) return sendError(socket, result.error);
     finishIfGameOver(room);
     broadcastState(joinedCode);
+    maybeTriggerAI(room);
   });
 
   socket.on('surrender', () => {
@@ -305,8 +378,14 @@ io.on('connection', (socket) => {
     if (vote === 'no') {
       io.to(room.code).emit('returnToLobby');
       clearMoveTimer(room);
+      if (room.aiTimer) clearTimeout(room.aiTimer);
       rooms.delete(room.code);
       broadcastOpenRooms();
+      return;
+    }
+
+    if (room.vsAI) {
+      startRematch(room);
       return;
     }
 
@@ -354,12 +433,14 @@ io.on('connection', (socket) => {
 
 function startRematch(room) {
   clearMoveTimer(room);
+  if (room.aiTimer) clearTimeout(room.aiTimer);
   room.rematchVotes = {};
   room.statsRecorded = false;
   room.endReason = null;
   room.game = new Game(room.players.map((p) => p.username));
   io.to(room.code).emit('gameStarted', { names: namesFor(room) });
   broadcastState(room.code);
+  maybeTriggerAI(room);
 }
 
 const PORT = process.env.PORT || 3000;

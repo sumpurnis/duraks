@@ -67,6 +67,10 @@ html, body {
   text-align: left;
   margin-bottom: 14px;
 }
+
+#createBtn + #playVsAiBtn {
+  margin-top: 10px;
+}
 .field span {
   display: block;
   font-size: 0.72rem;
