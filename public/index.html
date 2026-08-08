@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Duraks</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div id="lobby" class="screen">
+    <div class="lobby-card">
+      <h1 class="wordmark">Durak<span class="accent">s</span></h1>
+      <p class="tagline">Divu spēlētāju kāršu spēle · pilns 52 kāršu klājs</p>
+
+      <div id="authStep">
+        <label class="field">
+          <span>Lietotājvārds</span>
+          <input id="nameInput" type="text" placeholder="Spēlētājs" maxlength="20" autocomplete="username" />
+        </label>
+
+        <div id="passwordFields" class="hidden">
+          <label class="field">
+            <span id="passwordLabel">Parole</span>
+            <input id="passwordInput" type="password" placeholder="••••••" autocomplete="current-password" />
+          </label>
+          <label class="field hidden" id="confirmField">
+            <span>Atkārto paroli</span>
+            <input id="confirmInput" type="password" placeholder="••••••" autocomplete="new-password" />
+          </label>
+          <button id="authBtn" class="btn btn-primary"></button>
+        </div>
+
+        <button id="continueBtn" class="btn btn-primary">Turpināt</button>
+      </div>
+
+      <div id="playStep" class="hidden">
+        <p class="playing-as">Spēlē kā <strong id="currentUsername"></strong> · <a href="#" id="switchUserLink">mainīt</a></p>
+
+        <div class="lobby-actions">
+          <button id="createBtn" class="btn btn-primary">Izveidot istabu</button>
+          <div class="divider"><span>vai</span></div>
+          <label class="field">
+            <span>Istabas kods</span>
+            <input id="codeInput" type="text" placeholder="XXXX" maxlength="4" style="text-transform:uppercase" />
+          </label>
+          <button id="joinBtn" class="btn btn-secondary">Pievienoties</button>
+        </div>
+
+        <div class="open-rooms">
+          <p class="open-rooms-title">Atvērtās spēles</p>
+          <div id="openRoomsList" class="open-rooms-list">
+            <p class="muted small">Nav aktīvu atvērtu spēļu…</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="waiting" class="waiting hidden">
+        <p>Istabas kods:</p>
+        <div id="roomCode" class="room-code"></div>
+        <p class="muted">Dalies ar šo kodu, lai otrs spēlētājs pievienotos</p>
+        <div class="share-link-row">
+          <input id="shareLinkInput" type="text" readonly />
+          <button id="copyLinkBtn" class="btn btn-secondary">Kopēt saiti</button>
+        </div>
+        <p class="muted small">Šo saiti vari izmantot, lai atgrieztos spēlē pēc lapas pārlādēšanas</p>
+      </div>
+
+      <p id="lobbyError" class="error hidden"></p>
+    </div>
+  </div>
+
+  <div id="game" class="screen hidden">
+    <header class="table-header">
+      <div class="hud-item">
+        <span class="hud-label">Klājs</span>
+        <span id="deckCount" class="hud-value">—</span>
+      </div>
+      <div class="hud-item trump-item">
+        <span class="hud-label">Trumpis</span>
+        <span id="trumpCard" class="hud-value">—</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">Tu</span>
+        <span id="myName" class="hud-value clickable-name">—</span>
+      </div>
+    </header>
+
+    <div id="connectionBanner" class="connection-banner hidden"></div>
+
+    <div class="opponent-row">
+      <span id="opponentName" class="opponent-name clickable-name">Pretinieks</span>
+      <div id="opponentHand" class="opponent-hand"></div>
+    </div>
+
+    <div id="roleBanner" class="role-banner">—</div>
+
+    <main id="tableFelt" class="table-felt">
+      <div id="tableSlots" class="table-slots"></div>
+    </main>
+
+    <div class="action-row">
+      <button id="passBtn" class="btn btn-primary hidden">Bita (beigt uzbrukumu)</button>
+      <button id="takeBtn" class="btn btn-danger hidden">Ņemt kārtis</button>
+      <button id="surrenderBtn" class="btn btn-ghost-danger">Padoties</button>
+      <button id="chatToggleBtn" class="btn btn-secondary">💬 Čats</button>
+    </div>
+
+    <footer class="hand-area">
+      <div id="handCards" class="hand-cards"></div>
+    </footer>
+
+    <div id="chatPanel" class="chat-panel hidden">
+      <div class="chat-header">
+        <span>Čats</span>
+        <button id="chatCloseBtn" class="chat-close">✕</button>
+      </div>
+      <div id="chatMessages" class="chat-messages"></div>
+      <div class="chat-input-row">
+        <input id="chatInput" type="text" placeholder="Uzraksti ziņu…" maxlength="300" />
+        <button id="chatSendBtn" class="btn btn-primary">Sūtīt</button>
+      </div>
+    </div>
+
+    <div id="gameOverModal" class="modal hidden">
+      <div class="modal-card">
+        <h2 id="gameOverTitle">Spēle beigusies</h2>
+        <p id="gameOverText"></p>
+        <p class="rematch-question">Spēlēt vēlreiz?</p>
+        <div id="rematchVoteRow" class="rematch-choice-row">
+          <button id="rematchYesBtn" class="btn btn-primary">Jā</button>
+          <button id="rematchNoBtn" class="btn btn-secondary">Nē</button>
+        </div>
+        <p id="rematchStatus" class="muted hidden"></p>
+      </div>
+    </div>
+
+    <div id="profileModal" class="modal hidden">
+      <div class="modal-card">
+        <h2 id="profileTitle">Profils</h2>
+        <div class="profile-stats">
+          <div class="profile-stat-row"><span>Spēles spēlētas</span><strong id="statPlayed">—</strong></div>
+          <div class="profile-stat-row"><span>Spēles uzvarētas</span><strong id="statWon">—</strong></div>
+          <div class="profile-stat-row"><span>Spēles zaudētas</span><strong id="statLost">—</strong></div>
+          <div class="profile-stat-row muted-row"><span>t.sk. uzvaras piespiedu kārtā</span><strong id="statWonForfeit">—</strong></div>
+          <div class="profile-stat-row muted-row"><span>t.sk. zaudējumi piespiedu kārtā</span><strong id="statLostForfeit">—</strong></div>
+        </div>
+        <button id="profileCloseBtn" class="btn btn-secondary">Aizvērt</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>

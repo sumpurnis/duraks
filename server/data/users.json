@@ -1,0 +1,28 @@
+{
+  "zivs": {
+    "createdAt": 1786209826648,
+    "email": null,
+    "stats": {
+      "played": 2,
+      "won": 2,
+      "lost": 0,
+      "wonByForfeit": 2,
+      "lostByForfeit": 0
+    },
+    "salt": "834605a8cddcca2776b5434ca830b5e0",
+    "hash": "54be2c6e93669fb2eb0a9128e35beb4d97fd78fc25be5558f57b5fa991a4f8f0750e2ed23f4d47ab06f6d8a54a584490b8f179f1c3d2db8636bd0fc438421cf5"
+  },
+  "nezivs": {
+    "createdAt": 1786209863490,
+    "email": null,
+    "stats": {
+      "played": 2,
+      "won": 0,
+      "lost": 2,
+      "wonByForfeit": 0,
+      "lostByForfeit": 2
+    },
+    "salt": "c7750d2576918e5cff84d00cecfd8c90",
+    "hash": "2f9e1d796a82ba6c5965e8a1955a6ffaea5444dc4dee6fdc3ebaec564e04e63dac27890eddc95c0488d83191f2b181f6445d339b1a7b420e14112283defdf030"
+  }
+}
