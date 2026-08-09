@@ -38,6 +38,16 @@ html, body {
   padding: 24px;
 }
 
+.lobby-layout {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 820px;
+}
+
 .lobby-card {
   width: 100%;
   max-width: 380px;
@@ -46,6 +56,103 @@ html, body {
   border-radius: 14px;
   padding: 32px 28px;
   text-align: center;
+}
+
+.stats-panel {
+  width: 100%;
+  max-width: 380px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(201, 162, 75, 0.35);
+  border-radius: 14px;
+  padding: 28px 24px;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.stats-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  margin: 0 0 14px;
+  color: var(--gold-bright);
+  letter-spacing: 0.02em;
+}
+
+.stats-line {
+  margin: 0 0 6px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.stats-highlight { margin-right: 14px; white-space: nowrap; }
+.stats-highlight strong { color: var(--cream); font-weight: 600; }
+
+.stats-block {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(201, 162, 75, 0.2);
+}
+.stats-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.stats-block-title {
+  font-weight: 600;
+  color: var(--gold-bright);
+  font-size: 0.82rem;
+}
+.stats-block-title em { color: var(--muted); font-style: normal; font-weight: 400; }
+
+.stats-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 6px;
+  padding: 2px;
+}
+.stats-tab {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  padding: 4px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+}
+.stats-tab.active { background: var(--gold); color: #2a2005; font-weight: 600; }
+
+.top-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.top-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 0.83rem;
+}
+.top-rank { color: var(--muted); width: 18px; flex-shrink: 0; }
+.top-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-pct { color: var(--gold-bright); font-weight: 600; }
+.top-played { color: var(--muted); font-size: 0.72rem; }
+
+.profile-stats-divider {
+  margin: 14px 0 4px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  border-top: 1px solid rgba(201, 162, 75, 0.2);
+  padding-top: 10px;
+}
+
+@media (max-width: 800px) {
+  .lobby-layout { flex-direction: column; align-items: center; }
 }
 
 .wordmark {
@@ -289,9 +396,12 @@ html, body {
   left: 50%;
   transform: translate(-50%, -50%);
   cursor: default;
+  pointer-events: none; /* table cards are display-only — clicks pass through to the .slot */
+  z-index: 1;
 }
 .card.mini.defend-offset {
   transform: translate(calc(-50% + 28px), calc(-50% + 28px));
+  z-index: 2; /* defend card always renders above the attack card it beat */
 }
 .card-back {
   width: 124px;

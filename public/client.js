@@ -150,6 +150,66 @@ function escapeHtml(s) {
   return d.innerHTML;
 }
 
+// ================= Statistika / leaderboards (lobby) =================
+
+let lastLeaderboards = null;
+let leaderboardScope = 'today';
+
+function holderHtml(entry) {
+  if (!entry) return '—';
+  return `<span class="clickable-name" data-username="${escapeHtml(entry.username)}">${escapeHtml(entry.username)}</span> (${entry.value})`;
+}
+
+function renderLeaderboards() {
+  if (!lastLeaderboards) return;
+  const d = lastLeaderboards;
+
+  el('gamesToday').textContent = d.games.today;
+  el('gamesAllTime').textContent = d.games.allTime;
+
+  el('streakToday').innerHTML = holderHtml(d.longestStreak.today);
+  el('streakAllTime').innerHTML = holderHtml(d.longestStreak.allTime);
+  el('mostPlayedToday').innerHTML = holderHtml(d.mostPlayed.today);
+  el('mostPlayedAllTime').innerHTML = holderHtml(d.mostPlayed.allTime);
+
+  const list = el('topWinRateList');
+  const rows = d.topWinRate[leaderboardScope] || [];
+  if (rows.length === 0) {
+    list.innerHTML = '<li class="muted small">Vēl nav datu…</li>';
+  } else {
+    list.innerHTML = rows
+      .map(
+        (r, i) => `
+      <li class="top-list-row">
+        <span class="top-rank">${i + 1}.</span>
+        <span class="top-name clickable-name" data-username="${escapeHtml(r.username)}">${escapeHtml(r.username)}</span>
+        <span class="top-pct">${r.winPct}%</span>
+        <span class="top-played">(${r.played})</span>
+      </li>`
+      )
+      .join('');
+  }
+}
+
+socket.on('leaderboardsData', (data) => {
+  lastLeaderboards = data;
+  renderLeaderboards();
+});
+
+document.querySelectorAll('#topScopeTabs .stats-tab').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    leaderboardScope = btn.dataset.scope;
+    document.querySelectorAll('#topScopeTabs .stats-tab').forEach((b) => b.classList.toggle('active', b === btn));
+    renderLeaderboards();
+  });
+});
+
+el('statsPanel').addEventListener('click', (e) => {
+  const target = e.target.closest('.clickable-name[data-username]');
+  if (!target) return;
+  socket.emit('getProfile', { username: target.dataset.username });
+});
+
 // ================= Lobby / rooms =================
 
 el('createBtn').addEventListener('click', () => {
@@ -601,6 +661,12 @@ socket.on('profileData', ({ username: name, stats }) => {
   el('statLost').textContent = stats.lost;
   el('statWonForfeit').textContent = stats.wonByForfeit;
   el('statLostForfeit').textContent = stats.lostByForfeit;
+  el('statCurrentStreak').textContent = stats.currentStreak;
+  el('statLongestStreak').textContent = stats.longestStreak;
+  el('statPlayedToday').textContent = stats.today.played;
+  el('statWonToday').textContent = stats.today.won;
+  el('statLostToday').textContent = stats.today.lost;
+  el('statLongestStreakToday').textContent = stats.today.longestStreak;
   el('profileModal').classList.remove('hidden');
 });
 

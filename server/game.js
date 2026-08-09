@@ -41,6 +41,10 @@ class Game {
     this.winnerId = null;
     this.durakId = null;
     this.log = [];
+    // Every card that has ever been played face-up on the table, whether it
+    // ended up in the discard pile or got taken back into a hand. Once shown,
+    // both players have seen its face — used for card-counting heuristics.
+    this.seenCards = new Set();
 
     this._deal();
   }
@@ -130,6 +134,7 @@ class Game {
 
     this.removeFromHand(playerId, cardId);
     this.table.push({ attack: card, defend: null });
+    this.seenCards.add(card.id);
     this.log.push(`${playerId} attacks with ${card.rank} of ${card.suit}`);
     return { ok: true };
   }
@@ -146,6 +151,7 @@ class Game {
 
     this.removeFromHand(playerId, cardId);
     slot.defend = card;
+    this.seenCards.add(card.id);
     this.log.push(`${playerId} defends with ${card.rank} of ${card.suit}`);
 
     if (this.openSlots() === 0 && this.hands[this.attackerId].length === 0 && this.deck.length === 0) {
@@ -257,4 +263,4 @@ class Game {
   }
 }
 
-module.exports = { Game, RANK_VALUE, SUITS, RANKS };
+module.exports = { Game, RANK_VALUE, SUITS, RANKS, MAX_TABLE_SLOTS };

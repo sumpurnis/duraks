@@ -75,11 +75,13 @@ function recordNormalResult(room) {
   if (room.statsRecorded) return;
   room.statsRecorded = true;
   if (room.vsAI) return;
+  users.recordGameCompleted();
   const { winnerId, durakId, draw } = room.game;
   if (!draw) {
     if (winnerId) users.recordResult(winnerId, true, false);
     if (durakId) users.recordResult(durakId, false, false);
   }
+  broadcastLeaderboards();
 }
 
 function finishIfGameOver(room) {
@@ -98,8 +100,10 @@ function endByForfeit(room, loserUsername, reason) {
   if (!room.statsRecorded) {
     room.statsRecorded = true;
     if (!room.vsAI) {
+      users.recordGameCompleted();
       if (winnerUsername) users.recordResult(winnerUsername, true, true);
       users.recordResult(loserUsername, false, true);
+      broadcastLeaderboards();
     }
   }
 
@@ -183,6 +187,10 @@ function broadcastOpenRooms() {
   io.to(LOBBY_ROOM).emit('openRoomsUpdated', listOpenRooms());
 }
 
+function broadcastLeaderboards() {
+  io.to(LOBBY_ROOM).emit('leaderboardsData', users.getLeaderboards());
+}
+
 io.on('connection', (socket) => {
   let joinedCode = null;
   let playerId = null; // == username once authenticated
@@ -193,6 +201,7 @@ io.on('connection', (socket) => {
     socket.join(LOBBY_ROOM);
     socket.emit('registered', rec);
     socket.emit('openRoomsUpdated', listOpenRooms());
+    socket.emit('leaderboardsData', users.getLeaderboards());
   }
 
   socket.on('register', ({ username: name, password }) => {
@@ -315,6 +324,10 @@ io.on('connection', (socket) => {
 
   socket.on('listOpenRooms', () => {
     socket.emit('openRoomsUpdated', listOpenRooms());
+  });
+
+  socket.on('getLeaderboards', () => {
+    socket.emit('leaderboardsData', users.getLeaderboards());
   });
 
   socket.on('attack', ({ cardId }) => {

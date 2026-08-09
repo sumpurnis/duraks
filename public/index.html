@@ -9,6 +9,7 @@
 <body>
 
   <div id="lobby" class="screen">
+    <div class="lobby-layout">
     <div class="lobby-card">
       <h1 class="wordmark">Durak<span class="accent">s</span></h1>
       <p class="tagline">Divu spēlētāju kāršu spēle · pilna 52 kāršu kava</p>
@@ -68,6 +69,46 @@
       </div>
 
       <p id="lobbyError" class="error hidden"></p>
+    </div>
+
+    <div id="statsPanel" class="stats-panel">
+      <p class="stats-title">Statistika</p>
+
+      <p class="stats-line">
+        Spēles izspēlētas:
+        <span class="stats-highlight">Šodien: <strong id="gamesToday">—</strong></span>
+        <span class="stats-highlight">Kopā: <strong id="gamesAllTime">—</strong></span>
+      </p>
+
+      <div class="stats-block">
+        <div class="stats-block-header">
+          <span class="stats-block-title">Labākie spēlētāji TOP10 <em>(uzvaras %)</em></span>
+          <div class="stats-tabs" id="topScopeTabs">
+            <button class="stats-tab active" data-scope="today" type="button">Šodien</button>
+            <button class="stats-tab" data-scope="allTime" type="button">Visu laiku</button>
+          </div>
+        </div>
+        <ol id="topWinRateList" class="top-list">
+          <li class="muted small">Vēl nav datu…</li>
+        </ol>
+      </div>
+
+      <div class="stats-block">
+        <p class="stats-block-title">Garākā uzvaru sērija</p>
+        <p class="stats-line">
+          <span class="stats-highlight">Šodien: <strong id="streakToday" class="stat-holder">—</strong></span>
+          <span class="stats-highlight">Visu laiku: <strong id="streakAllTime" class="stat-holder">—</strong></span>
+        </p>
+      </div>
+
+      <div class="stats-block">
+        <p class="stats-block-title">Visvairāk izspēlētās spēles</p>
+        <p class="stats-line">
+          <span class="stats-highlight">Šodien: <strong id="mostPlayedToday" class="stat-holder">—</strong></span>
+          <span class="stats-highlight">Visu laiku: <strong id="mostPlayedAllTime" class="stat-holder">—</strong></span>
+        </p>
+      </div>
+    </div>
     </div>
   </div>
 
@@ -145,6 +186,13 @@
           <div class="profile-stat-row"><span>Spēles zaudētas</span><strong id="statLost">—</strong></div>
           <div class="profile-stat-row muted-row"><span>t.sk. uzvaras piespiedu kārtā</span><strong id="statWonForfeit">—</strong></div>
           <div class="profile-stat-row muted-row"><span>t.sk. zaudējumi piespiedu kārtā</span><strong id="statLostForfeit">—</strong></div>
+          <div class="profile-stat-row"><span>Pašreizējā uzvaru sērija</span><strong id="statCurrentStreak">—</strong></div>
+          <div class="profile-stat-row"><span>Garākā uzvaru sērija (visu laiku)</span><strong id="statLongestStreak">—</strong></div>
+          <p class="profile-stats-divider">Šodien</p>
+          <div class="profile-stat-row"><span>Spēles šodien</span><strong id="statPlayedToday">—</strong></div>
+          <div class="profile-stat-row"><span>Uzvaras šodien</span><strong id="statWonToday">—</strong></div>
+          <div class="profile-stat-row"><span>Zaudējumi šodien</span><strong id="statLostToday">—</strong></div>
+          <div class="profile-stat-row"><span>Garākā sērija šodien</span><strong id="statLongestStreakToday">—</strong></div>
         </div>
         <button id="profileCloseBtn" class="btn btn-secondary">Aizvērt</button>
       </div>
