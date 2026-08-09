@@ -113,33 +113,30 @@
   </div>
 
   <div id="game" class="screen hidden">
-    <header class="table-header">
-      <div class="hud-item">
-        <span class="hud-label">Klājs</span>
-        <span id="deckCount" class="hud-value">—</span>
-      </div>
-      <div class="hud-item trump-item">
-        <span class="hud-label">Trumpis</span>
-        <span id="trumpCard" class="hud-value">—</span>
-      </div>
-      <div class="hud-item">
-        <span class="hud-label">Tu</span>
-        <span id="myName" class="hud-value clickable-name">—</span>
-      </div>
-    </header>
-
     <div id="connectionBanner" class="connection-banner hidden"></div>
 
-    <div class="opponent-row">
-      <span id="opponentName" class="opponent-name clickable-name">Pretinieks</span>
-      <div id="opponentHand" class="opponent-hand"></div>
+    <div class="name-pill-row name-pill-row-top">
+      <span id="opponentName" class="name-pill clickable-name">Pretinieks</span>
     </div>
 
-    <div id="roleBanner" class="role-banner">—</div>
-
     <main id="tableFelt" class="table-felt">
-      <div id="tableSlots" class="table-slots"></div>
+      <div class="table-wood">
+        <div class="deck-pile">
+          <span id="trumpCard" class="deck-trump-card"></span>
+          <img class="deck-stack-img" src="/images/trump-stack.png" alt="" />
+          <span id="deckCount" class="deck-count">—</span>
+        </div>
+        <div id="opponentHand" class="opponent-hand-onboard"></div>
+        <div id="roleBanner" class="role-banner-onboard">—</div>
+        <div class="table-safezone">
+          <div id="tableSlots" class="table-slots"></div>
+        </div>
+      </div>
     </main>
+
+    <div class="name-pill-row name-pill-row-bottom">
+      <span id="myName" class="name-pill clickable-name">—</span>
+    </div>
 
     <div class="action-row">
       <button id="passBtn" class="btn btn-primary hidden">Beigt gājienu</button>

@@ -262,62 +262,161 @@ html, body {
   flex-direction: column;
 }
 
-.table-header {
+.deck-pile {
+  position: absolute;
+  top: 8%;
+  left: 5%;
+  width: 0;
+  height: 0;
+}
+.deck-trump-card {
+  position: absolute;
+  top: 4cqw;
+  left: 4cqw;
+  width: 11cqw; /* matches .slot exactly, so it reads as the same card size as the table */
+  aspect-ratio: 84 / 122;
+  transform: rotate(-45deg);
+  z-index: 1; /* beneath the stack image */
+  display: block;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.deck-stack-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 12.65cqw; /* 15% larger than a played card */
+  aspect-ratio: 84 / 122;
+  object-fit: cover;
+  border-radius: 6px;
+  transform: rotate(45deg);
+  z-index: 2; /* on top — the trump card peeks out from underneath */
+  pointer-events: none;
+}
+.deck-count {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 12.65cqw;
+  aspect-ratio: 84 / 122;
   display: flex;
-  justify-content: space-around;
-  padding: 14px 10px;
-  background: rgba(0,0,0,0.25);
-  border-bottom: 1px solid rgba(201, 162, 75, 0.25);
-}
-.hud-item {
-  text-align: center;
-}
-.hud-label {
-  display: block;
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-.hud-value {
-  display: block;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(-45deg);
+  z-index: 3; /* centered on top of the stack image */
   font-family: var(--font-display);
-  font-size: 1.3rem;
-  margin-top: 2px;
+  font-weight: bold;
+  font-size: 7cqw;
+  color: #8fbfa8;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.65);
+  pointer-events: none;
 }
-.trump-item .hud-value { color: var(--gold-bright); }
 
-.role-banner {
-  text-align: center;
-  padding: 8px;
-  font-size: 0.9rem;
+.role-banner-onboard {
+  position: absolute;
+  bottom: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 0.8cqw 3.5cqw;
+  border-radius: 6px;
+  background: rgba(15, 43, 34, 0.62);
+  border: 1px solid rgba(201, 162, 75, 0.4);
+  font-size: 1.9cqw;
   font-weight: 600;
   letter-spacing: 0.03em;
-  background: rgba(201, 162, 75, 0.12);
+  white-space: nowrap;
+  text-align: center;
 }
-.role-banner.attacker { color: var(--gold-bright); }
-.role-banner.defender { color: #8fbfa8; }
+.role-banner-onboard.attacker { color: var(--gold-bright); }
+.role-banner-onboard.defender { color: #8fbfa8; }
+
+.name-pill-row {
+  display: flex;
+  justify-content: center;
+  padding: 10px 10px 4px;
+}
+.name-pill-row-bottom { padding: 4px 10px 10px; }
+.name-pill {
+  display: inline-block;
+  padding: 6px 18px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cream);
+}
+
+.opponent-hand-onboard {
+  position: absolute;
+  top: 2%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  z-index: 2;
+}
+.opponent-hand-onboard .card-back-mini {
+  width: 7cqw;
+  aspect-ratio: 84 / 122;
+  border-radius: 4px;
+  margin-left: -3.5cqw;
+  background-image: url('/images/trump-stack.png');
+  background-size: cover;
+  background-position: center;
+}
+.opponent-hand-onboard .card-back-mini:first-child { margin-left: 0; }
 
 .table-felt {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 30px;
+  padding: 16px;
+  min-height: 0;
+}
+
+.table-wood {
+  position: relative;
+  width: 100%;
+  max-width: 760px;
+  aspect-ratio: 1536 / 1024;
+  max-height: 100%;
+  background-image: url('/images/table-wood.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  container-type: inline-size;
+  container-name: tablewood;
+}
+
+.table-safezone {
+  position: absolute;
+  top: 16%;
+  bottom: 28%;
+  left: 10%;
+  right: 10%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .table-slots {
   display: flex;
-  flex-wrap: wrap;
-  gap: 34px;
+  flex-wrap: nowrap;
+  gap: 1.3cqw;
   justify-content: center;
-  max-width: 960px;
+  align-items: center;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .slot {
   position: relative;
-  width: 186px;
-  height: 270px;
+  width: 11cqw;
+  aspect-ratio: 84 / 122;
+  flex-shrink: 0;
 }
 
 .action-row {
@@ -389,8 +488,8 @@ html, body {
 }
 
 .card.mini {
-  width: 124px;
-  height: 180px;
+  width: 100%;
+  height: 100%;
   position: absolute;
   top: 50%;
   left: 50%;
@@ -400,15 +499,8 @@ html, body {
   z-index: 1;
 }
 .card.mini.defend-offset {
-  transform: translate(calc(-50% + 28px), calc(-50% + 28px));
+  transform: translate(calc(-50% + 1.7cqw), calc(-50% + 1.7cqw));
   z-index: 2; /* defend card always renders above the attack card it beat */
-}
-.card-back {
-  width: 124px;
-  height: 180px;
-  border-radius: 12px;
-  background: repeating-linear-gradient(45deg, #7a1f1f, #7a1f1f 6px, #601818 6px, #601818 12px);
-  border: 2px solid var(--gold);
 }
 
 /* Toast */
@@ -684,34 +776,6 @@ html, body {
 }
 .profile-stat-row.muted-row strong { color: var(--muted); }
 
-/* ---------- Opponent row ---------- */
-
-.opponent-row {
-  padding: 10px 10px 4px;
-  text-align: center;
-}
-.opponent-name {
-  display: block;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-.opponent-hand {
-  display: flex;
-  justify-content: center;
-  gap: -18px;
-  min-height: 56px;
-}
-.opponent-hand .card-back.small {
-  width: 34px;
-  height: 50px;
-  margin-left: -16px;
-  border-width: 1px;
-}
-.opponent-hand .card-back.small:first-child { margin-left: 0; }
-
 /* ---------- Drag & drop ---------- */
 
 .card[draggable="true"] { cursor: grab; }
@@ -739,9 +803,8 @@ html, body {
 
 @media (max-width: 420px) {
   .card { width: 96px; height: 140px; margin-left: -54px; }
-  .card.mini, .card-back { width: 104px; height: 152px; }
-  .slot { width: 156px; height: 228px; }
 }
+
 /* Auto-generated card-face sprite positions (13 ranks x 4 suits) */
 .card-face {
   background-image: url("/images/cards-sprite.png");

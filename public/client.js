@@ -373,7 +373,7 @@ function render(state) {
   const banner = el('roleBanner');
   const isAttacker = state.yourRole === 'attacker';
   banner.textContent = isAttacker ? 'Tu uzbrūc' : 'Tu aizsargājies';
-  banner.className = 'role-banner ' + (isAttacker ? 'attacker' : 'defender');
+  banner.className = 'role-banner-onboard ' + (isAttacker ? 'attacker' : 'defender');
 
   renderOpponentHand(state);
   renderTable(state);
@@ -396,7 +396,7 @@ function renderOpponentHand(state) {
   container.innerHTML = '';
   for (let i = 0; i < state.opponentCount; i++) {
     const back = document.createElement('div');
-    back.className = 'card-back small';
+    back.className = 'card-back-mini';
     container.appendChild(back);
   }
 }
