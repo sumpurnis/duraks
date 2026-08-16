@@ -1,5 +1,22 @@
 'use strict';
 
+// Mobile browsers (especially Chrome/Brave on Android) report `100vh` against
+// the viewport size with the address bar collapsed, not what's actually
+// visible — this pushes bottom UI (action buttons) below the visible area
+// until the page is scrolled. `dvh` in CSS handles this in modern browsers;
+// this is a belt-and-suspenders JS fallback using the more precise
+// visualViewport API, exposed as --app-vh for anywhere CSS needs it.
+function updateAppViewportHeight() {
+  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  document.documentElement.style.setProperty('--app-vh', h * 0.01 + 'px');
+}
+updateAppViewportHeight();
+window.addEventListener('resize', updateAppViewportHeight);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', updateAppViewportHeight);
+  window.visualViewport.addEventListener('scroll', updateAppViewportHeight);
+}
+
 const RANKS_ORDER = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 const RANK_VALUE = Object.fromEntries(RANKS_ORDER.map((r, i) => [r, i + 2]));
 
@@ -689,13 +706,13 @@ function showGameOver(state) {
 
   if (state.draw) {
     el('gameOverTitle').textContent = 'Neizšķirts!';
-    el('gameOverText').textContent = 'Kava beidzās un abiem tukšas rokas vienlaicīgi.';
+    el('gameOverText').textContent = 'Klājs beidzies un abiem tukšas rokas vienlaicīgi.';
   } else if (state.winnerId === myId) {
     el('gameOverTitle').textContent = 'Tu uzvarēji! 🎉';
     el('gameOverText').textContent = `Pretinieks paliek par duraku${reasonText}.`;
   } else {
-    el('gameOverTitle').textContent = 'Tu zaudēji!';
-    el('gameOverText').textContent = `Šoreiz nepaveicās${reasonText} — spēlē vēlreiz!`;
+    el('gameOverTitle').textContent = 'Tu esi duraks!';
+    el('gameOverText').textContent = `Šoreiz neveicās${reasonText} — spēlē vēlreiz!`;
   }
 }
 
