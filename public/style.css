@@ -285,6 +285,7 @@ html, body {
   display: block;
   border-radius: 6px;
   overflow: hidden;
+  color-scheme: light;
 }
 .deck-stack-img {
   position: absolute;
@@ -297,6 +298,7 @@ html, body {
   transform: rotate(45deg);
   z-index: 2; /* on top — the trump card peeks out from underneath */
   pointer-events: none;
+  color-scheme: light;
 }
 .deck-count {
   position: absolute;
@@ -389,6 +391,7 @@ html, body {
   width: min(100%, 1280px, calc((var(--app-vh, 1vh) * 100 - 150px) * 1.5));
   aspect-ratio: 1536 / 1024;
   max-height: 100%;
+  color-scheme: light;
   background-image: url('/images/table-wood.png');
   background-size: contain;
   background-repeat: no-repeat;
@@ -423,6 +426,7 @@ html, body {
   width: 11cqw;
   aspect-ratio: 84 / 122;
   flex-shrink: 0;
+  color-scheme: light;
 }
 
 .action-row {
@@ -513,6 +517,7 @@ html, body {
   cursor: default;
   pointer-events: none; /* table cards are display-only — clicks pass through to the .slot */
   z-index: 1;
+  color-scheme: light;
 }
 .card.mini.defend-offset {
   transform: translate(calc(-50% + 1.7cqw), calc(-50% + 1.7cqw));
@@ -817,6 +822,7 @@ html, body {
   background-image: url("/images/cards-sprite.png");
   background-repeat: no-repeat;
   background-size: 1300% 400%;
+  color-scheme: light;
 }
 
 .card-face-2-hearts { background-position: 0.0% 0.0%; }
