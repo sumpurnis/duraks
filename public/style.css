@@ -823,6 +823,9 @@ html, body {
   background-repeat: no-repeat;
   background-size: 1300% 400%;
   color-scheme: light;
+  will-change: transform;
+  filter: brightness(1);
+  isolation: isolate;
 }
 
 .card-face-2-hearts { background-position: 0.0% 0.0%; }
