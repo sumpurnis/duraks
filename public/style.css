@@ -459,6 +459,18 @@ html, body {
   border: 1px solid rgba(0,0,0,0.15);
 }
 .card:first-child { margin-left: 0; }
+
+/* Mobile hack: hand cards scale with the table (cqw) like everything else,
+   which makes them too small to read comfortably on narrow phone screens.
+   On touch devices under 600px wide, size the hand relative to the actual
+   viewport instead so it stays legible — this only affects the player's
+   own interactive hand, not the table or opponent's cards. */
+@media (max-width: 600px) and (pointer: coarse) {
+  .card {
+    width: 19vw;
+    margin-left: -10.5vw;
+  }
+}
 .card:hover { transform: translateY(-16px); box-shadow: 0 10px 20px rgba(0,0,0,0.5); z-index: 5; }
 .card.disabled { cursor: not-allowed; }
 

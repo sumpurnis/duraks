@@ -689,13 +689,13 @@ function showGameOver(state) {
 
   if (state.draw) {
     el('gameOverTitle').textContent = 'Neizšķirts!';
-    el('gameOverText').textContent = 'Klājs beidzies un abiem tukšas rokas vienlaicīgi.';
+    el('gameOverText').textContent = 'Kava beidzās un abiem tukšas rokas vienlaicīgi.';
   } else if (state.winnerId === myId) {
     el('gameOverTitle').textContent = 'Tu uzvarēji! 🎉';
     el('gameOverText').textContent = `Pretinieks paliek par duraku${reasonText}.`;
   } else {
-    el('gameOverTitle').textContent = 'Tu esi duraks!';
-    el('gameOverText').textContent = `Šoreiz neveicās${reasonText} — spēlē vēlreiz!`;
+    el('gameOverTitle').textContent = 'Tu zaudēji!';
+    el('gameOverText').textContent = `Šoreiz nepaveicās${reasonText} — spēlē vēlreiz!`;
   }
 }
 
