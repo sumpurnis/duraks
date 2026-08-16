@@ -41,6 +41,7 @@ let authMode = null; // 'login' | 'register'
 let chatOpen = false;
 let unreadChat = 0;
 let vsAI = false;
+let currentGameOverTournamentId = null; // set by showGameOver when the finished game was part of a tournament
 
 const urlParams = new URLSearchParams(window.location.search);
 const urlRoomCode = (urlParams.get('room') || '').toUpperCase() || null;
@@ -704,15 +705,43 @@ function showGameOver(state) {
     disconnect: ' (pretinieks pameta spēli)',
   }[state.endReason] || '';
 
+  const isTournament = !!state.tournamentInfo;
+  currentGameOverTournamentId = isTournament ? state.tournamentInfo.tournamentId : null;
+  const questionEl = document.querySelector('.rematch-question');
+  const yesBtn = el('rematchYesBtn');
+  const noBtn = el('rematchNoBtn');
+
   if (state.draw) {
     el('gameOverTitle').textContent = 'Neizšķirts!';
     el('gameOverText').textContent = 'Klājs beidzies un abiem tukšas rokas vienlaicīgi.';
   } else if (state.winnerId === myId) {
     el('gameOverTitle').textContent = 'Tu uzvarēji! 🎉';
     el('gameOverText').textContent = `Pretinieks paliek par duraku${reasonText}.`;
+  } else if (isTournament) {
+    el('gameOverTitle').textContent = 'Šoreiz nepaveicās!';
+    el('gameOverText').textContent = '';
   } else {
     el('gameOverTitle').textContent = 'Tu esi duraks!';
     el('gameOverText').textContent = `Šoreiz neveicās${reasonText} — spēlē vēlreiz!`;
+  }
+
+  if (isTournament) {
+    questionEl.classList.add('hidden');
+    noBtn.textContent = 'Pamest turnīru';
+    noBtn.classList.remove('hidden');
+    if (state.winnerId === myId) {
+      yesBtn.textContent = 'Turpināt turnīru';
+      yesBtn.classList.remove('hidden');
+    } else {
+      // Lost (or drew) a tournament game — nothing to continue, only leaving makes sense.
+      yesBtn.classList.add('hidden');
+    }
+  } else {
+    questionEl.classList.remove('hidden');
+    yesBtn.textContent = 'Jā';
+    yesBtn.classList.remove('hidden');
+    noBtn.textContent = 'Nē';
+    noBtn.classList.remove('hidden');
   }
 }
 
@@ -724,6 +753,13 @@ function resetRematchUI() {
 }
 
 el('rematchYesBtn').addEventListener('click', () => {
+  if (currentGameOverTournamentId) {
+    // "Turpināt turnīru" — tournament games don't use peer rematch voting;
+    // just tear the room down and return to the lobby. The tournament
+    // itself keeps going on its own (or via the bracket's "Sākt spēli").
+    socket.emit('rematchVote', { vote: 'no' });
+    return;
+  }
   socket.emit('rematchVote', { vote: 'yes' });
   el('rematchYesBtn').disabled = true;
   el('rematchNoBtn').disabled = true;
@@ -733,6 +769,9 @@ el('rematchYesBtn').addEventListener('click', () => {
 });
 
 el('rematchNoBtn').addEventListener('click', () => {
+  if (currentGameOverTournamentId) {
+    socket.emit('leaveTournamentMidway', { id: currentGameOverTournamentId });
+  }
   socket.emit('rematchVote', { vote: 'no' });
 });
 

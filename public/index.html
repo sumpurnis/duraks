@@ -6,6 +6,7 @@
 <meta name="color-scheme" content="light" />
 <title>Duraks</title>
 <link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="tournament.css" />
 </head>
 <body>
 
@@ -42,6 +43,8 @@
         <div class="lobby-actions">
           <button id="createBtn" class="btn btn-primary">Izveidot istabu</button>
           <button id="playVsAiBtn" class="btn btn-secondary">🤖 Spēlēt pret datoru</button>
+          <button id="tournamentOpenBtn" class="btn btn-secondary">🏆 Turnīri</button>
+          <button id="tournamentCreateDirectBtn" class="btn btn-secondary">+ Izveidot turnīru</button>
           <div class="divider"><span>vai</span></div>
           <label class="field">
             <span>Istabas kods</span>
@@ -128,6 +131,10 @@
           <span id="deckCount" class="deck-count">—</span>
         </div>
         <div id="opponentHand" class="opponent-hand-onboard"></div>
+        <div id="tournamentGameInfo" class="tournament-game-info hidden">
+          <div id="tGameInfoRound" class="tournament-game-info-round"></div>
+          <div id="tGameInfoScore" class="tournament-game-info-score"></div>
+        </div>
         <div id="roleBanner" class="role-banner-onboard">—</div>
         <div class="table-safezone">
           <div id="tableSlots" class="table-slots"></div>
@@ -171,26 +178,78 @@
         <p id="rematchStatus" class="muted hidden"></p>
       </div>
     </div>
+  </div>
 
-    <div id="profileModal" class="modal hidden">
-      <div class="modal-card">
-        <h2 id="profileTitle">Profils</h2>
-        <div class="profile-stats">
-          <div class="profile-stat-row"><span>Spēles spēlētas</span><strong id="statPlayed">—</strong></div>
-          <div class="profile-stat-row"><span>Spēles uzvarētas</span><strong id="statWon">—</strong></div>
-          <div class="profile-stat-row"><span>Spēles zaudētas</span><strong id="statLost">—</strong></div>
-          <div class="profile-stat-row muted-row"><span>t.sk. uzvaras piespiedu kārtā</span><strong id="statWonForfeit">—</strong></div>
-          <div class="profile-stat-row muted-row"><span>t.sk. zaudējumi piespiedu kārtā</span><strong id="statLostForfeit">—</strong></div>
-          <div class="profile-stat-row"><span>Pašreizējā uzvaru sērija</span><strong id="statCurrentStreak">—</strong></div>
-          <div class="profile-stat-row"><span>Garākā uzvaru sērija (visu laiku)</span><strong id="statLongestStreak">—</strong></div>
-          <p class="profile-stats-divider">Šodien</p>
-          <div class="profile-stat-row"><span>Spēles šodien</span><strong id="statPlayedToday">—</strong></div>
-          <div class="profile-stat-row"><span>Uzvaras šodien</span><strong id="statWonToday">—</strong></div>
-          <div class="profile-stat-row"><span>Zaudējumi šodien</span><strong id="statLostToday">—</strong></div>
-          <div class="profile-stat-row"><span>Garākā sērija šodien</span><strong id="statLongestStreakToday">—</strong></div>
-        </div>
-        <button id="profileCloseBtn" class="btn btn-secondary">Aizvērt</button>
+  <div id="tournamentModal" class="modal hidden">
+    <div class="modal-card modal-card-wide">
+      <div class="tournament-modal-header">
+        <h2>Turnīri</h2>
+        <button id="tournamentCloseBtn" class="btn-icon" aria-label="Aizvērt">✕</button>
       </div>
+
+      <div id="tournamentListView">
+        <div class="tournament-list-actions">
+          <button id="tournamentCreateOpenBtn" class="btn btn-primary btn-small">+ Izveidot turnīru</button>
+          <button id="tournamentResultsOpenBtn" class="btn btn-secondary btn-small">Mani rezultāti</button>
+          <button id="tournamentDeleteAllBtn" class="btn btn-ghost-danger btn-small hidden">🗑 Dzēst visus pabeigtos</button>
+        </div>
+        <div class="tournament-join-code-row">
+          <input id="tournamentCodeInput" type="text" placeholder="Ielūguma kods" maxlength="6" style="text-transform:uppercase" />
+          <button id="tournamentJoinCodeBtn" class="btn btn-secondary btn-small">Pievienoties ar kodu</button>
+        </div>
+        <div id="tournamentList" class="tournament-list">
+          <p class="muted small">Ielādē…</p>
+        </div>
+      </div>
+
+      <div id="tournamentCreateView" class="hidden">
+        <button class="btn btn-secondary btn-small tournament-back-btn" data-back-to="list">← Atpakaļ</button>
+        <label class="field"><span>Nosaukums</span><input id="tCreateName" type="text" maxlength="60" placeholder="Rudens kauss" /></label>
+        <label class="field"><span>Maksimālais dalībnieku skaits</span><input id="tCreateMax" type="number" min="3" max="64" value="8" /></label>
+        <p class="hint small">Minimālais dalībnieku skaits vienmēr ir 3.</p>
+        <label class="field"><span>Formāts</span>
+          <select id="tCreateFormat">
+            <option value="bo3">Bo3 (labākais no 3)</option>
+            <option value="bo5">Bo5 (labākais no 5)</option>
+          </select>
+        </label>
+        <label class="field"><span>Reģistrācija slēdzas</span><input id="tCreateRegEnd" type="datetime-local" /></label>
+        <label class="field"><span>Turnīra sākums</span><input id="tCreateStart" type="datetime-local" /></label>
+        <label class="checkbox-field"><input id="tCreatePrivate" type="checkbox" /><span>Privāts turnīrs (ar ielūguma kodu)</span></label>
+        <button id="tCreateSubmitBtn" class="btn btn-primary">Izveidot turnīru</button>
+      </div>
+
+      <div id="tournamentDetailView" class="hidden">
+        <button class="btn btn-secondary btn-small tournament-back-btn" data-back-to="list">← Atpakaļ</button>
+        <div id="tDetailHeader" class="tournament-detail-header"></div>
+        <div id="tDetailBody" class="tournament-detail-body"></div>
+      </div>
+
+      <div id="tournamentResultsView" class="hidden">
+        <button class="btn btn-secondary btn-small tournament-back-btn" data-back-to="list">← Atpakaļ</button>
+        <div id="tResultsBody" class="tournament-results-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="profileModal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="profileTitle">Profils</h2>
+      <div class="profile-stats">
+        <div class="profile-stat-row"><span>Spēles spēlētas</span><strong id="statPlayed">—</strong></div>
+        <div class="profile-stat-row"><span>Spēles uzvarētas</span><strong id="statWon">—</strong></div>
+        <div class="profile-stat-row"><span>Spēles zaudētas</span><strong id="statLost">—</strong></div>
+        <div class="profile-stat-row muted-row"><span>t.sk. uzvaras piespiedu kārtā</span><strong id="statWonForfeit">—</strong></div>
+        <div class="profile-stat-row muted-row"><span>t.sk. zaudējumi piespiedu kārtā</span><strong id="statLostForfeit">—</strong></div>
+        <div class="profile-stat-row"><span>Pašreizējā uzvaru sērija</span><strong id="statCurrentStreak">—</strong></div>
+        <div class="profile-stat-row"><span>Garākā uzvaru sērija (visu laiku)</span><strong id="statLongestStreak">—</strong></div>
+        <p class="profile-stats-divider">Šodien</p>
+        <div class="profile-stat-row"><span>Spēles šodien</span><strong id="statPlayedToday">—</strong></div>
+        <div class="profile-stat-row"><span>Uzvaras šodien</span><strong id="statWonToday">—</strong></div>
+        <div class="profile-stat-row"><span>Zaudējumi šodien</span><strong id="statLostToday">—</strong></div>
+        <div class="profile-stat-row"><span>Garākā sērija šodien</span><strong id="statLongestStreakToday">—</strong></div>
+      </div>
+      <button id="profileCloseBtn" class="btn btn-secondary">Aizvērt</button>
     </div>
   </div>
 
@@ -198,5 +257,6 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
+  <script src="tournament-client.js"></script>
 </body>
 </html>

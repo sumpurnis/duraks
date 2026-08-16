@@ -1,57 +1,57 @@
 {
   "users": {
     "zivs": {
-      "createdAt": 1786209826648,
+      "createdAt": 1786880396607,
       "email": null,
       "stats": {
-        "played": 20,
-        "won": 13,
-        "lost": 7,
-        "wonByForfeit": 13,
-        "lostByForfeit": 7,
+        "played": 4,
+        "won": 2,
+        "lost": 2,
+        "wonByForfeit": 2,
+        "lostByForfeit": 2,
+        "currentStreak": 0,
+        "longestStreak": 1,
+        "daily": {
+          "date": "2026-08-16",
+          "played": 4,
+          "won": 2,
+          "lost": 2,
+          "currentStreak": 0,
+          "longestStreak": 1
+        }
+      },
+      "salt": "352a8d69687fa4696d201255546d7be1",
+      "hash": "84ff8caaed755d94b686822c548ff483e864eb9725657ad0c4385580d95310fb8fdf0c4465c58256d47b9a7b95adc3da287ab0aae6e7cef93a656499f729f4c7"
+    },
+    "nezivs": {
+      "createdAt": 1786880485846,
+      "email": null,
+      "stats": {
+        "played": 4,
+        "won": 2,
+        "lost": 2,
+        "wonByForfeit": 2,
+        "lostByForfeit": 2,
         "currentStreak": 1,
         "longestStreak": 1,
         "daily": {
-          "date": "2026-08-09",
-          "played": 1,
-          "won": 1,
-          "lost": 0,
+          "date": "2026-08-16",
+          "played": 4,
+          "won": 2,
+          "lost": 2,
           "currentStreak": 1,
           "longestStreak": 1
         }
       },
-      "salt": "834605a8cddcca2776b5434ca830b5e0",
-      "hash": "54be2c6e93669fb2eb0a9128e35beb4d97fd78fc25be5558f57b5fa991a4f8f0750e2ed23f4d47ab06f6d8a54a584490b8f179f1c3d2db8636bd0fc438421cf5"
-    },
-    "nezivs": {
-      "createdAt": 1786209863490,
-      "email": null,
-      "stats": {
-        "played": 20,
-        "won": 7,
-        "lost": 13,
-        "wonByForfeit": 7,
-        "lostByForfeit": 13,
-        "currentStreak": 0,
-        "longestStreak": 0,
-        "daily": {
-          "date": "2026-08-09",
-          "played": 1,
-          "won": 0,
-          "lost": 1,
-          "currentStreak": 0,
-          "longestStreak": 0
-        }
-      },
-      "salt": "c7750d2576918e5cff84d00cecfd8c90",
-      "hash": "2f9e1d796a82ba6c5965e8a1955a6ffaea5444dc4dee6fdc3ebaec564e04e63dac27890eddc95c0488d83191f2b181f6445d339b1a7b420e14112283defdf030"
+      "salt": "4c58ce9b03f7bb8ccb199e38eb1441e7",
+      "hash": "ca938c8ec3f8d8a88e0da6f407687e08333a2fd7059a77e101e4ad7ce0dc9c98fc854c396a39781a5b99121f6cc647ff65c890704851ac9ae8b0f7f5dae01ca1"
     }
   },
   "global": {
-    "allTimePlayed": 1,
+    "allTimePlayed": 4,
     "daily": {
-      "date": "2026-08-09",
-      "played": 1
+      "date": "2026-08-16",
+      "played": 4
     }
   }
 }

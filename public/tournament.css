@@ -1,0 +1,310 @@
+/* ---------- tournament.css ----------
+   Styling for the tournament bracket feature. Kept in its own file,
+   separate from style.css (the game itself), per the project's request
+   to keep this feature loosely coupled from the core game files. Reuses
+   the existing color/font custom properties defined in style.css's :root
+   so it stays visually consistent without duplicating the palette. */
+
+.modal-card-wide {
+  max-width: 640px;
+  width: 92vw;
+  max-height: 86vh;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.tournament-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.tournament-modal-header h2 { margin: 0; }
+
+.btn-icon {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.btn-icon:hover { color: var(--gold-bright); }
+
+.btn-small {
+  width: auto;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+}
+
+.tournament-back-btn { margin-bottom: 14px; }
+
+.tournament-list-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.tournament-join-code-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.tournament-join-code-row input {
+  flex: 1;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  border-radius: 6px;
+  color: var(--cream);
+  text-transform: uppercase;
+}
+
+.field select {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  border-radius: 6px;
+  color: var(--cream);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+}
+
+.tournament-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tournament-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(201, 162, 75, 0.18);
+  border-radius: 8px;
+}
+.tournament-row-title {
+  font-family: var(--font-display);
+  color: var(--gold-bright);
+  font-size: 0.95rem;
+}
+.tournament-row-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 18px;
+  font-size: 0.85rem;
+  color: var(--cream);
+}
+.checkbox-field input { width: auto; }
+
+.hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin: -8px 0 14px;
+}
+.hint.small { font-size: 0.7rem; }
+
+.tournament-form-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+.tournament-form-actions .btn { width: auto; flex: 1; min-width: 140px; }
+
+.tournament-detail-header h3 {
+  font-family: var(--font-display);
+  color: var(--gold-bright);
+  margin: 0 0 6px;
+}
+
+.tournament-invite-code {
+  font-family: var(--font-display);
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  color: var(--gold-bright);
+  background: rgba(201, 162, 75, 0.12);
+  border: 1px dashed var(--gold);
+  border-radius: 6px;
+  padding: 6px 10px;
+  display: inline-block;
+  margin-top: 6px;
+}
+
+.tournament-roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.tournament-roster-chip {
+  padding: 5px 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(201, 162, 75, 0.25);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--cream);
+}
+
+/* ---------- bracket ---------- */
+
+.tournament-bracket {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  padding: 6px 2px 12px;
+}
+.tournament-bracket-round {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 150px;
+}
+.tournament-bracket-round h4 {
+  font-family: var(--font-display);
+  color: var(--gold-bright);
+  font-size: 0.82rem;
+  margin: 0 0 4px;
+  text-align: center;
+}
+.tournament-match-box {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(201, 162, 75, 0.25);
+  border-radius: 8px;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--cream);
+  overflow: hidden;
+}
+.tournament-match-box.third-place { border-color: rgba(201, 162, 75, 0.5); }
+.tournament-match-box.bye { color: var(--muted); font-style: italic; padding: 8px 10px; }
+
+.tournament-match-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+}
+.tournament-match-row:first-child { border-bottom: 1px solid rgba(255,255,255,0.08); }
+.tournament-match-row.winner-row { background: rgba(76, 175, 111, 0.1); }
+.tournament-match-row.loser-row { background: rgba(209, 107, 98, 0.06); }
+
+.tournament-match-score {
+  font-family: var(--font-display);
+  font-weight: bold;
+  font-size: 0.9rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.tournament-match-row.winner-row .tournament-match-score { color: #4caf6f; }
+.tournament-match-row.loser-row .tournament-match-score { color: #d16b62; font-weight: normal; }
+
+.tournament-match-format {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 3px 10px 6px;
+}
+
+.tournament-match-start-btn {
+  width: calc(100% - 12px);
+  margin: 4px 6px 6px;
+  padding: 5px 8px;
+  font-size: 0.72rem;
+}
+
+.tournament-player-name.winner { font-weight: bold; color: #4caf6f; }
+.tournament-player-name.loser { font-weight: normal; color: #d16b62; }
+.tournament-player-name.forfeited { font-style: italic; }
+.tournament-player-name.place-gold { font-weight: bold; color: #ffd700; }
+.tournament-player-name.place-silver { font-weight: bold; color: #c8ccd4; }
+.tournament-player-name.place-bronze { font-weight: bold; color: #cd7f32; }
+
+.tournament-placements-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(201, 162, 75, 0.25);
+  border-radius: 8px;
+}
+.tournament-placements-summary-row {
+  font-size: 0.9rem;
+}
+
+/* ---------- results ---------- */
+
+.tournament-results-bucket { margin-bottom: 22px; }
+.tournament-results-bucket h4 {
+  font-family: var(--font-display);
+  color: var(--gold-bright);
+  margin: 0 0 4px;
+}
+.tournament-placements-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tournament-placements-list li {
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: var(--cream);
+}
+
+/* ---------- in-game HUD: round/score/stage, shown next to the opponent's
+   hand for games that are part of a tournament match ---------- */
+
+.tournament-game-info {
+  position: absolute;
+  top: 2%;
+  right: 4%;
+  max-height: 10cqw; /* matches the opponent hand's card height (7cqw wide, 84:122 ratio) — never taller than the cards */
+  overflow: hidden;
+  background: rgba(15, 43, 34, 0.7);
+  border: 1px solid rgba(201, 162, 75, 0.4);
+  border-radius: 6px;
+  padding: 0.5cqw 1.4cqw;
+  text-align: center;
+  z-index: 3;
+  pointer-events: none;
+}
+.tournament-game-info-round {
+  font-size: 1.2cqw;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tournament-game-info-score {
+  font-family: var(--font-display);
+  font-weight: bold;
+  font-size: 2.4cqw;
+  color: var(--gold-bright);
+  white-space: nowrap;
+  line-height: 1.15;
+}
+
+@media (max-width: 480px) {
+  .modal-card-wide { padding: 20px; }
+  .tournament-list-actions { flex-direction: column; }
+}
