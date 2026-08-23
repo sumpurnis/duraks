@@ -166,6 +166,8 @@ function tReadDateSelects(prefix) {
   return isNaN(d.getTime()) ? null : d;
 }
 
+let tGamesListCache = [];
+
 function tOpenCreateForm() {
   tPopulateDateSelects('tCreateRegEnd');
   tPopulateDateSelects('tCreateStart');
@@ -179,7 +181,19 @@ function tOpenCreateForm() {
   tSetDateSelects('tCreateStart', start);
   el('tCreatePrivate').checked = false;
   tShowView('create');
+  socket.emit('listGames');
 }
+
+socket.on('gamesData', ({ isAdmin, games }) => {
+  tGamesListCache = games;
+  el('tCreateGameField').classList.toggle('hidden', !isAdmin);
+  if (!isAdmin) return;
+  const select = el('tCreateGame');
+  const previousValue = select.value;
+  select.innerHTML = '';
+  games.forEach((g) => select.add(new Option(g.name, g.id)));
+  if (previousValue && games.some((g) => g.id === previousValue)) select.value = previousValue;
+});
 
 el('tournamentCreateOpenBtn').addEventListener('click', tOpenCreateForm);
 
@@ -187,6 +201,7 @@ el('tCreateSubmitBtn').addEventListener('click', () => {
   const name = el('tCreateName').value.trim();
   const maxParticipants = parseInt(el('tCreateMax').value, 10);
   const seriesFormat = el('tCreateFormat').value;
+  const gameId = el('tCreateGame').value || undefined;
   const regEndDate = tReadDateSelects('tCreateRegEnd');
   const startDate = tReadDateSelects('tCreateStart');
   const registrationEndTime = regEndDate ? regEndDate.toISOString() : null;
@@ -196,7 +211,7 @@ el('tCreateSubmitBtn').addEventListener('click', () => {
   if (!name) return showToast('Ievadi turnīra nosaukumu');
   if (!registrationEndTime || !startTime) return showToast('Ievadi abus laikus');
 
-  socket.emit('createTournament', { name, maxParticipants, seriesFormat, registrationEndTime, startTime, isPrivate });
+  socket.emit('createTournament', { name, maxParticipants, seriesFormat, gameId, registrationEndTime, startTime, isPrivate });
 });
 
 el('tournamentJoinCodeBtn').addEventListener('click', () => {

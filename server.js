@@ -4,7 +4,7 @@ const path = require('path');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { Game } = require('./server/game');
+const gamesRegistry = require('./server/games/registry');
 const users = require('./server/users');
 const { chooseMove } = require('./server/ai');
 const tournaments = require('./server/tournament/store');
@@ -276,6 +276,8 @@ function startTournamentGameForHuman(humanUsername, tournamentId, matchId) {
   if (!socketId) return false; // human isn't currently connected — can't push them into a game
   const socket = io.sockets.sockets.get(socketId);
   if (!socket) return false;
+  const t = tournaments.getTournament(tournamentId);
+  const gameId = (t && t.gameId) || gamesRegistry.DEFAULT_GAME_ID;
 
   const code = makeRoomCode();
   rooms.set(code, {
@@ -293,10 +295,11 @@ function startTournamentGameForHuman(humanUsername, tournamentId, matchId) {
     statsRecorded: false,
     endReason: null,
     vsAI: true,
+    gameId,
     tournamentMatch: { tournamentId, matchId },
   });
   const room = rooms.get(code);
-  room.game = new Game(room.players.map((p) => p.username));
+  room.game = gamesRegistry.getGame(room.gameId).createEngine(room.players.map((p) => p.username));
   maybeTriggerAI(room); // in case the AI goes first
   tournaments.markMatchInProgress(tournamentId, matchId);
 
@@ -319,6 +322,8 @@ function startTournamentGameForHumans(player1Username, player2Username, tourname
   const socket1 = io.sockets.sockets.get(socket1Id);
   const socket2 = io.sockets.sockets.get(socket2Id);
   if (!socket1 || !socket2) return false;
+  const t = tournaments.getTournament(tournamentId);
+  const gameId = (t && t.gameId) || gamesRegistry.DEFAULT_GAME_ID;
 
   const code = makeRoomCode();
   rooms.set(code, {
@@ -334,10 +339,11 @@ function startTournamentGameForHumans(player1Username, player2Username, tourname
     rematchVotes: {},
     statsRecorded: false,
     endReason: null,
+    gameId,
     tournamentMatch: { tournamentId, matchId },
   });
   const room = rooms.get(code);
-  room.game = new Game(room.players.map((p) => p.username));
+  room.game = gamesRegistry.getGame(room.gameId).createEngine(room.players.map((p) => p.username));
   tournaments.markMatchInProgress(tournamentId, matchId);
 
   socket1.emit('tournamentGameStarting', { code, vsBot: false });
@@ -454,6 +460,8 @@ function serializeTournament(t, forUsername) {
     maxParticipants: t.maxParticipants,
     minParticipants: t.minParticipants,
     seriesFormat: t.seriesFormat,
+    gameId: t.gameId,
+    gameName: gamesRegistry.getGame(t.gameId).name,
     registrationEndTime: t.registrationEndTime.toISOString(),
     startTime: t.startTime.toISOString(),
     status: t.status,
@@ -567,6 +575,16 @@ io.on('connection', (socket) => {
     sendTournamentsTo(socket, username);
   });
 
+  socket.on('listGames', () => {
+    if (!username) return sendError(socket, 'Vispirms ielogojies');
+    const isAdmin = username === ADMIN_USERNAME;
+    const games = isAdmin ? gamesRegistry.listAllGames() : gamesRegistry.listPublicGames();
+    socket.emit('gamesData', {
+      isAdmin,
+      games: games.map((g) => ({ id: g.id, name: g.name, description: g.description })),
+    });
+  });
+
   socket.on('createTournament', (config) => {
     if (!username) return sendError(socket, 'Vispirms ielogojies');
     const stats = users.getStats(username);
@@ -597,6 +615,14 @@ io.on('connection', (socket) => {
       const isPrivate = !!(config && config.isPrivate);
       const seriesFormat = config && config.seriesFormat === 'bo5' ? 'bo5' : 'bo3';
 
+      // Game selection is hidden from regular users for now — even if a
+      // request tries to sneak a different value through, only the admin
+      // account can actually create a tournament for a non-default game.
+      let gameId = gamesRegistry.DEFAULT_GAME_ID;
+      if (username === ADMIN_USERNAME && config && config.gameId && gamesRegistry.isValidGameId(config.gameId)) {
+        gameId = config.gameId;
+      }
+
       const t = tournaments.createTournament({
         name,
         createdBy: username,
@@ -605,6 +631,7 @@ io.on('connection', (socket) => {
         // minParticipants intentionally omitted — always defaults to the
         // fixed floor of 3 (ABSOLUTE_MIN_PARTICIPANTS), not organizer-set.
         seriesFormat,
+        gameId,
         registrationEndTime,
         startTime,
       });
@@ -797,6 +824,7 @@ io.on('connection', (socket) => {
       rematchVotes: {},
       statsRecorded: false,
       endReason: null,
+      gameId: gamesRegistry.DEFAULT_GAME_ID,
     });
     socket.join(code);
     socket.leave(LOBBY_ROOM);
@@ -826,11 +854,12 @@ io.on('connection', (socket) => {
       statsRecorded: false,
       endReason: null,
       vsAI: true,
+      gameId: gamesRegistry.DEFAULT_GAME_ID,
     });
     const room = rooms.get(code);
     socket.join(code);
 
-    room.game = new Game(room.players.map((p) => p.username));
+    room.game = gamesRegistry.getGame(room.gameId).createEngine(room.players.map((p) => p.username));
     // Tells the client this is a guest session (no account) — used to show
     // the "reģistrēties ar šo vārdu" offer after the game ends.
     socket.emit('guestPlayStarted', { username: guestName });
@@ -859,12 +888,13 @@ io.on('connection', (socket) => {
       statsRecorded: false,
       endReason: null,
       vsAI: true,
+      gameId: gamesRegistry.DEFAULT_GAME_ID,
     });
     const room = rooms.get(code);
     socket.join(code);
     socket.leave(LOBBY_ROOM);
 
-    room.game = new Game(room.players.map((p) => p.username));
+    room.game = gamesRegistry.getGame(room.gameId).createEngine(room.players.map((p) => p.username));
     socket.emit('gameStarted', { names: namesFor(room) });
     broadcastState(code);
     maybeTriggerAI(room);
@@ -908,7 +938,7 @@ io.on('connection', (socket) => {
     socket.join(code);
     socket.leave(LOBBY_ROOM);
 
-    room.game = new Game(room.players.map((p) => p.username));
+    room.game = gamesRegistry.getGame(room.gameId || gamesRegistry.DEFAULT_GAME_ID).createEngine(room.players.map((p) => p.username));
     room.statsRecorded = false;
     room.endReason = null;
     io.to(code).emit('gameStarted', { names: namesFor(room) });
@@ -1045,7 +1075,7 @@ function startRematch(room) {
   room.rematchVotes = {};
   room.statsRecorded = false;
   room.endReason = null;
-  room.game = new Game(room.players.map((p) => p.username));
+  room.game = gamesRegistry.getGame(room.gameId || gamesRegistry.DEFAULT_GAME_ID).createEngine(room.players.map((p) => p.username));
   io.to(room.code).emit('gameStarted', { names: namesFor(room) });
   broadcastState(room.code);
   maybeTriggerAI(room);

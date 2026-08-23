@@ -70,6 +70,7 @@ function rehydrate(raw) {
     maxParticipants: raw.maxParticipants,
     minParticipants: raw.minParticipants,
     seriesFormat: raw.seriesFormat,
+    gameId: raw.gameId,
     registrationEndTime: raw.registrationEndTime,
     startTime: raw.startTime,
     prizePool: raw.prizePool,

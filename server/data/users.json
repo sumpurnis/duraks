@@ -1,67 +1,44 @@
 {
   "users": {
     "zivs": {
-      "createdAt": 1786880396607,
+      "createdAt": 1787498110767,
       "email": null,
       "stats": {
-        "played": 4,
-        "won": 2,
-        "lost": 2,
-        "wonByForfeit": 2,
-        "lostByForfeit": 2,
+        "played": 0,
+        "won": 0,
+        "lost": 0,
+        "wonByForfeit": 0,
+        "lostByForfeit": 0,
         "currentStreak": 0,
-        "longestStreak": 1,
+        "longestStreak": 0,
         "daily": {
-          "date": "2026-08-16",
-          "played": 4,
-          "won": 2,
-          "lost": 2,
+          "date": "2026-08-23",
+          "played": 0,
+          "won": 0,
+          "lost": 0,
           "currentStreak": 0,
-          "longestStreak": 1
+          "longestStreak": 0
         }
       },
-      "salt": "352a8d69687fa4696d201255546d7be1",
-      "hash": "84ff8caaed755d94b686822c548ff483e864eb9725657ad0c4385580d95310fb8fdf0c4465c58256d47b9a7b95adc3da287ab0aae6e7cef93a656499f729f4c7"
-    },
-    "nezivs": {
-      "createdAt": 1786880485846,
-      "email": null,
-      "stats": {
-        "played": 4,
-        "won": 2,
-        "lost": 2,
-        "wonByForfeit": 2,
-        "lostByForfeit": 2,
-        "currentStreak": 1,
-        "longestStreak": 1,
-        "daily": {
-          "date": "2026-08-16",
-          "played": 4,
-          "won": 2,
-          "lost": 2,
-          "currentStreak": 1,
-          "longestStreak": 1
-        }
-      },
-      "salt": "4c58ce9b03f7bb8ccb199e38eb1441e7",
-      "hash": "ca938c8ec3f8d8a88e0da6f407687e08333a2fd7059a77e101e4ad7ce0dc9c98fc854c396a39781a5b99121f6cc647ff65c890704851ac9ae8b0f7f5dae01ca1"
+      "salt": "04f78cf8bc516dc56a40392986bb976f",
+      "hash": "4af31bbb4e627d1703e8c28e56c236424f0df62eb3c0a5dfd4537bc64c055eed0ac3bf155f8af17c7c910b7be598aa50c6406ed1c9bf935aa28fcef5abf4f0cf"
     }
   },
   "global": {
-    "allTimePlayed": 4,
+    "allTimePlayed": 0,
     "daily": {
-      "date": "2026-08-16",
-      "played": 4
+      "date": "2026-08-23",
+      "played": 0
     },
-    "vsBotAllTime": 2,
+    "vsBotAllTime": 3,
     "vsBotDaily": {
       "date": "2026-08-23",
-      "played": 2
+      "played": 3
     },
-    "pageVisitsAllTime": 10,
+    "pageVisitsAllTime": 7,
     "pageVisitsDaily": {
       "date": "2026-08-23",
-      "count": 10
+      "count": 7
     }
   }
 }

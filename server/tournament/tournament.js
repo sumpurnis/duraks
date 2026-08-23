@@ -46,6 +46,7 @@ class Tournament {
     maxParticipants,
     minParticipants = ABSOLUTE_MIN_PARTICIPANTS,
     seriesFormat = 'bo3',
+    gameId = 'duraks-52',
     registrationEndTime,
     startTime,
     prizePool = 0,
@@ -80,6 +81,7 @@ class Tournament {
     this.maxParticipants = maxParticipants;
     this.minParticipants = minParticipants;
     this.seriesFormat = seriesFormat;
+    this.gameId = gameId;
     this.registrationEndTime = new Date(registrationEndTime);
     this.startTime = new Date(startTime);
     this.prizePool = prizePool;

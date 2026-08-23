@@ -465,7 +465,7 @@ html, body {
   cursor: pointer;
   user-select: none;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
-  margin-left: -5.9cqw;
+  margin-left: -4.7cqw;
   border: 1px solid rgba(0,0,0,0.15);
 }
 .card:first-child { margin-left: 0; }
@@ -478,18 +478,17 @@ html, body {
 @media (max-width: 600px) and (pointer: coarse) {
   .card {
     width: 19vw;
-    margin-left: -10.5vw;
+    margin-left: -8.4vw;
   }
 }
-.card:hover { transform: translateY(-16px); box-shadow: 0 10px 20px rgba(0,0,0,0.5); z-index: 5; }
+.card:hover { transform: translateY(-16px); box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
 .card.disabled { cursor: not-allowed; }
 
 .card.selected {
   outline: 3px solid var(--gold-bright);
   transform: translateY(-10px);
-  z-index: 4;
 }
-.card.selected:hover { transform: translateY(-16px); z-index: 5; }
+.card.selected:hover { transform: translateY(-16px); }
 
 .card.playable {
   animation: card-ready-glow 1.8s ease-in-out infinite;
