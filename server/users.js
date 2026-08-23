@@ -31,7 +31,14 @@ function blankStats() {
 }
 
 function blankGlobal() {
-  return { allTimePlayed: 0, daily: { date: todayStr(), played: 0 } };
+  return {
+    allTimePlayed: 0,
+    daily: { date: todayStr(), played: 0 },
+    vsBotAllTime: 0,
+    vsBotDaily: { date: todayStr(), played: 0 },
+    pageVisitsAllTime: 0,
+    pageVisitsDaily: { date: todayStr(), count: 0 },
+  };
 }
 
 function load() {
@@ -200,6 +207,41 @@ function getGameCounts() {
   return { today: daily.played, allTime: g.allTimePlayed };
 }
 
+// Called once per completed game against the AI opponent — covers the
+// plain "Spēlēt pret datoru" button, guest play, and tournament matches
+// played against a bot, since all of those are the same vsAI room type.
+function recordVsBotGameCompleted() {
+  const g = { ...blankGlobal(), ...store.global };
+  g.vsBotAllTime = (g.vsBotAllTime || 0) + 1;
+  g.vsBotDaily = g.vsBotDaily && g.vsBotDaily.date === todayStr() ? g.vsBotDaily : { date: todayStr(), played: 0 };
+  g.vsBotDaily.played += 1;
+  store.global = g;
+  save();
+}
+
+function getVsBotGameCounts() {
+  const g = { ...blankGlobal(), ...store.global };
+  const daily = g.vsBotDaily && g.vsBotDaily.date === todayStr() ? g.vsBotDaily : { date: todayStr(), played: 0 };
+  return { today: daily.played, allTime: g.vsBotAllTime || 0 };
+}
+
+// Called once per HTTP load of the main page (see the dedicated route in
+// server.js — this is a page-visit count, not a login or session count).
+function recordPageVisit() {
+  const g = { ...blankGlobal(), ...store.global };
+  g.pageVisitsAllTime = (g.pageVisitsAllTime || 0) + 1;
+  g.pageVisitsDaily = g.pageVisitsDaily && g.pageVisitsDaily.date === todayStr() ? g.pageVisitsDaily : { date: todayStr(), count: 0 };
+  g.pageVisitsDaily.count += 1;
+  store.global = g;
+  save();
+}
+
+function getPageVisitCounts() {
+  const g = { ...blankGlobal(), ...store.global };
+  const daily = g.pageVisitsDaily && g.pageVisitsDaily.date === todayStr() ? g.pageVisitsDaily : { date: todayStr(), count: 0 };
+  return { today: daily.count, allTime: g.pageVisitsAllTime || 0 };
+}
+
 function winPct(played, won) {
   return played > 0 ? (won / played) * 100 : 0;
 }
@@ -237,6 +279,8 @@ function getLeaderboards() {
 
   return {
     games: getGameCounts(),
+    gamesVsBot: getVsBotGameCounts(),
+    pageVisits: getPageVisitCounts(),
     topWinRate: {
       today: topByWinRate((s, d) => d.played, (s, d) => d.won),
       allTime: topByWinRate((s) => s.played, (s) => s.won),
@@ -259,6 +303,8 @@ module.exports = {
   recordResult,
   getStats,
   recordGameCompleted,
+  recordVsBotGameCompleted,
+  recordPageVisit,
   getLeaderboards,
   MIN_PASSWORD_LEN,
 };

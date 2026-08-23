@@ -22,6 +22,10 @@ const AI_ID = 'Dators 🤖';
 const ADMIN_USERNAME = 'zivs';
 const AI_MOVE_DELAY_MS = [500, 1100]; // randomized range, feels less instant/robotic
 
+app.get('/', (req, res) => {
+  users.recordPageVisit();
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // In-memory rooms, keyed by 4-char code. Players are identified by *username*
@@ -35,6 +39,20 @@ function makeRoomCode() {
     code = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
   } while (rooms.has(code));
   return code;
+}
+
+// Random letter+number identifier for no-registration guest play — e.g.
+// "Viesis-7F3K". Avoids ambiguous characters (0/O, 1/I) and, just in case,
+// regenerates on the vanishingly unlikely chance it collides with a real
+// registered username.
+function makeGuestName() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let name;
+  do {
+    const suffix = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    name = `Viesis-${suffix}`;
+  } while (users.usernameExists(name));
+  return name;
 }
 
 function namesFor(room) {
@@ -148,6 +166,9 @@ function recordNormalResult(room) {
       if (durakId) users.recordResult(durakId, false, false);
     }
     broadcastLeaderboards();
+  } else {
+    users.recordVsBotGameCompleted();
+    broadcastLeaderboards();
   }
   handleTournamentGameResult(room, room.game.winnerId);
 }
@@ -171,6 +192,9 @@ function endByForfeit(room, loserUsername, reason) {
       users.recordGameCompleted();
       if (winnerUsername) users.recordResult(winnerUsername, true, true);
       users.recordResult(loserUsername, false, true);
+      broadcastLeaderboards();
+    } else {
+      users.recordVsBotGameCompleted();
       broadcastLeaderboards();
     }
     handleTournamentGameResult(room, winnerUsername);
@@ -778,6 +802,41 @@ io.on('connection', (socket) => {
     socket.leave(LOBBY_ROOM);
     socket.emit('roomCreated', { code });
     broadcastOpenRooms();
+  });
+
+  socket.on('playVsAIGuest', () => {
+    if (username) return sendError(socket, 'Tu jau esi ielogojies');
+    const guestName = makeGuestName();
+
+    const code = makeRoomCode();
+    playerId = guestName;
+    joinedCode = code;
+    rooms.set(code, {
+      code,
+      createdAt: Date.now(),
+      players: [
+        { username: guestName, socketId: socket.id, connected: true },
+        { username: AI_ID, socketId: null, connected: false },
+      ],
+      game: null,
+      timer: null,
+      aiTimer: null,
+      turnToken: 0,
+      rematchVotes: {},
+      statsRecorded: false,
+      endReason: null,
+      vsAI: true,
+    });
+    const room = rooms.get(code);
+    socket.join(code);
+
+    room.game = new Game(room.players.map((p) => p.username));
+    // Tells the client this is a guest session (no account) — used to show
+    // the "reģistrēties ar šo vārdu" offer after the game ends.
+    socket.emit('guestPlayStarted', { username: guestName });
+    socket.emit('gameStarted', { names: namesFor(room) });
+    broadcastState(code);
+    maybeTriggerAI(room);
   });
 
   socket.on('playVsAI', () => {

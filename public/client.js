@@ -41,6 +41,8 @@ let authMode = null; // 'login' | 'register'
 let chatOpen = false;
 let unreadChat = 0;
 let vsAI = false;
+let isGuestSession = false;
+let guestUsername = null;
 let currentGameOverTournamentId = null; // set by showGameOver when the finished game was part of a tournament
 
 const urlParams = new URLSearchParams(window.location.search);
@@ -184,6 +186,10 @@ function renderLeaderboards() {
 
   el('gamesToday').textContent = d.games.today;
   el('gamesAllTime').textContent = d.games.allTime;
+  el('gamesVsBotToday').textContent = d.gamesVsBot.today;
+  el('gamesVsBotAllTime').textContent = d.gamesVsBot.allTime;
+  el('pageVisitsToday').textContent = d.pageVisits.today;
+  el('pageVisitsAllTime').textContent = d.pageVisits.allTime;
 
   el('streakToday').innerHTML = holderHtml(d.longestStreak.today);
   el('streakAllTime').innerHTML = holderHtml(d.longestStreak.allTime);
@@ -240,6 +246,16 @@ el('playVsAiBtn').addEventListener('click', () => {
   socket.emit('playVsAI');
 });
 
+el('playGuestBtn').addEventListener('click', () => {
+  vsAI = true;
+  socket.emit('playVsAIGuest');
+});
+
+socket.on('guestPlayStarted', ({ username: name }) => {
+  isGuestSession = true;
+  guestUsername = name;
+});
+
 el('joinBtn').addEventListener('click', () => {
   vsAI = false;
   const code = el('codeInput').value.trim().toUpperCase();
@@ -279,7 +295,7 @@ socket.on('errorMsg', (msg) => {
 });
 
 socket.on('gameStarted', ({ names }) => {
-  myId = myUsername;
+  myId = myUsername || guestUsername;
   lobbyScreen.classList.add('hidden');
   gameScreen.classList.remove('hidden');
   el('gameOverModal').classList.add('hidden');
@@ -290,7 +306,7 @@ socket.on('gameStarted', ({ names }) => {
   } else {
     history.replaceState(null, '', `?room=${el('roomCode').textContent || urlRoomCode || ''}`);
   }
-  el('myName').textContent = names[myId] || myUsername || 'Tu';
+  el('myName').textContent = names[myId] || myUsername || guestUsername || 'Tu';
   const oppId = Object.keys(names).find((id) => id !== myId);
   el('opponentName').textContent = names[oppId] || 'Pretinieks';
 });
@@ -793,7 +809,23 @@ socket.on('returnToLobby', () => {
   vsAI = false;
   history.replaceState(null, '', window.location.pathname);
   socket.emit('listOpenRooms');
-  showToast('Atgriezies sākuma lapā');
+
+  if (isGuestSession && guestUsername) {
+    el('nameInput').value = guestUsername;
+    el('continueBtn').classList.add('hidden');
+    el('passwordFields').classList.remove('hidden');
+    authMode = 'register';
+    el('passwordLabel').textContent = 'Izvēlies paroli';
+    el('confirmField').classList.remove('hidden');
+    el('authBtn').textContent = 'Reģistrēties';
+    el('passwordInput').value = '';
+    el('confirmInput').value = '';
+    el('passwordInput').focus();
+    showToast(`Patika spēle? Reģistrējies ar vārdu "${guestUsername}", lai saglabātu savu statistiku!`);
+    isGuestSession = false;
+  } else {
+    showToast('Atgriezies sākuma lapā');
+  }
 });
 
 // ================= Toast =================
