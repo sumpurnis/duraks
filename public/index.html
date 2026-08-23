@@ -228,8 +228,30 @@
             <option value="bo5">Bo5 (labākais no 5)</option>
           </select>
         </label>
-        <label class="field"><span>Reģistrācija slēdzas</span><input id="tCreateRegEnd" type="datetime-local" /></label>
-        <label class="field"><span>Turnīra sākums</span><input id="tCreateStart" type="datetime-local" /></label>
+        <label class="field"><span>Reģistrācija slēdzas (DD/MM/GGGG, 24h)</span></label>
+        <div class="datetime-row">
+          <select id="tCreateRegEndDay" class="datetime-day"></select>
+          <span class="datetime-slash">/</span>
+          <select id="tCreateRegEndMonth" class="datetime-month"></select>
+          <span class="datetime-slash">/</span>
+          <select id="tCreateRegEndYear" class="datetime-year"></select>
+          <select id="tCreateRegEndHour" class="datetime-hour"></select>
+          <span class="datetime-colon">:</span>
+          <select id="tCreateRegEndMinute" class="datetime-minute"></select>
+        </div>
+
+        <label class="field"><span>Turnīra sākums (DD/MM/GGGG, 24h)</span></label>
+        <div class="datetime-row">
+          <select id="tCreateStartDay" class="datetime-day"></select>
+          <span class="datetime-slash">/</span>
+          <select id="tCreateStartMonth" class="datetime-month"></select>
+          <span class="datetime-slash">/</span>
+          <select id="tCreateStartYear" class="datetime-year"></select>
+          <select id="tCreateStartHour" class="datetime-hour"></select>
+          <span class="datetime-colon">:</span>
+          <select id="tCreateStartMinute" class="datetime-minute"></select>
+        </div>
+
         <label class="checkbox-field"><input id="tCreatePrivate" type="checkbox" /><span>Privāts turnīrs (ar ielūguma kodu)</span></label>
         <button id="tCreateSubmitBtn" class="btn btn-primary">Izveidot turnīru</button>
       </div>

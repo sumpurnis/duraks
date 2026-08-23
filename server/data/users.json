@@ -53,15 +53,15 @@
       "date": "2026-08-16",
       "played": 4
     },
-    "vsBotAllTime": 1,
+    "vsBotAllTime": 2,
     "vsBotDaily": {
       "date": "2026-08-23",
-      "played": 1
+      "played": 2
     },
-    "pageVisitsAllTime": 3,
+    "pageVisitsAllTime": 10,
     "pageVisitsDaily": {
       "date": "2026-08-23",
-      "count": 3
+      "count": 10
     }
   }
 }

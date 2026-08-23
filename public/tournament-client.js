@@ -36,7 +36,13 @@ function tCloseModal() {
 
 function tFormatDateTime(iso) {
   const d = new Date(iso);
-  return d.toLocaleString('lv-LV', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const pad = (n) => String(n).padStart(2, '0');
+  const day = pad(d.getDate());
+  const month = pad(d.getMonth() + 1);
+  const year = d.getFullYear();
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
 }
 
 function tStatusLabel(t) {
@@ -118,32 +124,73 @@ document.querySelectorAll('.tournament-back-btn').forEach((btn) => {
   });
 });
 
+function tPopulateDateSelects(prefix) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const dayEl = el(`${prefix}Day`);
+  const monthEl = el(`${prefix}Month`);
+  const yearEl = el(`${prefix}Year`);
+  const hourEl = el(`${prefix}Hour`);
+  const minuteEl = el(`${prefix}Minute`);
+
+  if (dayEl.options.length === 0) {
+    for (let d = 1; d <= 31; d++) dayEl.add(new Option(pad(d), String(d)));
+    const monthNames = [
+      'Janvāris', 'Februāris', 'Marts', 'Aprīlis', 'Maijs', 'Jūnijs',
+      'Jūlijs', 'Augusts', 'Septembris', 'Oktobris', 'Novembris', 'Decembris',
+    ];
+    monthNames.forEach((label, i) => monthEl.add(new Option(label, String(i + 1))));
+    const thisYear = new Date().getFullYear();
+    for (let y = thisYear; y <= thisYear + 2; y++) yearEl.add(new Option(String(y), String(y)));
+    for (let h = 0; h <= 23; h++) hourEl.add(new Option(pad(h), String(h)));
+    for (let mi = 0; mi < 60; mi += 5) minuteEl.add(new Option(pad(mi), String(mi)));
+  }
+}
+
+function tSetDateSelects(prefix, date) {
+  el(`${prefix}Day`).value = String(date.getDate());
+  el(`${prefix}Month`).value = String(date.getMonth() + 1);
+  el(`${prefix}Year`).value = String(date.getFullYear());
+  el(`${prefix}Hour`).value = String(date.getHours());
+  // Minute select steps by 5 — snap the default to the nearest step.
+  el(`${prefix}Minute`).value = String(Math.round(date.getMinutes() / 5) * 5 % 60);
+}
+
+function tReadDateSelects(prefix) {
+  const day = el(`${prefix}Day`).value;
+  const month = el(`${prefix}Month`).value;
+  const year = el(`${prefix}Year`).value;
+  const hour = el(`${prefix}Hour`).value;
+  const minute = el(`${prefix}Minute`).value;
+  if (!day || !month || !year || hour === '' || minute === '') return null;
+  const d = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), 0, 0);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function tOpenCreateForm() {
+  tPopulateDateSelects('tCreateRegEnd');
+  tPopulateDateSelects('tCreateStart');
   // Sensible defaults: registration closes in 24h, tournament starts 1h after that.
   const regEnd = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const start = new Date(Date.now() + 25 * 60 * 60 * 1000);
   el('tCreateName').value = '';
   el('tCreateMax').value = 8;
   el('tCreateFormat').value = 'bo3';
-  el('tCreateRegEnd').value = tToLocalInputValue(regEnd);
-  el('tCreateStart').value = tToLocalInputValue(start);
+  tSetDateSelects('tCreateRegEnd', regEnd);
+  tSetDateSelects('tCreateStart', start);
   el('tCreatePrivate').checked = false;
   tShowView('create');
 }
 
 el('tournamentCreateOpenBtn').addEventListener('click', tOpenCreateForm);
 
-function tToLocalInputValue(date) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 el('tCreateSubmitBtn').addEventListener('click', () => {
   const name = el('tCreateName').value.trim();
   const maxParticipants = parseInt(el('tCreateMax').value, 10);
   const seriesFormat = el('tCreateFormat').value;
-  const registrationEndTime = el('tCreateRegEnd').value ? new Date(el('tCreateRegEnd').value).toISOString() : null;
-  const startTime = el('tCreateStart').value ? new Date(el('tCreateStart').value).toISOString() : null;
+  const regEndDate = tReadDateSelects('tCreateRegEnd');
+  const startDate = tReadDateSelects('tCreateStart');
+  const registrationEndTime = regEndDate ? regEndDate.toISOString() : null;
+  const startTime = startDate ? startDate.toISOString() : null;
   const isPrivate = el('tCreatePrivate').checked;
 
   if (!name) return showToast('Ievadi turnīra nosaukumu');

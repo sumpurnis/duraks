@@ -71,6 +71,40 @@
   font-family: var(--font-ui);
   font-size: 0.9rem;
 }
+.field select option {
+  background-color: var(--felt);
+  color: var(--cream);
+}
+
+.datetime-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+.datetime-row select {
+  padding: 8px 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  border-radius: 6px;
+  color: var(--cream);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+}
+.datetime-row select option {
+  background-color: var(--felt);
+  color: var(--cream);
+}
+.datetime-row .datetime-day,
+.datetime-row .datetime-hour,
+.datetime-row .datetime-minute { width: 58px; }
+.datetime-row .datetime-month { width: 110px; }
+.datetime-row .datetime-year { width: 78px; margin-right: 8px; }
+.datetime-row .datetime-slash,
+.datetime-row .datetime-colon {
+  color: var(--muted);
+  font-weight: bold;
+}
 
 .tournament-list {
   display: flex;
