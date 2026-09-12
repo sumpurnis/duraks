@@ -112,11 +112,6 @@ function tRenderList(list) {
 el('tournamentOpenBtn').addEventListener('click', tOpenModal);
 el('tournamentCloseBtn').addEventListener('click', tCloseModal);
 
-el('tournamentCreateDirectBtn').addEventListener('click', () => {
-  el('tournamentModal').classList.remove('hidden');
-  tOpenCreateForm();
-});
-
 document.querySelectorAll('.tournament-back-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     tShowView('list');

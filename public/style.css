@@ -816,6 +816,15 @@ html, body {
 }
 .rematch-choice-row .btn { flex: 1; }
 
+/* ---------- vs-AI player count picker ---------- */
+
+.vsai-count-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+}
+
 /* Auto-generated card-face sprite positions (13 ranks x 4 suits) */
 .card-face {
   background-image: url("/images/cards-sprite.png");

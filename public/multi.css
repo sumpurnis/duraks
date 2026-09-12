@@ -1,0 +1,154 @@
+/* ---------- multi.css ----------
+   Styling for the 3-4 player "play vs computer" mode. Visually this mode
+   reuses style.css's actual wood-table classes directly (.table-wood,
+   .deck-pile, .role-banner-onboard, .table-slots, .slot, .card, .card.mini,
+   .hand-cards-onboard, etc.) so it looks and scales identically to the
+   2-player game — there was no reason to reinvent any of that.
+   The one thing style.css has no equivalent for is showing *several*
+   opponents in a row (it was built assuming exactly one) — that's the
+   only new layout piece defined here. */
+
+.multi-opponents-onboard-row {
+  position: absolute;
+  top: 2%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 3cqw;
+  z-index: 2;
+}
+
+.multi-opponent-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3cqw;
+}
+
+.multi-opponent-group-name {
+  font-size: 1.05cqw;
+  color: var(--gold-bright);
+  font-family: var(--font-display);
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+.multi-opponent-group.multi-safe .multi-opponent-group-name {
+  opacity: 0.55;
+  font-style: italic;
+}
+
+.multi-opponent-group-cards {
+  display: flex;
+}
+.multi-opponent-group-cards .card-back-mini {
+  width: 6cqw;
+  aspect-ratio: 84 / 122;
+  border-radius: 4px;
+  margin-left: -3cqw;
+  background-image: url('/images/trump-stack.png');
+  background-size: cover;
+  background-position: center;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+.multi-opponent-group-cards .card-back-mini:first-child { margin-left: 0; }
+
+/* Whoever currently has a pending action gets a slightly bigger, brighter
+   card stack so it's easy to tell whose turn it is at a glance. */
+.multi-opponent-group-cards.multi-current-turn .card-back-mini {
+  transform: scale(1.1);
+  filter: brightness(1.35);
+}
+
+/* ---------- "your turn" notice ---------- */
+
+.multi-turn-notice {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 0.6cqw 1.6cqw;
+  background: rgba(0,0,0,0.6);
+  border: 1px solid var(--gold-bright);
+  border-radius: 10px;
+  color: var(--gold-bright);
+  font-family: var(--font-display);
+  font-weight: bold;
+  font-size: 1.6cqw;
+  white-space: nowrap;
+  z-index: 10;
+  pointer-events: none;
+  opacity: 0;
+}
+.multi-turn-notice.multi-turn-notice-fade {
+  animation: multi-turn-fade 1.6s ease forwards;
+}
+@keyframes multi-turn-fade {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ---------- lobby: multiplayer room creation / list / waiting ---------- */
+
+.multi-lobby-section {
+  margin-top: 10px;
+  text-align: left;
+}
+.multi-lobby-section > .btn { margin-bottom: 4px; }
+
+.open-rooms-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+.open-rooms-title-row .open-rooms-title { margin: 0; }
+.multi-refresh-btn {
+  background: none;
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  border-radius: 6px;
+  color: var(--gold-bright);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 4px 8px;
+}
+.multi-refresh-btn:hover { background: rgba(255,255,255,0.06); }
+
+.open-room-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(201, 162, 75, 0.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.open-room-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.open-room-info .host-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.open-room-row button {
+  width: auto;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.multi-silhouette-row {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+.multi-silhouette {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.multi-silhouette-empty { opacity: 0.3; }

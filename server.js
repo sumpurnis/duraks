@@ -9,6 +9,7 @@ const users = require('./server/users');
 const { chooseMove } = require('./server/ai');
 const tournaments = require('./server/tournament/store');
 const { generateBracket } = require('./server/tournament/bracket-generator');
+const registerMultiHandlers = require('./server/multi-rooms');
 
 const app = express();
 const server = http.createServer(app);
@@ -539,6 +540,11 @@ io.on('connection', (socket) => {
   let joinedCode = null;
   let playerId = null; // == username once authenticated
   let username = null;
+
+  // Fully separate room/event system for the 3-4 player vs-bots mode —
+  // see server/multi-rooms.js. Shares nothing with the 2-player game
+  // below except this one registration call and the username getter.
+  registerMultiHandlers(io, socket, { getUsername: () => username, users });
 
   function onAuthenticated(rec) {
     username = rec.username;

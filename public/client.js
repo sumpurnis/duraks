@@ -235,16 +235,9 @@ el('statsPanel').addEventListener('click', (e) => {
 });
 
 // ================= Lobby / rooms =================
-
-el('createBtn').addEventListener('click', () => {
-  vsAI = false;
-  socket.emit('createRoom');
-});
-
-el('playVsAiBtn').addEventListener('click', () => {
-  vsAI = true;
-  socket.emit('playVsAI');
-});
+// createBtn's click handler now lives in multi-client.js — it opens the
+// multiplayer room creation modal (which covers plain 2-player rooms too,
+// via totalPlayers:2, aiCount:0), replacing the old direct createRoom call.
 
 el('playGuestBtn').addEventListener('click', () => {
   vsAI = true;
@@ -394,7 +387,10 @@ socket.on('state', (state) => {
   render(state);
 });
 
+let activeDragCancel = null; // set while a card drag/tap gesture is in progress
+
 function render(state) {
+  if (activeDragCancel) activeDragCancel();
   el('deckCount').textContent = state.deckCount;
   el('myName').textContent = (state.names && state.names[myId]) || myUsername || 'Tu';
   const oppId = state.opponent;
@@ -567,7 +563,7 @@ function rectsOverlap(r1, r2) {
 
 function clearDropHighlights() {
   el('tableFelt').classList.remove('drag-target');
-  document.querySelectorAll('.slot').forEach((s) => s.classList.remove('drag-target'));
+  document.querySelectorAll('#tableSlots .slot').forEach((s) => s.classList.remove('drag-target'));
 }
 
 function updateDropTargets(ghostRect, card, kind) {
@@ -577,7 +573,7 @@ function updateDropTargets(ghostRect, card, kind) {
       el('tableFelt').classList.add('drag-target');
     }
   } else if (kind === 'defend') {
-    document.querySelectorAll('.slot[data-open="true"]').forEach((slotEl) => {
+    document.querySelectorAll('#tableSlots .slot[data-open="true"]').forEach((slotEl) => {
       const attackCard = JSON.parse(slotEl.dataset.attack);
       if (rectsOverlap(ghostRect, slotEl.getBoundingClientRect()) && cardBeats(attackCard, card, lastState.trumpSuit)) {
         slotEl.classList.add('drag-target');
@@ -591,7 +587,7 @@ function resolveDropTarget(ghostRect, card, kind) {
     return rectsOverlap(ghostRect, el('tableFelt').getBoundingClientRect()) ? { type: 'attack' } : null;
   }
   let found = null;
-  document.querySelectorAll('.slot[data-open="true"]').forEach((slotEl) => {
+  document.querySelectorAll('#tableSlots .slot[data-open="true"]').forEach((slotEl) => {
     if (found) return;
     const attackCard = JSON.parse(slotEl.dataset.attack);
     if (rectsOverlap(ghostRect, slotEl.getBoundingClientRect()) && cardBeats(attackCard, card, lastState.trumpSuit)) {
@@ -620,6 +616,19 @@ function attachCardInteraction(cardEl, card, kind) {
     const originRect = cardEl.getBoundingClientRect();
     let moved = false;
     let ghost = null;
+    let cancelled = false;
+
+    function cancel() {
+      if (cancelled) return;
+      cancelled = true;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (ghost) ghost.remove();
+      clearDropHighlights();
+      if (activeDragCancel === cancel) activeDragCancel = null;
+    }
+    activeDragCancel = cancel;
 
     function onMove(ev) {
       const dx = ev.clientX - startX;
@@ -644,6 +653,8 @@ function attachCardInteraction(cardEl, card, kind) {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
+      if (cancelled) return; // a re-render already tore this gesture down
+      activeDragCancel = null;
 
       if (!moved) {
         handleCardTap(card, kind);

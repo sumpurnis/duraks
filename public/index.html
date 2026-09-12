@@ -7,6 +7,7 @@
 <title>Duraks</title>
 <link rel="stylesheet" href="style.css" />
 <link rel="stylesheet" href="tournament.css" />
+<link rel="stylesheet" href="multi.css" />
 </head>
 <body>
 
@@ -38,6 +39,7 @@
 
         <div class="divider"><span>vai</span></div>
         <button id="playGuestBtn" class="btn btn-secondary">🤖 Spēlēt pret datoru (bez reģistrācijas)</button>
+        <button id="createRoomGuestBtn" class="btn btn-secondary">👥 Izveidot istabu (bez reģistrācijas)</button>
       </div>
 
       <div id="playStep" class="hidden">
@@ -45,9 +47,7 @@
 
         <div class="lobby-actions">
           <button id="createBtn" class="btn btn-primary">Izveidot istabu</button>
-          <button id="playVsAiBtn" class="btn btn-secondary">🤖 Spēlēt pret datoru</button>
           <button id="tournamentOpenBtn" class="btn btn-secondary">🏆 Turnīri</button>
-          <button id="tournamentCreateDirectBtn" class="btn btn-secondary">+ Izveidot turnīru</button>
           <div class="divider"><span>vai</span></div>
           <label class="field">
             <span>Istabas kods</span>
@@ -73,6 +73,42 @@
           <button id="copyLinkBtn" class="btn btn-secondary">Kopēt saiti</button>
         </div>
         <p class="muted small">Šo saiti vari izmantot, lai atgrieztos spēlē pēc lapas pārlādēšanas</p>
+      </div>
+
+      <div class="divider"><span>vai</span></div>
+
+      <div id="multiLobbySection" class="multi-lobby-section">
+        <div class="multi-join-by-code">
+          <label class="field">
+            <span>Istabas kods (privātai istabai)</span>
+            <input id="multiJoinCodeInput" type="text" placeholder="M-XXXX" maxlength="8" style="text-transform:uppercase" />
+          </label>
+          <label class="field">
+            <span>Parole (ja privāta)</span>
+            <input id="multiJoinPasswordInput" type="text" placeholder="ja nepieciešams" maxlength="10" />
+          </label>
+          <button id="multiJoinByCodeBtn" class="btn btn-secondary">Pievienoties ar kodu</button>
+        </div>
+
+        <div class="open-rooms">
+          <div class="open-rooms-title-row">
+            <p class="open-rooms-title">Vairāku spēlētāju istabas</p>
+            <button id="multiRoomsRefreshBtn" class="multi-refresh-btn" title="Atjaunot sarakstu" type="button">⟳</button>
+          </div>
+          <div id="multiRoomsList" class="open-rooms-list">
+            <p class="muted small">Nav atvērtu istabu…</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="multiRoomWaiting" class="waiting hidden">
+        <p>Gaida spēlētājus…</p>
+        <div id="multiWaitingSilhouettes" class="multi-silhouette-row"></div>
+        <p id="multiWaitingInfo" class="muted"></p>
+        <p class="muted small">Istabas kods: <strong id="multiWaitingCode"></strong></p>
+        <p id="multiWaitingPasswordRow" class="muted small hidden">Parole: <strong id="multiWaitingPassword"></strong></p>
+        <button id="multiRoomCancelBtn" class="btn btn-danger hidden">Atcelt istabu</button>
+        <button id="multiRoomLeaveWaitingBtn" class="btn btn-secondary hidden">Pamest istabu</button>
       </div>
 
       <p id="lobbyError" class="error hidden"></p>
@@ -272,6 +308,32 @@
     </div>
   </div>
 
+  <div id="multiRoomCreateModal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Izveidot istabu</h2>
+      <label class="field">
+        <span>Kopējais spēlētāju skaits</span>
+        <select id="multiCreateTotalPlayers">
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="4">4</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Datora pretinieku skaits</span>
+        <select id="multiCreateAiCount"></select>
+      </label>
+      <label class="checkbox-field">
+        <input id="multiCreatePrivate" type="checkbox" />
+        <span>Padarīt istabu privātu (pievienoties var tikai ar paroli)</span>
+      </label>
+      <div class="rematch-choice-row">
+        <button id="multiRoomCreateSubmitBtn" class="btn btn-primary">Izveidot</button>
+        <button id="multiRoomCreateCancelBtn" class="btn btn-secondary">Atcelt</button>
+      </div>
+    </div>
+  </div>
+
   <div id="profileModal" class="modal hidden">
     <div class="modal-card">
       <h2 id="profileTitle">Profils</h2>
@@ -293,10 +355,59 @@
     </div>
   </div>
 
+  <div id="multiGame" class="screen hidden">
+    <main id="multiTableFelt" class="table-felt">
+      <div class="table-wood">
+        <div class="deck-pile">
+          <span id="multiTrumpCard" class="deck-trump-card"></span>
+          <img class="deck-stack-img" src="/images/trump-stack.png" alt="" />
+          <span id="multiDeckCount" class="deck-count">—</span>
+        </div>
+        <div id="multiOpponentsRow" class="multi-opponents-onboard-row"></div>
+        <div id="multiRoleBanner" class="role-banner-onboard">—</div>
+        <div id="multiTurnNotice" class="multi-turn-notice hidden">Tavs gājiens</div>
+        <div class="table-safezone">
+          <div id="multiTableSlots" class="table-slots"></div>
+        </div>
+        <div id="multiHandCards" class="hand-cards-onboard"></div>
+      </div>
+    </main>
+
+    <div class="name-pill-row name-pill-row-bottom">
+      <span id="multiMyName" class="name-pill">—</span>
+    </div>
+
+    <div class="action-row">
+      <button id="multiDeclineBtn" class="btn btn-primary hidden">Atteikties piemest</button>
+      <button id="multiTakeBtn" class="btn btn-danger hidden">Ņemt kārtis</button>
+      <button id="multiSurrenderBtn" class="btn btn-ghost-danger">Padoties</button>
+    </div>
+  </div>
+
+  <div id="multiGameOverModal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="multiGameOverTitle">Spēle beigusies</h2>
+      <p id="multiGameOverText"></p>
+      <button id="multiGameOverCloseBtn" class="btn btn-primary">Atpakaļ uz sākumu</button>
+    </div>
+  </div>
+
+  <div id="multiSafeModal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="multiSafeTitle">Tu tiki drošībā!</h2>
+      <p id="multiSafeText">Pārējie spēlētāji vēl turpina spēlēt.</p>
+      <div class="rematch-choice-row">
+        <button id="multiSafeWatchBtn" class="btn btn-primary">Turpināt skatīties</button>
+        <button id="multiSafeLeaveBtn" class="btn btn-secondary">Pamest spēli</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
   <script src="tournament-client.js"></script>
+  <script src="multi-client.js"></script>
 </body>
 </html>
