@@ -15,7 +15,7 @@
     <div class="lobby-layout">
     <div class="lobby-card">
       <h1 class="wordmark">Durak<span class="accent">s</span></h1>
-      <p class="tagline">Divu spēlētāju kāršu spēle · pilna 52 kāršu kava</p>
+      <p class="tagline">2-4 spēlētāju kāršu spēle</p>
 
       <div id="authStep">
         <label class="field">
@@ -48,19 +48,6 @@
         <div class="lobby-actions">
           <button id="createBtn" class="btn btn-primary">Izveidot istabu</button>
           <button id="tournamentOpenBtn" class="btn btn-secondary">🏆 Turnīri</button>
-          <div class="divider"><span>vai</span></div>
-          <label class="field">
-            <span>Istabas kods</span>
-            <input id="codeInput" type="text" placeholder="XXXX" maxlength="4" style="text-transform:uppercase" />
-          </label>
-          <button id="joinBtn" class="btn btn-secondary">Pievienoties</button>
-        </div>
-
-        <div class="open-rooms">
-          <p class="open-rooms-title">Atvērtās spēles</p>
-          <div id="openRoomsList" class="open-rooms-list">
-            <p class="muted small">Nav aktīvu atvērtu spēļu…</p>
-          </div>
         </div>
       </div>
 
@@ -73,32 +60,6 @@
           <button id="copyLinkBtn" class="btn btn-secondary">Kopēt saiti</button>
         </div>
         <p class="muted small">Šo saiti vari izmantot, lai atgrieztos spēlē pēc lapas pārlādēšanas</p>
-      </div>
-
-      <div class="divider"><span>vai</span></div>
-
-      <div id="multiLobbySection" class="multi-lobby-section">
-        <div class="multi-join-by-code">
-          <label class="field">
-            <span>Istabas kods (privātai istabai)</span>
-            <input id="multiJoinCodeInput" type="text" placeholder="M-XXXX" maxlength="8" style="text-transform:uppercase" />
-          </label>
-          <label class="field">
-            <span>Parole (ja privāta)</span>
-            <input id="multiJoinPasswordInput" type="text" placeholder="ja nepieciešams" maxlength="10" />
-          </label>
-          <button id="multiJoinByCodeBtn" class="btn btn-secondary">Pievienoties ar kodu</button>
-        </div>
-
-        <div class="open-rooms">
-          <div class="open-rooms-title-row">
-            <p class="open-rooms-title">Vairāku spēlētāju istabas</p>
-            <button id="multiRoomsRefreshBtn" class="multi-refresh-btn" title="Atjaunot sarakstu" type="button">⟳</button>
-          </div>
-          <div id="multiRoomsList" class="open-rooms-list">
-            <p class="muted small">Nav atvērtu istabu…</p>
-          </div>
-        </div>
       </div>
 
       <div id="multiRoomWaiting" class="waiting hidden">
@@ -129,11 +90,21 @@
         <span class="stats-highlight">Kopā: <strong id="gamesVsBotAllTime">—</strong></span>
       </p>
 
-      <p class="stats-line">
+      <p class="stats-line hidden" id="pageVisitsLine">
         Apmeklējumi:
         <span class="stats-highlight">Šodien: <strong id="pageVisitsToday">—</strong></span>
         <span class="stats-highlight">Kopā: <strong id="pageVisitsAllTime">—</strong></span>
       </p>
+
+      <div class="open-rooms" id="multiRoomsSection">
+        <div class="open-rooms-title-row">
+          <p class="open-rooms-title">Atvērtās spēles</p>
+          <button id="multiRoomsRefreshBtn" class="multi-refresh-btn" title="Atjaunot sarakstu" type="button">⟳</button>
+        </div>
+        <div id="multiRoomsList" class="open-rooms-list">
+          <p class="muted small">Nav atvērtu spēļu…</p>
+        </div>
+      </div>
 
       <div class="stats-block">
         <div class="stats-block-header">
@@ -320,6 +291,13 @@
         </select>
       </label>
       <label class="field">
+        <span>Kāršu kava</span>
+        <select id="multiCreateDeckSize">
+          <option value="52">52 kārtis</option>
+          <option value="36">36 kārtis (tikai 2 spēlētājiem)</option>
+        </select>
+      </label>
+      <label class="field">
         <span>Datora pretinieku skaits</span>
         <select id="multiCreateAiCount"></select>
       </label>
@@ -330,6 +308,21 @@
       <div class="rematch-choice-row">
         <button id="multiRoomCreateSubmitBtn" class="btn btn-primary">Izveidot</button>
         <button id="multiRoomCreateCancelBtn" class="btn btn-secondary">Atcelt</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="multiJoinPasswordModal" class="modal hidden">
+    <div class="modal-card">
+      <h2>🔒 Privāta istaba</h2>
+      <p class="playing-as">Ievadi paroli, lai pievienotos</p>
+      <label class="field">
+        <span>Parole</span>
+        <input id="multiJoinPasswordModalInput" type="text" maxlength="10" autocomplete="off" />
+      </label>
+      <div class="rematch-choice-row">
+        <button id="multiJoinPasswordSubmitBtn" class="btn btn-primary">Pievienoties</button>
+        <button id="multiJoinPasswordCancelBtn" class="btn btn-secondary">Atcelt</button>
       </div>
     </div>
   </div>

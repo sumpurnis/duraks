@@ -190,6 +190,35 @@ function getStats(username) {
   return record ? publicStats(record) : null;
 }
 
+// Per-user game history: a capped, most-recent-first list of completed
+// games, independent of the running-total stats above. Each entry is a
+// simple, self-contained record — mode ('2p' or 'multi'), player count,
+// deck size, outcome ('won'/'lost'/'placed'/'draw' — 'placed' covers a
+// multiplayer finish that's safe but not 1st), placement (1 = best),
+// whether AI was involved, and opponent usernames (bot names included as
+// plain strings for context). Silently no-ops for accounts that don't
+// exist (guests), matching recordResult's existing behavior — a guest's
+// games simply aren't persisted anywhere.
+const HISTORY_LIMIT = 100;
+
+function recordGameHistoryEntry(username, entry) {
+  const name = normalize(username);
+  if (!name || !store.users[name]) return;
+  const record = store.users[name];
+  const history = Array.isArray(record.history) ? record.history : [];
+  history.unshift({ ...entry, timestamp: entry.timestamp || Date.now() });
+  record.history = history.slice(0, HISTORY_LIMIT);
+  save();
+}
+
+function getGameHistory(username, limit) {
+  const name = normalize(username);
+  const record = store.users[name];
+  if (!record || !Array.isArray(record.history)) return [];
+  const n = Number.isInteger(limit) && limit > 0 ? limit : HISTORY_LIMIT;
+  return record.history.slice(0, n);
+}
+
 // Called once per completed real (non-AI) game, regardless of how many
 // players are in it — this is a count of games, not of results.
 function recordGameCompleted() {
@@ -306,5 +335,7 @@ module.exports = {
   recordVsBotGameCompleted,
   recordPageVisit,
   getLeaderboards,
+  recordGameHistoryEntry,
+  getGameHistory,
   MIN_PASSWORD_LEN,
 };

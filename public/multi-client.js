@@ -38,7 +38,10 @@ function multiReturnToLobby() {
   socket.emit('listMultiRooms');
 }
 
-socket.on('multiGameStarted', () => {
+let multiMyUsername = null; // learned via multiGameStarted/multiRoomWaiting — works for guests too, unlike the login-only global myUsername
+
+socket.on('multiGameStarted', (data) => {
+  if (data && data.you) multiMyUsername = data.you;
   multiWasMyTurn = false;
   multiWasActive = true;
   el('multiRoomWaiting').classList.add('hidden');
@@ -83,7 +86,7 @@ function multiRenderRoomsList(rooms) {
   if (!rooms || rooms.length === 0) {
     const p = document.createElement('p');
     p.className = 'muted small';
-    p.textContent = 'Nav atvērtu istabu…';
+    p.textContent = 'Nav atvērtu spēļu…';
     container.appendChild(p);
     return;
   }
@@ -95,7 +98,8 @@ function multiRenderRoomsList(rooms) {
     info.className = 'open-room-info';
     const title = document.createElement('span');
     title.className = 'host-name';
-    title.textContent = r.creatorUsername + ' · ' + r.humansJoined + '/' + r.humanSlotsNeeded + ' spēlētāji';
+    const lockPrefix = r.isPrivate ? '🔒 ' : '';
+    title.textContent = lockPrefix + r.creatorUsername + ' · ' + r.humansJoined + '/' + r.humanSlotsNeeded + ' spēlētāji';
     info.appendChild(title);
     const silhouettes = document.createElement('div');
     silhouettes.className = 'multi-silhouette-row';
@@ -103,19 +107,51 @@ function multiRenderRoomsList(rooms) {
     info.appendChild(silhouettes);
     row.appendChild(info);
 
-    const joinBtn = document.createElement('button');
-    joinBtn.className = 'btn btn-secondary';
-    joinBtn.textContent = 'Pievienoties';
-    joinBtn.addEventListener('click', function () {
-      socket.emit('joinMultiRoom', { code: r.code });
-    });
-    row.appendChild(joinBtn);
+    const effectiveOwnUsername = myUsername || multiMyUsername;
+    const isMine = effectiveOwnUsername && r.creatorUsername === effectiveOwnUsername;
+
+    const actionBtn = document.createElement('button');
+    if (isMine) {
+      actionBtn.className = 'btn btn-danger';
+      actionBtn.textContent = 'Atcelt';
+      actionBtn.addEventListener('click', function () {
+        socket.emit('cancelMultiRoom', { code: r.code });
+      });
+    } else {
+      actionBtn.className = 'btn btn-secondary';
+      actionBtn.textContent = 'Pievienoties';
+      actionBtn.addEventListener('click', function () {
+        if (r.isPrivate) {
+          multiPendingJoinCode = r.code;
+          el('multiJoinPasswordModalInput').value = '';
+          el('multiJoinPasswordModal').classList.remove('hidden');
+          el('multiJoinPasswordModalInput').focus();
+        } else {
+          socket.emit('joinMultiRoom', { code: r.code });
+        }
+      });
+    }
+    row.appendChild(actionBtn);
 
     container.appendChild(row);
   });
 }
 
 socket.on('multiRoomsData', multiRenderRoomsList);
+
+let multiPendingJoinCode = null;
+
+el('multiJoinPasswordCancelBtn').addEventListener('click', function () {
+  el('multiJoinPasswordModal').classList.add('hidden');
+  multiPendingJoinCode = null;
+});
+el('multiJoinPasswordSubmitBtn').addEventListener('click', function () {
+  const password = el('multiJoinPasswordModalInput').value.trim();
+  if (!multiPendingJoinCode) return;
+  socket.emit('joinMultiRoom', { code: multiPendingJoinCode, password: password });
+  el('multiJoinPasswordModal').classList.add('hidden');
+  multiPendingJoinCode = null;
+});
 
 el('multiRoomsRefreshBtn').addEventListener('click', function () {
   socket.emit('listMultiRooms');
@@ -134,11 +170,26 @@ function multiPopulateAiCountOptions() {
 multiPopulateAiCountOptions();
 el('multiCreateTotalPlayers').addEventListener('change', multiPopulateAiCountOptions);
 
+function multiApplyDeckSizeConstraint() {
+  const is36 = el('multiCreateDeckSize').value === '36';
+  const totalSelect = el('multiCreateTotalPlayers');
+  if (is36) {
+    totalSelect.value = '2';
+    totalSelect.disabled = true;
+  } else {
+    totalSelect.disabled = false;
+  }
+  multiPopulateAiCountOptions();
+}
+el('multiCreateDeckSize').addEventListener('change', multiApplyDeckSizeConstraint);
+
 // createBtn now opens this modal — it replaces the old direct 2p-only room
 // creation, since totalPlayers:2/aiCount:0 covers that exact case too.
 // createRoomGuestBtn (pre-login) opens the exact same modal, so guests can
 // create rooms too without needing to register.
 function multiOpenRoomCreateModal() {
+  el('multiCreateDeckSize').value = '52';
+  el('multiCreateTotalPlayers').disabled = false;
   multiPopulateAiCountOptions();
   el('multiCreatePrivate').checked = false;
   el('multiRoomCreateModal').classList.remove('hidden');
@@ -153,11 +204,13 @@ el('multiRoomCreateSubmitBtn').addEventListener('click', function () {
   const totalPlayers = parseInt(el('multiCreateTotalPlayers').value, 10);
   const aiCount = parseInt(el('multiCreateAiCount').value, 10);
   const isPrivate = el('multiCreatePrivate').checked;
+  const deckSize = parseInt(el('multiCreateDeckSize').value, 10);
   el('multiRoomCreateModal').classList.add('hidden');
-  socket.emit('createMultiRoom', { totalPlayers: totalPlayers, aiCount: aiCount, isPrivate: isPrivate });
+  socket.emit('createMultiRoom', { totalPlayers: totalPlayers, aiCount: aiCount, isPrivate: isPrivate, deckSize: deckSize });
 });
 
 socket.on('multiRoomWaiting', function (data) {
+  if (data && data.yourUsername) multiMyUsername = data.yourUsername;
   el('multiRoomWaiting').classList.remove('hidden');
   el('multiWaitingInfo').textContent = data.humansJoined + '/' + data.humanSlotsNeeded + ' spēlētāji pievienojušies';
   el('multiWaitingCode').textContent = data.code;
@@ -185,13 +238,6 @@ el('multiRoomCancelBtn').addEventListener('click', function () {
 el('multiRoomLeaveWaitingBtn').addEventListener('click', function () {
   socket.emit('multiLeaveRoom');
   el('multiRoomWaiting').classList.add('hidden');
-});
-
-el('multiJoinByCodeBtn').addEventListener('click', function () {
-  const code = el('multiJoinCodeInput').value.trim().toUpperCase();
-  const password = el('multiJoinPasswordInput').value.trim();
-  if (!code) return showToast('Ievadi istabas kodu');
-  socket.emit('joinMultiRoom', { code: code, password: password });
 });
 
 

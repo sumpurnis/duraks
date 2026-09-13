@@ -47,15 +47,24 @@
 
 const SUITS = ['clubs', 'diamonds', 'hearts', 'spades'];
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+const RANKS_36 = RANKS.slice(4); // ['6','7','8','9','10','J','Q','K','A'] — 9 ranks x 4 suits = 36
 const RANK_VALUE = Object.fromEntries(RANKS.map((r, i) => [r, i + 2]));
 const MAX_TABLE_SLOTS = 6;
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 4;
 
-function makeDeck() {
+function ranksForDeckSize(deckSize) {
+  return deckSize === 36 ? RANKS_36 : RANKS;
+}
+
+function rankValueFor(ranks) {
+  return Object.fromEntries(ranks.map((r, i) => [r, i + 2]));
+}
+
+function makeDeck(ranks) {
   const deck = [];
   for (const suit of SUITS) {
-    for (const rank of RANKS) {
+    for (const rank of ranks) {
       deck.push({ suit, rank, id: `${rank}-${suit}` });
     }
   }
@@ -92,9 +101,18 @@ class Game {
     // throw in matching-rank cards before the pickup is finalized, same as
     // physical Durak's "beru" moment.
     this.pendingTake = false;
+    // 52 (default) or 36 — a 36-card deck drops ranks 2-5, per the same
+    // convention as the standalone duraks36.js 2-player engine. Kept as
+    // instance state (not a module constant) so ranks/rankValue below are
+    // correctly recalibrated per game — comparisons, trump preservation
+    // cost, and danger-scoring all rely on rank *position*, not the
+    // specific characters, so this is the only thing that needs to vary.
+    this.deckSize = opts.deckSize === 36 ? 36 : 52;
+    this.ranks = ranksForDeckSize(this.deckSize);
+    this.rankValue = rankValueFor(this.ranks);
     this.hands = {};
     for (const p of this.players) this.hands[p] = [];
-    this.deck = shuffle(makeDeck());
+    this.deck = shuffle(makeDeck(this.ranks));
     this.discard = [];
     this.trumpCard = null;
     this.trumpSuit = null;
@@ -130,7 +148,7 @@ class Game {
     for (const p of this.players) {
       for (const c of this.hands[p]) {
         if (c.suit === this.trumpSuit) {
-          if (!lowest || RANK_VALUE[c.rank] < RANK_VALUE[lowest]) {
+          if (!lowest || this.rankValue[c.rank] < this.rankValue[lowest]) {
             lowest = c.rank;
             starter = p;
           }
@@ -171,7 +189,7 @@ class Game {
 
   beats(attackCard, defendCard) {
     if (defendCard.suit === attackCard.suit) {
-      return RANK_VALUE[defendCard.rank] > RANK_VALUE[attackCard.rank];
+      return this.rankValue[defendCard.rank] > this.rankValue[attackCard.rank];
     }
     return defendCard.suit === this.trumpSuit && attackCard.suit !== this.trumpSuit;
   }

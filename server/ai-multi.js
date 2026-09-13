@@ -16,18 +16,19 @@
  * Same "deliberately simple, reasonable stand-in" philosophy as ai.js:
  * trump preservation (low trumps spendable early, high trumps a
  * near-last-resort, both getting pricier as the deck depletes) plus
- * basic card counting for which cheap card is safest to lead with. The
- * throw-in decision (this engine's equivalent of ai.js's "pile on or end
- * the attack") uses the same cost logic, and applies whether this bot is
- * the original attacker continuing to add cards or another player taking
- * their turn in the throw-in rotation — mechanically the action is
- * identical either way (attack() with a matching-rank card, or decline).
+ * basic card counting for which cheap card is safest to lead with. All of
+ * this reads rank scale and deck size from the game instance itself
+ * (game.ranks / game.rankValue / game.deckSize), so it's correctly
+ * calibrated whether the game is using a 52-card or 36-card deck — not
+ * just hardcoded for one. The throw-in decision (this engine's equivalent
+ * of ai.js's "pile on or end the attack") uses the same cost logic, and
+ * applies whether this bot is the original attacker continuing to add
+ * cards or another player taking their turn in the throw-in rotation —
+ * mechanically the action is identical either way (attack() with a
+ * matching-rank card, or decline).
  */
 
-const { SUITS, RANKS, MAX_TABLE_SLOTS } = require('./games/duraks-multi');
-
-const rankValue = (r) => RANKS.indexOf(r);
-const HIGH_TRUMP_THRESHOLD = rankValue('10'); // rank index above this = J, Q, K, A
+const { SUITS, MAX_TABLE_SLOTS } = require('./games/duraks-multi');
 
 // Called once per game tick per bot seat — server.js is expected to check
 // every AI-controlled player against game.pendingActors() and call this
@@ -103,33 +104,38 @@ function bestOpeningCard(game, aiId) {
 }
 
 // How "expensive" it is to spend this card right now — same shape as
-// ai.js, but the deck's starting size after dealing depends on how many
-// players are seated (52 - 6 per player), not a fixed 40.
+// ai.js, but both the rank scale and the deck's starting size depend on
+// the game's own deck size (36 or 52) and player count, not fixed values.
 function cardCost(card, game) {
-  const base = rankValue(card.rank);
+  const base = game.rankValue[card.rank];
   if (card.suit !== game.trumpSuit) return base;
 
-  if (rankValue(card.rank) > HIGH_TRUMP_THRESHOLD) {
+  // '10' exists in both the 36- and 52-card rank sets, and in both cases
+  // everything above it (J, Q, K, A) is the same fixed set of "high"
+  // trumps worth protecting — so this threshold works unchanged for
+  // either deck size.
+  if (base > game.rankValue['10']) {
     return 1000 + base;
   }
 
-  const startingDeckSize = 52 - 6 * game.players.length;
+  const startingDeckSize = game.deckSize - 6 * game.players.length;
   const deckPhase = Math.max(0, Math.min(1, 1 - game.deck.length / startingDeckSize));
   return base + deckPhase * 40;
 }
 
 // Same card-counting idea as ai.js, generalized to however many opponents
 // there are: counts still-unseen cards (not in this bot's own hand, not
-// already shown face-up) that could beat the given card. With more
-// players at the table there's naturally a larger unseen pool, but that's
-// fine — this is only ever compared against other candidates within the
-// same hand at the same moment, not across games with different player
-// counts.
+// already shown face-up) that could beat the given card. Iterates the
+// game's own rank set so a 36-card game doesn't count phantom low cards
+// that were never in that deck to begin with. With more players at the
+// table there's naturally a larger unseen pool, but that's fine — this is
+// only ever compared against other candidates within the same hand at the
+// same moment, not across games with different player counts or deck sizes.
 function dangerScore(card, game, aiHandIds) {
   const seen = game.seenCards;
   let danger = 0;
   for (const suit of SUITS) {
-    for (const rank of RANKS) {
+    for (const rank of game.ranks) {
       const id = `${rank}-${suit}`;
       if (id === card.id || seen.has(id) || aiHandIds.has(id)) continue;
       if (game.beats(card, { suit, rank })) danger++;

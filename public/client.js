@@ -126,43 +126,15 @@ socket.on('registered', (rec) => {
   if (urlRoomCode) socket.emit('joinRoom', { code: urlRoomCode });
 });
 
+// ================= Open rooms browser (old 2p-only room system) =================
+// Retired: room creation now always goes through the unified multi-room
+// modal (see multi-client.js), which supports plain 2-player rooms too.
+// The server still emits openRoomsUpdated for backward compatibility, but
+// there's no UI here to render it into anymore, and no UI path left that
+// creates a room this system would ever list.
+
 tryAutoLogin();
 
-// ================= Open rooms browser =================
-
-socket.on('openRoomsUpdated', (roomsList) => {
-  const container = el('openRoomsList');
-  container.innerHTML = '';
-  if (roomsList.length === 0) {
-    container.innerHTML = '<p class="muted small">Nav aktīvu atvērtu spēļu…</p>';
-    return;
-  }
-  roomsList.forEach((r) => {
-    const item = document.createElement('div');
-    item.className = 'open-room-item';
-    const isMine = r.host === myUsername;
-    item.innerHTML = `<span><span class="host-name">${escapeHtml(r.host)}</span><span class="room-age">${relativeTime(r.createdAt)}</span></span>`;
-    if (!isMine) {
-      const btn = document.createElement('button');
-      btn.className = 'btn btn-primary';
-      btn.textContent = 'Pievienoties';
-      btn.addEventListener('click', () => socket.emit('joinRoom', { code: r.code }));
-      item.appendChild(btn);
-    } else {
-      const tag = document.createElement('span');
-      tag.className = 'muted small';
-      tag.textContent = 'Tava istaba';
-      item.appendChild(tag);
-    }
-    container.appendChild(item);
-  });
-});
-
-function relativeTime(ts) {
-  const secs = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (secs < 60) return `pirms ${secs}s`;
-  return `pirms ${Math.floor(secs / 60)}min`;
-}
 
 function escapeHtml(s) {
   const d = document.createElement('div');
@@ -247,13 +219,6 @@ el('playGuestBtn').addEventListener('click', () => {
 socket.on('guestPlayStarted', ({ username: name }) => {
   isGuestSession = true;
   guestUsername = name;
-});
-
-el('joinBtn').addEventListener('click', () => {
-  vsAI = false;
-  const code = el('codeInput').value.trim().toUpperCase();
-  if (!code) return showLobbyError('Ievadi istabas kodu');
-  socket.emit('joinRoom', { code });
 });
 
 function showLobbyError(msg) {

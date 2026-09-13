@@ -159,9 +159,9 @@ function autoStartReadyBotMatches(tournamentId) {
 function recordNormalResult(room) {
   if (room.statsRecorded) return;
   room.statsRecorded = true;
+  const { winnerId, durakId, draw } = room.game;
   if (!room.vsAI) {
     users.recordGameCompleted();
-    const { winnerId, durakId, draw } = room.game;
     if (!draw) {
       if (winnerId) users.recordResult(winnerId, true, false);
       if (durakId) users.recordResult(durakId, false, false);
@@ -171,7 +171,32 @@ function recordNormalResult(room) {
     users.recordVsBotGameCompleted();
     broadcastLeaderboards();
   }
+  recordTwoPlayerHistory(room, winnerId, durakId, draw, false);
   handleTournamentGameResult(room, room.game.winnerId);
+}
+
+// Personal history log for a 2-player game — recorded for both real and
+// vs-bot games (vs-bot games just don't touch the competitive
+// leaderboard/win-loss counters above). Silently no-ops per-player for
+// guests, same as recordResult.
+function recordTwoPlayerHistory(room, winnerId, durakId, draw, forfeit) {
+  const usernames = room.players.map((p) => p.username).filter((u) => u !== AI_ID);
+  for (const username of usernames) {
+    let outcome;
+    if (draw) outcome = 'draw';
+    else outcome = username === winnerId ? 'won' : 'lost';
+    users.recordGameHistoryEntry(username, {
+      mode: '2p',
+      totalPlayers: 2,
+      deckSize: 52,
+      ranked: false,
+      outcome,
+      placement: outcome === 'won' ? 1 : outcome === 'draw' ? null : 2,
+      vsBots: !!room.vsAI,
+      forfeit: !!forfeit,
+      opponents: room.players.map((p) => p.username).filter((u) => u !== username),
+    });
+  }
 }
 
 function finishIfGameOver(room) {
@@ -198,6 +223,7 @@ function endByForfeit(room, loserUsername, reason) {
       users.recordVsBotGameCompleted();
       broadcastLeaderboards();
     }
+    recordTwoPlayerHistory(room, winnerUsername, loserUsername, false, true);
     handleTournamentGameResult(room, winnerUsername);
   }
 
