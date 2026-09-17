@@ -554,7 +554,10 @@ html, body {
   border-radius: 12px;
   padding: 32px;
   text-align: center;
+  width: min(320px, 90vw);
   max-width: 320px;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 .modal-card h2 {
   font-family: var(--font-display);
@@ -785,9 +788,19 @@ html, body {
 .profile-stat-row {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
   padding: 7px 0;
   border-bottom: 1px solid rgba(201, 162, 75, 0.15);
   font-size: 0.9rem;
+}
+.profile-stat-row span {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.profile-stat-row strong {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .profile-stat-row strong { color: var(--gold-bright); }
 .profile-stat-row.muted-row {
@@ -814,9 +827,14 @@ html, body {
 .profile-elo-chart-labels {
   display: flex;
   justify-content: space-between;
+  gap: 6px;
   margin-top: 4px;
   color: var(--muted);
   font-size: 0.72rem;
+}
+.profile-elo-chart-labels span {
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 .profile-history-list {
   display: flex;
@@ -827,24 +845,28 @@ html, body {
 }
 .profile-history-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 2px;
   padding: 7px 10px;
   border-radius: 6px;
   background: rgba(255,255,255,0.04);
   border-left: 3px solid var(--muted);
   font-size: 0.85rem;
+  min-width: 0;
 }
 .profile-history-row.profile-history-won { border-left-color: #4caf6d; }
 .profile-history-row.profile-history-lost { border-left-color: #c95c5c; }
 .profile-history-row.profile-history-placed { border-left-color: var(--gold-bright); }
 .profile-history-row.profile-history-draw { border-left-color: var(--muted); }
-.profile-history-outcome { font-weight: 600; white-space: nowrap; }
+.profile-history-outcome {
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
 .profile-history-meta {
   color: var(--muted);
   font-size: 0.78rem;
-  text-align: right;
+  text-align: left;
+  overflow-wrap: break-word;
 }
 
 /* ---------- Drag & drop ---------- */
