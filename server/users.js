@@ -219,6 +219,73 @@ function getGameHistory(username, limit) {
   return record.history.slice(0, n);
 }
 
+// ---------- ELO rating ----------
+//
+// One rating, shared across all player counts (2-4) — a ranked game
+// always counts toward it regardless of how many people were at the
+// table, same spirit as Age of Empires 2's ranked queue. There's no
+// separate "team" concept here, just N individuals with a placement
+// (1 = best) each. Extended to N>2 by treating the game as every
+// possible pair of participants playing a virtual 1v1: each pair
+// contributes a standard expected-score comparison based on the ELO gap,
+// and a player's own rating change is the sum of their pairwise deltas
+// averaged across their (N-1) opponents — this keeps a typical change
+// roughly the same size regardless of table size, rather than a 4-player
+// game swinging ratings 3x harder than a 2-player one for the same K.
+//
+// New accounts don't get an elo field until their first ranked game —
+// getElo and applyRankedGameResult both treat a missing field as
+// DEFAULT_ELO, so this needs no migration for existing accounts.
+const DEFAULT_ELO = 1000;
+const ELO_K = 32;
+
+function getElo(username) {
+  const name = normalize(username);
+  const record = store.users[name];
+  if (!record) return null;
+  return typeof record.elo === 'number' ? record.elo : DEFAULT_ELO;
+}
+
+// placements: array of { username, placement } (1 = best place at the
+// table). Only entries whose account actually exists are rated — guests
+// are silently excluded, same as everywhere else. Requires at least 2
+// ratable participants. Returns { [username]: { before, after, delta } }
+// for each rated participant, or null if fewer than 2 were ratable.
+// Does NOT decide whether a game qualifies as ranked — that's the
+// caller's job (see multi-rooms.js's ranked-room restrictions).
+function applyRankedGameResult(placements) {
+  const eligible = (placements || [])
+    .map((p) => ({ username: normalize(p.username), placement: p.placement }))
+    .filter((p) => p.username && store.users[p.username]);
+  if (eligible.length < 2) return null;
+
+  const before = {};
+  for (const p of eligible) before[p.username] = getElo(p.username);
+
+  const deltaSum = {};
+  for (const p of eligible) deltaSum[p.username] = 0;
+
+  for (const a of eligible) {
+    for (const b of eligible) {
+      if (a.username === b.username) continue;
+      const expectedA = 1 / (1 + Math.pow(10, (before[b.username] - before[a.username]) / 400));
+      const actualA = a.placement < b.placement ? 1 : a.placement > b.placement ? 0 : 0.5;
+      deltaSum[a.username] += ELO_K * (actualA - expectedA);
+    }
+  }
+
+  const result = {};
+  const n = eligible.length - 1;
+  for (const p of eligible) {
+    const avgDelta = Math.round(deltaSum[p.username] / n);
+    const newElo = before[p.username] + avgDelta;
+    store.users[p.username].elo = newElo;
+    result[p.username] = { before: before[p.username], after: newElo, delta: avgDelta };
+  }
+  save();
+  return result;
+}
+
 // Called once per completed real (non-AI) game, regardless of how many
 // players are in it — this is a count of games, not of results.
 function recordGameCompleted() {
@@ -337,5 +404,7 @@ module.exports = {
   getLeaderboards,
   recordGameHistoryEntry,
   getGameHistory,
+  getElo,
+  applyRankedGameResult,
   MIN_PASSWORD_LEN,
 };

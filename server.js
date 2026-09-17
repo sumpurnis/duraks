@@ -1073,7 +1073,9 @@ io.on('connection', (socket) => {
   socket.on('getProfile', ({ username: target }) => {
     const stats = users.getStats(target);
     if (!stats) return sendError(socket, 'Profils nav atrasts');
-    socket.emit('profileData', { username: target, stats });
+    const history = users.getGameHistory(target, 50);
+    const elo = users.getElo(target);
+    socket.emit('profileData', { username: target, stats, history, elo });
   });
 
   socket.on('disconnect', () => {

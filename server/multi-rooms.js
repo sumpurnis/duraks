@@ -115,6 +115,7 @@ function serializeOpenRoom(room) {
     humanNames: room.humans.map((h) => h.username),
     creatorUsername: room.creatorUsername,
     isPrivate: !!room.isPrivate,
+    ranked: !!room.ranked,
   };
 }
 
@@ -130,8 +131,10 @@ function listOpenMultiRooms() {
 // one is blocked while this is true).
 function userHasActiveRoom(username) {
   for (const room of multiRooms.values()) {
-    if (room.status === 'waiting' || room.status === 'active') {
-      if (room.humans.some((h) => h.username === username)) return true;
+    const isWaitingRoom = room.status === 'waiting';
+    const isOngoingGame = room.game && room.game.status === 'active';
+    if ((isWaitingRoom || isOngoingGame) && room.humans.some((h) => h.username === username)) {
+      return true;
     }
   }
   return false;
@@ -172,6 +175,10 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   // the order players went safe (1st entry = best), durakId is always
   // last place; a true draw (nobody left active, no durak) records no
   // placement. Bots are never recorded — only room.humans.
+  function broadcastMultiLeaderboards() {
+    io.to(MULTI_LOBBY_ROOM).emit('leaderboardsData', users.getLeaderboards());
+  }
+
   function recordMultiGameHistory(room) {
     if (room.historyRecorded) return;
     room.historyRecorded = true;
@@ -183,8 +190,38 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
       placementOf[username] = idx + 1;
     });
     if (game.durakId) placementOf[game.durakId] = room.totalPlayers;
+    // Any human not yet placed didn't go safe through normal play and
+    // isn't the durak — a survivor of a forced finish (surrender/
+    // timeout/disconnect), which ends the whole game immediately rather
+    // than letting them keep playing to a natural placement. Treat them
+    // as a winner: unambiguous for 2 players, a reasonable simplification
+    // for 3-4 (co-winners) given the alternative is leaving them
+    // unaccounted for entirely.
+    for (const h of room.humans) {
+      if (!(h.username in placementOf)) placementOf[h.username] = 1;
+    }
     const isDraw = !game.durakId && game.activePlayers.length === 0;
     const vsBots = room.bots.length > 0;
+
+    let eloResult = null;
+    if (room.ranked && !isDraw) {
+      const placements = room.humans.map((h) => ({
+        username: h.username,
+        placement: placementOf[h.username] || room.totalPlayers,
+      }));
+      eloResult = users.applyRankedGameResult(placements);
+    }
+
+    // Feed the classic games-played/won/lost stats and TOP10 leaderboard
+    // too — these predate the history log and were never wired up when
+    // multiplayer room creation became the path for every game (including
+    // 1v1, once room creation was unified), so they'd otherwise silently
+    // never move for any game played through this system.
+    if (vsBots) {
+      users.recordVsBotGameCompleted();
+    } else {
+      users.recordGameCompleted();
+    }
 
     for (const h of room.humans) {
       const username = h.username;
@@ -195,17 +232,28 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
       else if (placement === 1) outcome = 'won';
       else outcome = 'placed';
 
+      if (!vsBots && !isDraw) {
+        users.recordResult(username, outcome === 'won', false);
+      }
+
+      const eloEntry = eloResult && eloResult[username];
+
       users.recordGameHistoryEntry(username, {
         mode: 'multi',
         totalPlayers: room.totalPlayers,
         deckSize: room.deckSize || 52,
-        ranked: false,
+        ranked: !!room.ranked,
         outcome,
         placement,
         vsBots,
         opponents: game.players.filter((p) => p !== username),
+        eloBefore: eloEntry ? eloEntry.before : undefined,
+        eloAfter: eloEntry ? eloEntry.after : undefined,
+        eloChange: eloEntry ? eloEntry.delta : undefined,
       });
     }
+
+    broadcastMultiLeaderboards();
   }
 
   function broadcastMultiState(room) {
@@ -336,7 +384,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     }
   }
 
-  socket.on('createMultiRoom', ({ totalPlayers, aiCount, isPrivate, deckSize }) => {
+  socket.on('createMultiRoom', ({ totalPlayers, aiCount, isPrivate, deckSize, ranked }) => {
     const username = effectiveUsername();
     if (userHasActiveRoom(username)) {
       return sendMultiError('Tev jau ir aktīva istaba — vispirms to pamet vai atcel');
@@ -344,6 +392,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     const n = parseInt(totalPlayers, 10);
     const ai = parseInt(aiCount, 10);
     const deck = parseInt(deckSize, 10) === 36 ? 36 : 52;
+    const isRanked = !!ranked;
     if (!Number.isInteger(n) || n < 2 || n > 4) {
       return sendMultiError('Spēlētāju skaitam jābūt no 2 līdz 4');
     }
@@ -352,6 +401,12 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     }
     if (deck === 36 && n !== 2) {
       return sendMultiError('36 kāršu kava ir pieejama tikai 2 spēlētājiem');
+    }
+    if (isRanked && ai > 0) {
+      return sendMultiError('Ranked istabās nevar būt datora pretinieki');
+    }
+    if (isRanked && !getUsername()) {
+      return sendMultiError('Ranked istabas var izveidot tikai reģistrēti lietotāji');
     }
 
     const code = makeMultiRoomCode();
@@ -362,6 +417,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
       totalPlayers: n,
       aiCount: ai,
       deckSize: deck,
+      ranked: isRanked,
       humanSlotsNeeded: n - ai,
       creatorUsername: username,
       isPrivate: !!isPrivate,
@@ -399,6 +455,9 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     }
     if (room.isPrivate && String(password || '').trim().toUpperCase() !== room.password) {
       return sendMultiError('Nepareiza parole');
+    }
+    if (room.ranked && !getUsername()) {
+      return sendMultiError('Ranked istabām var pievienoties tikai reģistrēti lietotāji');
     }
     if (room.humans.length >= room.humanSlotsNeeded) return sendMultiError('Istaba jau ir pilna');
 

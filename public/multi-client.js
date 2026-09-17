@@ -99,7 +99,8 @@ function multiRenderRoomsList(rooms) {
     const title = document.createElement('span');
     title.className = 'host-name';
     const lockPrefix = r.isPrivate ? '🔒 ' : '';
-    title.textContent = lockPrefix + r.creatorUsername + ' · ' + r.humansJoined + '/' + r.humanSlotsNeeded + ' spēlētāji';
+    const rankedPrefix = r.ranked ? '🏅 ' : '';
+    title.textContent = lockPrefix + rankedPrefix + r.creatorUsername + ' · ' + r.humansJoined + '/' + r.humanSlotsNeeded + ' spēlētāji';
     info.appendChild(title);
     const silhouettes = document.createElement('div');
     silhouettes.className = 'multi-silhouette-row';
@@ -183,6 +184,18 @@ function multiApplyDeckSizeConstraint() {
 }
 el('multiCreateDeckSize').addEventListener('change', multiApplyDeckSizeConstraint);
 
+function multiApplyRankedConstraint() {
+  const isRanked = el('multiCreateRanked').checked;
+  const aiSelect = el('multiCreateAiCount');
+  if (isRanked) {
+    aiSelect.value = '0';
+    aiSelect.disabled = true;
+  } else {
+    aiSelect.disabled = false;
+  }
+}
+el('multiCreateRanked').addEventListener('change', multiApplyRankedConstraint);
+
 // createBtn now opens this modal — it replaces the old direct 2p-only room
 // creation, since totalPlayers:2/aiCount:0 covers that exact case too.
 // createRoomGuestBtn (pre-login) opens the exact same modal, so guests can
@@ -192,6 +205,8 @@ function multiOpenRoomCreateModal() {
   el('multiCreateTotalPlayers').disabled = false;
   multiPopulateAiCountOptions();
   el('multiCreatePrivate').checked = false;
+  el('multiCreateRanked').checked = false;
+  el('multiCreateAiCount').disabled = false;
   el('multiRoomCreateModal').classList.remove('hidden');
 }
 el('createBtn').addEventListener('click', multiOpenRoomCreateModal);
@@ -205,14 +220,15 @@ el('multiRoomCreateSubmitBtn').addEventListener('click', function () {
   const aiCount = parseInt(el('multiCreateAiCount').value, 10);
   const isPrivate = el('multiCreatePrivate').checked;
   const deckSize = parseInt(el('multiCreateDeckSize').value, 10);
+  const ranked = el('multiCreateRanked').checked;
   el('multiRoomCreateModal').classList.add('hidden');
-  socket.emit('createMultiRoom', { totalPlayers: totalPlayers, aiCount: aiCount, isPrivate: isPrivate, deckSize: deckSize });
+  socket.emit('createMultiRoom', { totalPlayers: totalPlayers, aiCount: aiCount, isPrivate: isPrivate, deckSize: deckSize, ranked: ranked });
 });
 
 socket.on('multiRoomWaiting', function (data) {
   if (data && data.yourUsername) multiMyUsername = data.yourUsername;
   el('multiRoomWaiting').classList.remove('hidden');
-  el('multiWaitingInfo').textContent = data.humansJoined + '/' + data.humanSlotsNeeded + ' spēlētāji pievienojušies';
+  el('multiWaitingInfo').textContent = data.humansJoined + '/' + data.humanSlotsNeeded + ' spēlētāji pievienojušies' + (data.ranked ? ' · 🏅 Ranked' : '');
   el('multiWaitingCode').textContent = data.code;
   multiRenderSilhouettes(el('multiWaitingSilhouettes'), data.totalPlayers, data.aiCount, data.humansJoined);
   el('multiRoomCancelBtn').classList.toggle('hidden', !data.isCreator);

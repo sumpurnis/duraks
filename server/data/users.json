@@ -4,64 +4,394 @@
       "createdAt": 1787498110767,
       "email": null,
       "stats": {
-        "played": 1,
-        "won": 0,
-        "lost": 1,
+        "played": 6,
+        "won": 4,
+        "lost": 2,
         "wonByForfeit": 0,
         "lostByForfeit": 1,
         "currentStreak": 0,
-        "longestStreak": 0,
+        "longestStreak": 4,
         "daily": {
-          "date": "2026-09-12",
-          "played": 1,
-          "won": 0,
+          "date": "2026-09-17",
+          "played": 5,
+          "won": 4,
           "lost": 1,
           "currentStreak": 0,
-          "longestStreak": 0
+          "longestStreak": 4
         }
       },
       "salt": "04f78cf8bc516dc56a40392986bb976f",
-      "hash": "4af31bbb4e627d1703e8c28e56c236424f0df62eb3c0a5dfd4537bc64c055eed0ac3bf155f8af17c7c910b7be598aa50c6406ed1c9bf935aa28fcef5abf4f0cf"
+      "hash": "4af31bbb4e627d1703e8c28e56c236424f0df62eb3c0a5dfd4537bc64c055eed0ac3bf155f8af17c7c910b7be598aa50c6406ed1c9bf935aa28fcef5abf4f0cf",
+      "history": [
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 52,
+          "ranked": true,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": false,
+          "opponents": [
+            "nezivs"
+          ],
+          "eloBefore": 1016,
+          "eloAfter": 999,
+          "eloChange": -17,
+          "timestamp": 1789640460065
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 52,
+          "ranked": true,
+          "outcome": "won",
+          "placement": 1,
+          "vsBots": false,
+          "opponents": [
+            "nezivs"
+          ],
+          "eloBefore": 1000,
+          "eloAfter": 1016,
+          "eloChange": 16,
+          "timestamp": 1789640435962
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 52,
+          "ranked": false,
+          "outcome": "won",
+          "placement": 1,
+          "vsBots": false,
+          "opponents": [
+            "nezivs"
+          ],
+          "timestamp": 1789640047996
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 52,
+          "ranked": false,
+          "outcome": "won",
+          "placement": 1,
+          "vsBots": false,
+          "opponents": [
+            "nezivs"
+          ],
+          "timestamp": 1789639950285
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "won",
+          "placement": 1,
+          "vsBots": false,
+          "opponents": [
+            "nezivs"
+          ],
+          "timestamp": 1789639929215
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "won",
+          "placement": 1,
+          "vsBots": false,
+          "opponents": [
+            "nezivs"
+          ],
+          "timestamp": 1789638759970
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": false,
+          "opponents": [
+            "nezivs"
+          ],
+          "timestamp": 1789638567345
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 52,
+          "ranked": false,
+          "outcome": "placed",
+          "placement": null,
+          "vsBots": false,
+          "opponents": [
+            "nezivs"
+          ],
+          "timestamp": 1789638312555
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": false,
+          "opponents": [
+            "nezivs"
+          ],
+          "timestamp": 1789638270995
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "placed",
+          "placement": null,
+          "vsBots": false,
+          "opponents": [
+            "nezivs"
+          ],
+          "timestamp": 1789638257875
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "placed",
+          "placement": null,
+          "vsBots": false,
+          "opponents": [
+            "nezivs"
+          ],
+          "timestamp": 1789638233452
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": false,
+          "opponents": [
+            "nezivs"
+          ],
+          "timestamp": 1789638210212
+        }
+      ],
+      "elo": 999
     },
     "nezivs": {
       "createdAt": 1789240302595,
       "email": null,
       "stats": {
-        "played": 1,
-        "won": 1,
-        "lost": 0,
+        "played": 6,
+        "won": 2,
+        "lost": 4,
         "wonByForfeit": 1,
         "lostByForfeit": 0,
         "currentStreak": 1,
         "longestStreak": 1,
         "daily": {
-          "date": "2026-09-12",
-          "played": 1,
+          "date": "2026-09-17",
+          "played": 5,
           "won": 1,
-          "lost": 0,
+          "lost": 4,
           "currentStreak": 1,
           "longestStreak": 1
         }
       },
       "salt": "c2c025bcb015502ae580fc0f7cd6977c",
-      "hash": "1eedcce2850116c590d2c20f50fd12bf83558fcde7a20a579311e6b2f47d4d28794740dba991e4babeb3e394b311f67d1f16c73acabc023b3d308dc3c408ab56"
+      "hash": "1eedcce2850116c590d2c20f50fd12bf83558fcde7a20a579311e6b2f47d4d28794740dba991e4babeb3e394b311f67d1f16c73acabc023b3d308dc3c408ab56",
+      "history": [
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 52,
+          "ranked": true,
+          "outcome": "won",
+          "placement": 1,
+          "vsBots": false,
+          "opponents": [
+            "zivs"
+          ],
+          "eloBefore": 984,
+          "eloAfter": 1001,
+          "eloChange": 17,
+          "timestamp": 1789640460065
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 52,
+          "ranked": true,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": false,
+          "opponents": [
+            "zivs"
+          ],
+          "eloBefore": 1000,
+          "eloAfter": 984,
+          "eloChange": -16,
+          "timestamp": 1789640435963
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 52,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": false,
+          "opponents": [
+            "zivs"
+          ],
+          "timestamp": 1789640047996
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 52,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": false,
+          "opponents": [
+            "zivs"
+          ],
+          "timestamp": 1789639950286
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": false,
+          "opponents": [
+            "zivs"
+          ],
+          "timestamp": 1789639929215
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": false,
+          "opponents": [
+            "zivs"
+          ],
+          "timestamp": 1789638759970
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "won",
+          "placement": 1,
+          "vsBots": false,
+          "opponents": [
+            "zivs"
+          ],
+          "timestamp": 1789638567345
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 52,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": false,
+          "opponents": [
+            "zivs"
+          ],
+          "timestamp": 1789638312555
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "placed",
+          "placement": null,
+          "vsBots": false,
+          "opponents": [
+            "zivs"
+          ],
+          "timestamp": 1789638270995
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": false,
+          "opponents": [
+            "zivs"
+          ],
+          "timestamp": 1789638257875
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": false,
+          "opponents": [
+            "zivs"
+          ],
+          "timestamp": 1789638233452
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "placed",
+          "placement": null,
+          "vsBots": false,
+          "opponents": [
+            "zivs"
+          ],
+          "timestamp": 1789638210211
+        }
+      ],
+      "elo": 1001
     }
   },
   "global": {
-    "allTimePlayed": 1,
+    "allTimePlayed": 6,
     "daily": {
-      "date": "2026-09-12",
-      "played": 1
+      "date": "2026-09-17",
+      "played": 5
     },
     "vsBotAllTime": 11,
     "vsBotDaily": {
       "date": "2026-09-13",
       "played": 3
     },
-    "pageVisitsAllTime": 68,
+    "pageVisitsAllTime": 86,
     "pageVisitsDaily": {
-      "date": "2026-09-13",
-      "count": 11
+      "date": "2026-09-17",
+      "count": 18
     }
   }
 }

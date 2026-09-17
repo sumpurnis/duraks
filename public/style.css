@@ -796,6 +796,57 @@ html, body {
 }
 .profile-stat-row.muted-row strong { color: var(--muted); }
 
+.profile-history {
+  margin: 18px 0;
+  text-align: left;
+}
+.profile-elo-chart {
+  margin: 18px 0;
+  text-align: left;
+}
+.profile-elo-chart-svg {
+  width: 100%;
+  height: 90px;
+  display: block;
+  background: rgba(255,255,255,0.03);
+  border-radius: 6px;
+}
+.profile-elo-chart-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.profile-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.profile-history-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+  border-left: 3px solid var(--muted);
+  font-size: 0.85rem;
+}
+.profile-history-row.profile-history-won { border-left-color: #4caf6d; }
+.profile-history-row.profile-history-lost { border-left-color: #c95c5c; }
+.profile-history-row.profile-history-placed { border-left-color: var(--gold-bright); }
+.profile-history-row.profile-history-draw { border-left-color: var(--muted); }
+.profile-history-outcome { font-weight: 600; white-space: nowrap; }
+.profile-history-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: right;
+}
+
 /* ---------- Drag & drop ---------- */
 
 .card[draggable="true"] { cursor: grab; }

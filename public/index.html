@@ -305,6 +305,10 @@
         <input id="multiCreatePrivate" type="checkbox" />
         <span>Padarīt istabu privātu (pievienoties var tikai ar paroli)</span>
       </label>
+      <label class="checkbox-field">
+        <input id="multiCreateRanked" type="checkbox" />
+        <span>🏅 Ranked (ietekmē ELO reitingu — tikai reģistrētiem, bez datora pretiniekiem)</span>
+      </label>
       <div class="rematch-choice-row">
         <button id="multiRoomCreateSubmitBtn" class="btn btn-primary">Izveidot</button>
         <button id="multiRoomCreateCancelBtn" class="btn btn-secondary">Atcelt</button>
@@ -331,6 +335,7 @@
     <div class="modal-card">
       <h2 id="profileTitle">Profils</h2>
       <div class="profile-stats">
+        <div class="profile-stat-row"><span>ELO reitings</span><strong id="statElo">—</strong></div>
         <div class="profile-stat-row"><span>Spēles spēlētas</span><strong id="statPlayed">—</strong></div>
         <div class="profile-stat-row"><span>Spēles uzvarētas</span><strong id="statWon">—</strong></div>
         <div class="profile-stat-row"><span>Spēles zaudētas</span><strong id="statLost">—</strong></div>
@@ -343,6 +348,18 @@
         <div class="profile-stat-row"><span>Uzvaras šodien</span><strong id="statWonToday">—</strong></div>
         <div class="profile-stat-row"><span>Zaudējumi šodien</span><strong id="statLostToday">—</strong></div>
         <div class="profile-stat-row"><span>Garākā sērija šodien</span><strong id="statLongestStreakToday">—</strong></div>
+      </div>
+      <div class="profile-elo-chart">
+        <p class="profile-stats-divider">ELO svārstības</p>
+        <div id="profileEloChart">
+          <p class="muted small">Nepietiek ranked spēļu grafikam (vajag vismaz 2)</p>
+        </div>
+      </div>
+      <div class="profile-history">
+        <p class="profile-stats-divider">Pēdējās spēles</p>
+        <div id="profileHistoryList" class="profile-history-list">
+          <p class="muted small">Nav vēl izspēlētu spēļu…</p>
+        </div>
       </div>
       <button id="profileCloseBtn" class="btn btn-secondary">Aizvērt</button>
     </div>

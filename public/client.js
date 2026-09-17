@@ -664,8 +664,9 @@ el('opponentName').addEventListener('click', () => {
   socket.emit('getProfile', { username: lastState.opponent });
 });
 
-socket.on('profileData', ({ username: name, stats }) => {
+socket.on('profileData', ({ username: name, stats, history, elo }) => {
   el('profileTitle').textContent = name;
+  el('statElo').textContent = typeof elo === 'number' ? elo : '—';
   el('statPlayed').textContent = stats.played;
   el('statWon').textContent = stats.won;
   el('statLost').textContent = stats.lost;
@@ -677,8 +678,108 @@ socket.on('profileData', ({ username: name, stats }) => {
   el('statWonToday').textContent = stats.today.won;
   el('statLostToday').textContent = stats.today.lost;
   el('statLongestStreakToday').textContent = stats.today.longestStreak;
+  renderProfileHistory((history || []).slice(0, 15));
+  renderEloChart(history || []);
   el('profileModal').classList.remove('hidden');
 });
+
+function profileRelativeTime(ts) {
+  const secs = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (secs < 60) return `pirms ${secs}s`;
+  if (secs < 3600) return `pirms ${Math.floor(secs / 60)}min`;
+  if (secs < 86400) return `pirms ${Math.floor(secs / 3600)}h`;
+  return `pirms ${Math.floor(secs / 86400)}d`;
+}
+
+const PROFILE_OUTCOME_LABELS = { won: 'Uzvara', lost: 'Zaudējums', placed: 'Ievietojās', draw: 'Neizšķirts' };
+
+function renderEloChart(history) {
+  const container = el('profileEloChart');
+  const rankedEntries = history.filter((e) => typeof e.eloAfter === 'number').slice().reverse();
+
+  if (rankedEntries.length < 2) {
+    container.innerHTML = '<p class="muted small">Nepietiek ranked spēļu grafikam (vajag vismaz 2)</p>';
+    return;
+  }
+
+  const values = rankedEntries.map((e) => e.eloAfter);
+  const width = 300;
+  const height = 90;
+  const padTop = 10;
+  const padBottom = 10;
+  const padSide = 6;
+  const minVal = Math.min.apply(null, values);
+  const maxVal = Math.max.apply(null, values);
+  const range = Math.max(1, maxVal - minVal);
+
+  function xFor(i) {
+    if (values.length === 1) return width / 2;
+    return padSide + (i / (values.length - 1)) * (width - 2 * padSide);
+  }
+  function yFor(v) {
+    return height - padBottom - ((v - minVal) / range) * (height - padTop - padBottom);
+  }
+
+  const points = values.map((v, i) => xFor(i).toFixed(1) + ',' + yFor(v).toFixed(1)).join(' ');
+  const lastChange = rankedEntries[rankedEntries.length - 1].eloChange;
+  const lineColor = lastChange >= 0 ? '#4caf6d' : '#c95c5c';
+
+  const dots = values.map((v, i) => {
+    const isLast = i === values.length - 1;
+    const r = isLast ? 3 : 1.6;
+    const color = isLast ? lineColor : '#c9a24b';
+    return '<circle cx="' + xFor(i).toFixed(1) + '" cy="' + yFor(v).toFixed(1) + '" r="' + r + '" fill="' + color + '" />';
+  }).join('');
+
+  container.innerHTML =
+    '<svg viewBox="0 0 ' + width + ' ' + height + '" class="profile-elo-chart-svg" preserveAspectRatio="none">' +
+    '<polyline points="' + points + '" fill="none" stroke="' + lineColor + '" stroke-width="2" vector-effect="non-scaling-stroke" />' +
+    dots +
+    '</svg>' +
+    '<div class="profile-elo-chart-labels">' +
+    '<span>' + minVal + '</span>' +
+    '<span>Pēdējās ' + values.length + ' ranked spēles</span>' +
+    '<span>' + maxVal + '</span>' +
+    '</div>';
+}
+
+function renderProfileHistory(history) {
+  const container = el('profileHistoryList');
+  container.innerHTML = '';
+  if (!history || history.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'muted small';
+    p.textContent = 'Nav vēl izspēlētu spēļu…';
+    container.appendChild(p);
+    return;
+  }
+  history.forEach((entry) => {
+    const row = document.createElement('div');
+    row.className = 'profile-history-row profile-history-' + (entry.outcome || 'lost');
+
+    const outcomeLabel = PROFILE_OUTCOME_LABELS[entry.outcome] || entry.outcome;
+    const placementLabel = entry.placement ? ` (${entry.placement}. vieta)` : '';
+    const rankedLabel = entry.ranked ? ' 🏅' : '';
+    const modeLabel = entry.mode === '2p' ? '2 spēlētāji' : `${entry.totalPlayers} spēlētāji`;
+    const deckLabel = entry.deckSize === 36 ? ' · 36 kārtis' : '';
+    const vsBotsLabel = entry.vsBots ? ' · pret datoru' : '';
+    const eloLabel = typeof entry.eloChange === 'number'
+      ? ` · ELO ${entry.eloChange > 0 ? '+' : ''}${entry.eloChange}`
+      : '';
+
+    const outcomeSpan = document.createElement('span');
+    outcomeSpan.className = 'profile-history-outcome';
+    outcomeSpan.textContent = outcomeLabel + placementLabel + rankedLabel + eloLabel;
+
+    const metaSpan = document.createElement('span');
+    metaSpan.className = 'profile-history-meta';
+    metaSpan.textContent = `${modeLabel}${deckLabel}${vsBotsLabel} · ${profileRelativeTime(entry.timestamp)}`;
+
+    row.appendChild(outcomeSpan);
+    row.appendChild(metaSpan);
+    container.appendChild(row);
+  });
+}
 
 el('profileCloseBtn').addEventListener('click', () => el('profileModal').classList.add('hidden'));
 el('profileModal').addEventListener('click', (e) => {
