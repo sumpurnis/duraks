@@ -325,6 +325,10 @@
         <input id="multiCreateRanked" type="checkbox" />
         <span>🏅 Ranked (ietekmē ELO reitingu — tikai reģistrētiem, bez datora pretiniekiem)</span>
       </label>
+      <label id="multiCreateTransferField" class="checkbox-field">
+        <input id="multiCreateTransfer" type="checkbox" />
+        <span>🔄 Padošana (var padot tālāk kārti ar tādu pašu vērtību, nevis tikai atsist — pagaidām tikai 2 spēlētājiem)</span>
+      </label>
       <div class="rematch-choice-row">
         <button id="multiRoomCreateSubmitBtn" class="btn btn-primary">Izveidot</button>
         <button id="multiRoomCreateCancelBtn" class="btn btn-secondary">Atcelt</button>
@@ -405,6 +409,7 @@
 
     <div class="action-row">
       <button id="multiDeclineBtn" class="btn btn-primary hidden">Atteikties piemest</button>
+      <button id="multiTransferBtn" class="btn btn-secondary hidden">🔄 Padot</button>
       <button id="multiTakeBtn" class="btn btn-danger hidden">Ņemt kārtis</button>
       <button id="multiSurrenderBtn" class="btn btn-ghost-danger">Padoties</button>
     </div>

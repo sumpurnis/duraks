@@ -116,6 +116,7 @@ function serializeOpenRoom(room) {
     creatorUsername: room.creatorUsername,
     isPrivate: !!room.isPrivate,
     ranked: !!room.ranked,
+    allowTransfer: !!room.allowTransfer,
   };
 }
 
@@ -361,6 +362,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     if (!action) return { error: 'Bots neatrada derīgu gājienu' };
     if (action.type === 'attack') return room.game.attack(playerId, action.cardId);
     if (action.type === 'defend') return room.game.defend(playerId, action.cardId, action.slotIndex);
+    if (action.type === 'transfer') return room.game.transferCards(playerId, action.cardId);
     if (action.type === 'declineThrowIn') return room.game.declineThrowIn(playerId);
     if (action.type === 'take') return room.game.takeCards(playerId);
     return { error: `Nezināma darbība: ${action.type}` };
@@ -371,7 +373,11 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     room.startedAt = Date.now();
     room.bots = BOT_NAMES.slice(0, room.aiCount);
     const seating = [...room.humans.map((h) => h.username), ...room.bots];
-    room.game = new Game(seating, { deferAutoResolve: true, deckSize: room.deckSize || 52 });
+    room.game = new Game(seating, {
+      deferAutoResolve: true,
+      deckSize: room.deckSize || 52,
+      allowTransfer: !!room.allowTransfer,
+    });
 
     for (const h of room.humans) {
       const sock = io.sockets.sockets.get(h.socketId);
@@ -403,7 +409,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     }
   }
 
-  socket.on('createMultiRoom', ({ totalPlayers, aiCount, isPrivate, deckSize, ranked }) => {
+  socket.on('createMultiRoom', ({ totalPlayers, aiCount, isPrivate, deckSize, ranked, allowTransfer }) => {
     const username = effectiveUsername();
     if (userHasActiveRoom(username)) {
       return sendMultiError('Tev jau ir aktīva istaba — vispirms to pamet vai atcel');
@@ -412,6 +418,11 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     const ai = parseInt(aiCount, 10);
     const deck = parseInt(deckSize, 10) === 36 ? 36 : 52;
     const isRanked = !!ranked;
+    // "Padošana" (perevodnoy transfer rule) — supported by the engine for
+    // any player count, but only offered here for 2-player rooms for now;
+    // see the note in games/duraks-multi.js about the 3-4 player cascade
+    // needing more testing before it's exposed there too.
+    const isTransferable = !!allowTransfer;
     if (!Number.isInteger(n) || n < 2 || n > 4) {
       return sendMultiError('Spēlētāju skaitam jābūt no 2 līdz 4');
     }
@@ -427,13 +438,23 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     if (isRanked && !getUsername()) {
       return sendMultiError('Ranked istabas var izveidot tikai reģistrēti lietotāji');
     }
+    if (isTransferable && n !== 2) {
+      return sendMultiError('Padošana pagaidām ir pieejama tikai 2 spēlētāju istabās');
+    }
 
     // Remember these choices for next time, but only for registered users
     // (guests have no account to attach them to). This only stores a
     // snapshot for pre-filling the modal later — it never auto-creates a
     // room by itself.
     if (getUsername()) {
-      users.saveLastRoomSettings(username, { totalPlayers: n, aiCount: ai, deckSize: deck, isPrivate: !!isPrivate, ranked: isRanked });
+      users.saveLastRoomSettings(username, {
+        totalPlayers: n,
+        aiCount: ai,
+        deckSize: deck,
+        isPrivate: !!isPrivate,
+        ranked: isRanked,
+        allowTransfer: isTransferable,
+      });
     }
 
     const code = makeMultiRoomCode();
@@ -445,6 +466,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
       aiCount: ai,
       deckSize: deck,
       ranked: isRanked,
+      allowTransfer: isTransferable,
       humanSlotsNeeded: n - ai,
       creatorUsername: username,
       isPrivate: !!isPrivate,
@@ -531,6 +553,15 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     const room = currentRoom();
     if (!room) return;
     const res = room.game.defend(effectiveUsername(), cardId, slotIndex);
+    if (res.error) return sendMultiError(res.error);
+    broadcastMultiState(room);
+    driveBots(room);
+  });
+
+  socket.on('multiTransferCards', ({ cardId }) => {
+    const room = currentRoom();
+    if (!room) return;
+    const res = room.game.transferCards(effectiveUsername(), cardId);
     if (res.error) return sendMultiError(res.error);
     broadcastMultiState(room);
     driveBots(room);

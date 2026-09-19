@@ -79,7 +79,22 @@ function chooseDefend(game, aiId) {
     .filter((c) => game.beats(slot.attack, c))
     .sort((a, b) => cardCost(a, game) - cardCost(b, game));
 
-  if (beaters.length === 0) return { type: 'take' };
+  if (beaters.length === 0) {
+    // Can't beat it — if the room allows padošana (transfer) and a
+    // matching-rank card is available, that's strictly better than
+    // taking the whole pile: it costs one card instead of the entire
+    // table, and hands the problem to the next player.
+    if (game.canTransfer(aiId)) {
+      const ranks = game.ranksOnTable();
+      const transferable = game.hands[aiId]
+        .filter((c) => ranks.has(c.rank))
+        .sort((a, b) => cardCost(a, game) - cardCost(b, game));
+      if (transferable.length > 0) {
+        return { type: 'transfer', cardId: transferable[0].id };
+      }
+    }
+    return { type: 'take' };
+  }
 
   return { type: 'defend', cardId: beaters[0].id, slotIndex: game.table.indexOf(slot) };
 }

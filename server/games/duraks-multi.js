@@ -108,6 +108,12 @@ class Game {
     // cost, and danger-scoring all rely on rank *position*, not the
     // specific characters, so this is the only thing that needs to vary.
     this.deckSize = opts.deckSize === 36 ? 36 : 52;
+    // "Perevodnoy" transfer rule: while defending, and before defending any
+    // card this round, the defender may instead play a card of the same
+    // rank already on the table — the whole (now larger) pile then passes
+    // to the next active player after them, who becomes the new defender.
+    // Off by default; a room opts into it explicitly at creation.
+    this.allowTransfer = !!opts.allowTransfer;
     this.ranks = ranksForDeckSize(this.deckSize);
     this.rankValue = rankValueFor(this.ranks);
     this.hands = {};
@@ -302,6 +308,89 @@ class Game {
     return this._maybeResolveRound() || { ok: true };
   }
 
+  /** True right now, for this playerId, whether a transfer ("padošana") is
+   *  a legal move — used both to validate transferCards() and so the
+   *  client/AI can decide whether to offer/consider it (e.g. only show the
+   *  "Padot" button when there's actually a transfer to make). Requires:
+   *  the room allows it, this player is the current defender, nobody has
+   *  taken yet, there's a round in progress, nothing on the table has
+   *  been defended yet this round (once any card is beaten, the defender
+   *  is committed and can no longer hand the round off), this player
+   *  actually holds a matching-rank card, and the next active player has
+   *  enough cards in hand to receive the (possibly larger) pile. */
+  canTransfer(playerId) {
+    if (
+      this.status !== 'active' ||
+      !this.allowTransfer ||
+      this.pendingTake ||
+      playerId !== this.defenderId ||
+      this.table.length === 0 ||
+      this.openSlots() !== this.table.length
+    ) {
+      return false;
+    }
+    const ranks = this.ranksOnTable();
+    const hasMatchingCard = this.hands[playerId].some((c) => ranks.has(c.rank));
+    if (!hasMatchingCard) return false;
+
+    const newDefenderId = this._nextActiveAfter(playerId);
+    if (!newDefenderId) return false;
+    const cap = Math.min(MAX_TABLE_SLOTS, this.hands[newDefenderId].length);
+    return this.table.length < cap;
+  }
+
+  /** Defender plays a card matching the rank already on the table instead
+   *  of defending — the entire pile (plus this new card) passes to the
+   *  next active player after the defender, who becomes the new defender
+   *  for it. The player who transferred takes over the attackerId
+   *  bookkeeping role (this matters most with exactly 2 active players,
+   *  where it's the only way attackerId and defenderId don't end up
+   *  pointing at the same person) — the original attacker doesn't lose
+   *  anything by this, since throw-in rights already belong to *every*
+   *  active non-defender player, not just whoever attackerId names. With
+   *  3-4 active players a transfer can hand off to a third/fourth player,
+   *  who may transfer again in turn if they also can. */
+  transferCards(playerId, cardId) {
+    if (this.status !== 'active') return { error: 'Spēle ir beigusies' };
+    if (!this.allowTransfer) return { error: 'Padošana nav atļauta šajā istabā' };
+    if (playerId !== this.defenderId) return { error: 'Tikai aizstāvis var padot tālāk' };
+    if (this.pendingTake) return { error: 'Nevar padot pēc paziņojuma par kāršu ņemšanu' };
+    if (this.table.length === 0) return { error: 'Uz galda vēl nav kāršu' };
+    if (this.openSlots() !== this.table.length) {
+      return { error: 'Padošana vairs nav iespējama — kāda kārts jau atsista' };
+    }
+    const hand = this.hands[playerId];
+    const card = hand.find((c) => c.id === cardId);
+    if (!card) return { error: 'Kārts nav tavā rokā' };
+    if (!this.ranksOnTable().has(card.rank)) {
+      return { error: 'Padošanai jāizmanto tāda paša ranga kārts, kāda jau ir uz galda' };
+    }
+
+    const newDefenderId = this._nextActiveAfter(playerId);
+    if (!newDefenderId) return { error: 'Nav neviena, kam padot' };
+    const cap = Math.min(MAX_TABLE_SLOTS, this.hands[newDefenderId].length);
+    if (this.table.length >= cap) {
+      return { error: 'Nevar padot — nākamajam spēlētājam nepietiek kāršu, lai segtu galdu' };
+    }
+
+    this.removeFromHand(playerId, cardId);
+    this.table.push({ attack: card, defend: null });
+    this.seenCards.add(card.id);
+    this._noteParticipant(playerId);
+    this.log.push(`${playerId} padod tālāk ar ${card.rank} no ${card.suit}`);
+
+    this.attackerId = playerId;
+    this.defenderId = newDefenderId;
+    this.roundStartHandSize = this.hands[newDefenderId].length;
+    // Everyone (including the player who just transferred) gets a fresh
+    // throw-in chance, same as after any successful card lands on the table.
+    this.throwInRotation = this._buildThrowInRotation();
+    this.throwInPointer = 0;
+    this.throwInDeclined = new Set();
+
+    return { ok: true, transferred: true, newDefenderId };
+  }
+
   /** True once nobody in the throw-in rotation has anything left to add —
    *  either the table is full, or everyone has declined since the last
    *  successful throw-in. */
@@ -491,6 +580,8 @@ class Game {
       defenderId: this.defenderId,
       yourRole: playerId === this.attackerId ? 'attacker' : playerId === this.defenderId ? 'defender' : 'other',
       canThrowIn: playerId !== this.defenderId && this.activePlayers.includes(playerId) && isThrowInTurn,
+      allowTransfer: this.allowTransfer,
+      canTransfer: this.canTransfer(playerId),
       pendingTake: this.pendingTake,
       pendingActorIds: this.pendingActors().map((a) => a.playerId),
       status: this.status,

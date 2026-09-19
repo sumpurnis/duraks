@@ -142,6 +142,7 @@
   color: var(--cream);
 }
 .checkbox-field input { width: auto; }
+.checkbox-field:has(input:disabled) { opacity: 0.45; }
 
 .hint {
   font-size: 0.72rem;

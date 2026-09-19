@@ -17,6 +17,13 @@
 let multiMyId = null;
 let multiLastState = null;
 let multiSelectedCardId = null;
+// Armed by the "🔄 Padot" button: while true (and only while the server
+// says canTransfer), tapping/dragging a matching-rank card sends
+// multiTransferCards instead of the normal defend — kept as an explicit,
+// separate mode (not inferred from which card gets picked) precisely so
+// it's unambiguous which action is about to happen, per the user's
+// request that padošana be simply distinguishable from a normal defend.
+let multiTransferMode = false;
 
 function multiShowScreen() {
   document.getElementById('lobby').classList.add('hidden');
@@ -33,6 +40,7 @@ function multiReturnToLobby() {
   multiMyId = null;
   multiLastState = null;
   multiSelectedCardId = null;
+  multiTransferMode = false;
   multiWasMyTurn = false;
   multiWasActive = true;
   socket.emit('listMultiRooms');
@@ -100,7 +108,8 @@ function multiRenderRoomsList(rooms) {
     title.className = 'host-name';
     const lockPrefix = r.isPrivate ? '🔒 ' : '';
     const rankedPrefix = r.ranked ? '🏅 ' : '';
-    title.textContent = lockPrefix + rankedPrefix + r.creatorUsername + ' · ' + r.humansJoined + '/' + r.humanSlotsNeeded + ' spēlētāji';
+    const transferPrefix = r.allowTransfer ? '🔄 ' : '';
+    title.textContent = lockPrefix + rankedPrefix + transferPrefix + r.creatorUsername + ' · ' + r.humansJoined + '/' + r.humanSlotsNeeded + ' spēlētāji';
     info.appendChild(title);
     const silhouettes = document.createElement('div');
     silhouettes.className = 'multi-silhouette-row';
@@ -165,7 +174,7 @@ el('multiRoomsRefreshBtn').addEventListener('click', function () {
 // a ranked room locks the AI count to 0 — just expressed as disabled
 // buttons instead of a disabled/forced select value.
 
-const multiCreateState = { totalPlayers: 3, aiCount: 0, deckSize: 52 };
+const multiCreateState = { totalPlayers: 3, aiCount: 0, deckSize: 52, allowTransfer: false };
 
 function multiSetActiveButton(groupEl, value) {
   Array.from(groupEl.children).forEach(function (btn) {
@@ -214,6 +223,15 @@ function multiRefreshCreateModal() {
     btn.disabled = isRanked && Number(btn.dataset.value) !== 0;
   });
   multiSetActiveButton(aiGroup, multiCreateState.aiCount);
+
+  // Padošana (transfer) is currently only offered for 2-player rooms —
+  // same "disabled, not hidden" treatment as the other constraints above,
+  // so switching player count back to 2 later doesn't lose the choice.
+  const transferInput = el('multiCreateTransfer');
+  const isTwoPlayers = multiCreateState.totalPlayers === 2;
+  transferInput.disabled = !isTwoPlayers;
+  if (!isTwoPlayers) transferInput.checked = false;
+  multiCreateState.allowTransfer = transferInput.checked;
 }
 
 el('multiCreateDeckSizeGroup').addEventListener('click', function (e) {
@@ -235,6 +253,7 @@ el('multiCreateAiCountGroup').addEventListener('click', function (e) {
   multiRefreshCreateModal();
 });
 el('multiCreateRanked').addEventListener('change', multiRefreshCreateModal);
+el('multiCreateTransfer').addEventListener('change', multiRefreshCreateModal);
 
 // createBtn now opens this modal — it replaces the old direct 2p-only room
 // creation, since totalPlayers:2/aiCount:0 covers that exact case too.
@@ -250,12 +269,13 @@ el('multiCreateRanked').addEventListener('change', multiRefreshCreateModal);
 // purely a convenience so returning hosts don't have to re-pick the same
 // options every time. It never auto-submits.
 function multiOpenRoomCreateModal(preset) {
-  const settings = preset || window.lastRoomSettings || { totalPlayers: 3, aiCount: 0, deckSize: 52, isPrivate: false, ranked: false };
+  const settings = preset || window.lastRoomSettings || { totalPlayers: 3, aiCount: 0, deckSize: 52, isPrivate: false, ranked: false, allowTransfer: false };
   multiCreateState.deckSize = settings.deckSize === 36 ? 36 : 52;
   multiCreateState.totalPlayers = settings.totalPlayers || 3;
   multiCreateState.aiCount = settings.aiCount || 0;
   el('multiCreatePrivate').checked = !!settings.isPrivate;
   el('multiCreateRanked').checked = !!settings.ranked;
+  el('multiCreateTransfer').checked = !!settings.allowTransfer;
   multiRefreshCreateModal();
   el('multiRoomCreateModal').classList.remove('hidden');
 }
@@ -287,14 +307,15 @@ el('multiRoomCreateSubmitBtn').addEventListener('click', function () {
   const isPrivate = el('multiCreatePrivate').checked;
   const deckSize = multiCreateState.deckSize;
   const ranked = el('multiCreateRanked').checked;
+  const allowTransfer = el('multiCreateTransfer').checked;
   el('multiRoomCreateModal').classList.add('hidden');
-  socket.emit('createMultiRoom', { totalPlayers: totalPlayers, aiCount: aiCount, isPrivate: isPrivate, deckSize: deckSize, ranked: ranked });
+  socket.emit('createMultiRoom', { totalPlayers: totalPlayers, aiCount: aiCount, isPrivate: isPrivate, deckSize: deckSize, ranked: ranked, allowTransfer: allowTransfer });
 });
 
 socket.on('multiRoomWaiting', function (data) {
   if (data && data.yourUsername) multiMyUsername = data.yourUsername;
   el('multiRoomWaiting').classList.remove('hidden');
-  el('multiWaitingInfo').textContent = data.humansJoined + '/' + data.humanSlotsNeeded + ' spēlētāji pievienojušies' + (data.ranked ? ' · 🏅 Ranked' : '');
+  el('multiWaitingInfo').textContent = data.humansJoined + '/' + data.humanSlotsNeeded + ' spēlētāji pievienojušies' + (data.ranked ? ' · 🏅 Ranked' : '') + (data.allowTransfer ? ' · 🔄 Padošana' : '');
   el('multiWaitingCode').textContent = data.code;
   multiRenderSilhouettes(el('multiWaitingSilhouettes'), data.totalPlayers, data.aiCount, data.humansJoined);
   el('multiRoomCancelBtn').classList.toggle('hidden', !data.isCreator);
@@ -423,7 +444,7 @@ function multiRenderTable(state) {
       const def = document.createElement('div');
       def.className = 'card mini defend-offset ' + cardFaceClass(slot.defend);
       slotDiv.appendChild(def);
-    } else if (!state.pendingTake && state.yourRole === 'defender' && state.status === 'active') {
+    } else if (!state.pendingTake && state.yourRole === 'defender' && state.status === 'active' && !(multiTransferMode && state.canTransfer)) {
       slotDiv.dataset.open = 'true';
       slotDiv.dataset.index = String(idx);
       slotDiv.dataset.attack = JSON.stringify(slot.attack);
@@ -458,13 +479,24 @@ function multiRenderHand(state) {
   const canThrowIn = !!state.canThrowIn;
   const canAttackNow = canOpenAttack || canThrowIn;
   const canDefend = !state.pendingTake && state.yourRole === 'defender' && state.status === 'active' && state.table.some(function (s) { return !s.defend; });
+  // Only actually "armed" while the server still agrees a transfer is
+  // legal right now (it stops being true the moment any slot gets
+  // defended) — otherwise a stale button state could suggest an action
+  // that would just get rejected.
+  const transferArmed = multiTransferMode && !!state.canTransfer;
+  el('multiHandCards').classList.toggle('transfer-mode', transferArmed);
 
   state.hand.forEach(function (card) {
     const div = document.createElement('div');
     div.className = 'card ' + cardFaceClass(card);
 
     let kind = null;
-    if (canAttackNow && (state.table.length === 0 || ranksOnTable.has(card.rank))) {
+    if (transferArmed) {
+      // Transfer mode narrows the hand to *only* matching-rank cards —
+      // everything else is disabled so there's no ambiguity about what
+      // a tap will do while it's armed.
+      if (ranksOnTable.has(card.rank)) kind = 'transfer';
+    } else if (canAttackNow && (state.table.length === 0 || ranksOnTable.has(card.rank))) {
       kind = 'attack';
     } else if (canDefend) {
       kind = 'defend';
@@ -486,11 +518,14 @@ function multiRenderActions(state) {
   const takeBtn = el('multiTakeBtn');
   const declineBtn = el('multiDeclineBtn');
   const surrenderBtn = el('multiSurrenderBtn');
+  const transferBtn = el('multiTransferBtn');
   takeBtn.classList.add('hidden');
   declineBtn.classList.add('hidden');
+  transferBtn.classList.add('hidden');
 
   if (state.status !== 'active') {
     surrenderBtn.classList.add('hidden');
+    multiTransferMode = false;
     return;
   }
   const isActive = !!(multiMyId && state.activePlayers && state.activePlayers.indexOf(multiMyId) !== -1);
@@ -498,7 +533,21 @@ function multiRenderActions(state) {
 
   if (state.yourRole === 'defender' && !state.pendingTake && state.table.some(function (s) { return !s.defend; })) takeBtn.classList.remove('hidden');
   if (state.canThrowIn) declineBtn.classList.remove('hidden');
+
+  if (state.canTransfer) {
+    transferBtn.classList.remove('hidden');
+    transferBtn.classList.toggle('armed', multiTransferMode);
+  } else {
+    multiTransferMode = false;
+  }
 }
+
+el('multiTransferBtn').addEventListener('click', function () {
+  multiTransferMode = !multiTransferMode;
+  multiSelectedCardId = null; // avoid a stale defend-card selection leaking into/out of transfer mode
+  if (multiTransferMode) showToast('Izvēlies kārti ar tādu pašu vērtību, lai padotu tālāk');
+  multiRender(multiLastState);
+});
 
 let multiActiveDragCancel = null; // set while a card drag/tap gesture is in progress
 
@@ -606,7 +655,7 @@ function multiClearDropHighlights() {
 
 function multiUpdateDropTargets(ghostRect, card, kind) {
   multiClearDropHighlights();
-  if (kind === 'attack') {
+  if (kind === 'attack' || kind === 'transfer') {
     if (multiRectsOverlap(ghostRect, el('multiTableFelt').getBoundingClientRect())) {
       el('multiTableFelt').classList.add('drag-target');
     }
@@ -621,8 +670,8 @@ function multiUpdateDropTargets(ghostRect, card, kind) {
 }
 
 function multiResolveDropTarget(ghostRect, card, kind) {
-  if (kind === 'attack') {
-    return multiRectsOverlap(ghostRect, el('multiTableFelt').getBoundingClientRect()) ? { type: 'attack' } : null;
+  if (kind === 'attack' || kind === 'transfer') {
+    return multiRectsOverlap(ghostRect, el('multiTableFelt').getBoundingClientRect()) ? { type: kind } : null;
   }
   let found = null;
   document.querySelectorAll('#multiTableSlots .slot[data-open="true"]').forEach(function (slotEl) {
@@ -639,6 +688,10 @@ function multiHandleCardTap(card, kind) {
   if (kind === 'attack') {
     socket.emit('multiAttack', { cardId: card.id });
     multiSelectedCardId = null;
+  } else if (kind === 'transfer') {
+    socket.emit('multiTransferCards', { cardId: card.id });
+    multiSelectedCardId = null;
+    multiTransferMode = false;
   } else if (kind === 'defend') {
     multiSelectedCardId = multiSelectedCardId === card.id ? null : card.id;
     multiRender(multiLastState);
@@ -704,7 +757,10 @@ function multiAttachCardInteraction(cardEl, card, kind) {
 
       if (target) {
         if (kind === 'attack') socket.emit('multiAttack', { cardId: card.id });
-        else socket.emit('multiDefend', { cardId: card.id, slotIndex: target.slotIndex });
+        else if (kind === 'transfer') {
+          socket.emit('multiTransferCards', { cardId: card.id });
+          multiTransferMode = false;
+        } else socket.emit('multiDefend', { cardId: card.id, slotIndex: target.slotIndex });
         ghost.remove();
         cardEl.classList.remove('drag-source-hidden');
       } else {

@@ -224,3 +224,16 @@
   line-height: 1;
 }
 .multi-silhouette-empty { opacity: 0.3; }
+
+/* Padošana (transfer) mode — makes it unmistakable that a tap on a card
+   right now will pass the round along, not defend it. */
+#multiTransferBtn.armed {
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  color: #2a2005;
+  border-color: var(--gold-bright);
+}
+#multiHandCards.transfer-mode {
+  outline: 2px dashed var(--gold-bright);
+  outline-offset: 6px;
+  border-radius: 10px;
+}
