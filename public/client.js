@@ -24,7 +24,12 @@ function cardFaceClass(card) {
   return `card-face card-face-${card.rank}-${card.suit}`;
 }
 const USER_KEY = 'duraks_username';
-const PASS_KEY = 'duraks_password'; // MVP-simple auth — see note in chat reply about the tradeoff
+// A server-issued session token, not the account password — the browser
+// never stores the password itself, only this random single-purpose token
+// (see loginWithToken below). Losing this token only exposes this one
+// "stay logged in" session, and it can be revoked without changing the
+// account password.
+const TOKEN_KEY = 'duraks_token';
 const DRAG_THRESHOLD_PX = 6;
 
 const socket = io();
@@ -50,11 +55,15 @@ const urlRoomCode = (urlParams.get('room') || '').toUpperCase() || null;
 
 // ================= Auth =================
 
+const SESSION_EXPIRED_MSG = 'Sesija vairs nav derīga, lūdzu piesakies no jauna';
+let autoLoginAttempted = false;
+
 function tryAutoLogin() {
   const savedUser = localStorage.getItem(USER_KEY);
-  const savedPass = localStorage.getItem(PASS_KEY);
-  if (savedUser && savedPass) {
-    socket.emit('login', { username: savedUser, password: savedPass });
+  const savedToken = localStorage.getItem(TOKEN_KEY);
+  if (savedUser && savedToken) {
+    autoLoginAttempted = true;
+    socket.emit('loginWithToken', { username: savedUser, token: savedToken });
   }
 }
 
@@ -93,7 +102,7 @@ function submitAuth() {
   const password = el('passwordInput').value;
   if (authMode === 'register') {
     const confirm = el('confirmInput').value;
-    if (password.length < 4) return showLobbyError('Parolei jābūt vismaz 4 rakstzīmes garai');
+    if (password.length < 8) return showLobbyError('Parolei jābūt vismaz 8 rakstzīmes garai');
     if (password !== confirm) return showLobbyError('Paroles nesakrīt');
     socket.emit('register', { username: name, password });
   } else {
@@ -103,8 +112,10 @@ function submitAuth() {
 
 el('switchUserLink').addEventListener('click', (e) => {
   e.preventDefault();
+  const savedToken = localStorage.getItem(TOKEN_KEY);
+  if (myUsername && savedToken) socket.emit('logout', { username: myUsername, token: savedToken });
   localStorage.removeItem(USER_KEY);
-  localStorage.removeItem(PASS_KEY);
+  localStorage.removeItem(TOKEN_KEY);
   myUsername = null;
   window.lastRoomSettings = null;
   el('playStep').classList.add('hidden');
@@ -117,8 +128,12 @@ el('switchUserLink').addEventListener('click', (e) => {
 
 socket.on('registered', (rec) => {
   myUsername = rec.username;
+  autoLoginAttempted = false;
   localStorage.setItem(USER_KEY, myUsername);
-  localStorage.setItem(PASS_KEY, el('passwordInput').value || localStorage.getItem(PASS_KEY) || '');
+  // sessionToken is only present on register/login/loginWithToken (not on
+  // every 'registered'-shaped payload elsewhere), so don't clobber an
+  // already-stored token with nothing if this event ever fires without one.
+  if (rec.sessionToken) localStorage.setItem(TOKEN_KEY, rec.sessionToken);
   el('currentUsername').textContent = myUsername;
   el('authStep').classList.add('hidden');
   el('playStep').classList.remove('hidden');
@@ -254,6 +269,16 @@ el('copyLinkBtn').addEventListener('click', async () => {
 });
 
 socket.on('errorMsg', (msg) => {
+  // A stale/expired/revoked "remember me" token failing quietly on page
+  // load shouldn't greet the person with an error toast — just drop back
+  // to the normal login screen and forget the dead token.
+  if (autoLoginAttempted && msg === SESSION_EXPIRED_MSG) {
+    autoLoginAttempted = false;
+    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    return;
+  }
+  autoLoginAttempted = false;
   showLobbyError(msg);
   showToast(msg);
 });

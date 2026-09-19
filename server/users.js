@@ -6,7 +6,7 @@ const crypto = require('crypto');
 
 const DATA_DIR = path.join(__dirname, 'data');
 const FILE = path.join(DATA_DIR, 'users.json');
-const MIN_PASSWORD_LEN = 4;
+const MIN_PASSWORD_LEN = 8;
 const LEADERBOARD_SIZE = 10;
 
 function todayStr() {
@@ -151,6 +151,74 @@ function verifyLogin(username, password) {
   if (!record) return null;
   if (!verifyPassword(record, password)) return null;
   return toPublic(name, record);
+}
+
+// Session tokens let a browser stay logged in ("remember me") without
+// storing the account password anywhere on the client — only a random,
+// server-issued, single-purpose token is kept in localStorage. The server
+// itself only ever stores a SHA-256 hash of each token (never the raw
+// value), the same defense-in-depth reasoning as password hashing: a leak
+// of users.json alone doesn't hand out usable login tokens either.
+//
+// Each account keeps a capped list of concurrent tokens (most-recent-use
+// first) so a person can stay logged in on a few devices/browsers at once
+// without them evicting each other. Using a token slides its expiry
+// forward (so an actively-used browser never gets logged out), while an
+// abandoned token quietly expires on its own.
+const SESSION_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const MAX_SESSION_TOKENS = 5;
+
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+// Mints a new session token for an existing account. Returns the raw token
+// (only ever handed out once, at creation time — never persisted or logged
+// in plaintext) or null if the account doesn't exist.
+function createSessionToken(username) {
+  const name = normalize(username);
+  const record = store.users[name];
+  if (!record) return null;
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokens = Array.isArray(record.sessionTokens) ? record.sessionTokens : [];
+  const now = Date.now();
+  const fresh = tokens.filter((t) => t.expiresAt > now);
+  fresh.unshift({ hash: hashToken(token), createdAt: now, expiresAt: now + SESSION_TOKEN_TTL_MS });
+  record.sessionTokens = fresh.slice(0, MAX_SESSION_TOKENS);
+  save();
+  return token;
+}
+
+// Verifies a previously-issued session token for an account. On success,
+// slides the token's expiry forward (so active use keeps a browser logged
+// in) and returns the public record; returns null if the account, token,
+// or a non-expired match doesn't exist.
+function verifySessionToken(username, token) {
+  const name = normalize(username);
+  const record = store.users[name];
+  if (!record || !token) return null;
+  const tokens = Array.isArray(record.sessionTokens) ? record.sessionTokens : [];
+  const hash = hashToken(token);
+  const now = Date.now();
+  const match = tokens.find((t) => t.hash === hash && t.expiresAt > now);
+  if (!match) return null;
+  match.expiresAt = now + SESSION_TOKEN_TTL_MS;
+  record.sessionTokens = tokens.filter((t) => t.expiresAt > now);
+  save();
+  return toPublic(name, record);
+}
+
+// Invalidates one specific session token (explicit logout on that device).
+// Silently no-ops if the account or token isn't found.
+function invalidateSessionToken(username, token) {
+  const name = normalize(username);
+  const record = store.users[name];
+  if (!record || !token) return;
+  const tokens = Array.isArray(record.sessionTokens) ? record.sessionTokens : [];
+  const hash = hashToken(token);
+  record.sessionTokens = tokens.filter((t) => t.hash !== hash);
+  save();
 }
 
 function recordResult(username, didWin, isForfeit) {
@@ -450,6 +518,9 @@ module.exports = {
   usernameExists,
   createAccount,
   verifyLogin,
+  createSessionToken,
+  verifySessionToken,
+  invalidateSessionToken,
   recordResult,
   getStats,
   recordGameCompleted,

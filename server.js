@@ -10,6 +10,7 @@ const { chooseMove } = require('./server/ai');
 const tournaments = require('./server/tournament/store');
 const { generateBracket } = require('./server/tournament/bracket-generator');
 const registerMultiHandlers = require('./server/multi-rooms');
+const { createRateLimiter } = require('./server/rate-limit');
 
 const app = express();
 const server = http.createServer(app);
@@ -20,8 +21,15 @@ const DISCONNECT_GRACE_MS = 30000;
 const ROOM_CLEANUP_MS = 5 * 60 * 1000;
 const LOBBY_ROOM = 'lobby';
 const AI_ID = 'Dators 🤖';
-const ADMIN_USERNAME = 'zivs';
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'zivs';
 const AI_MOVE_DELAY_MS = [500, 1100]; // randomized range, feels less instant/robotic
+
+// Brute-force / scraping protection. Keyed by IP where possible (falls back
+// to socket id if a proxy hides it) — a few honest mistyped-password
+// retries are fine, but repeated automated attempts get slowed way down.
+const loginLimiter = createRateLimiter({ max: 8, windowMs: 60 * 1000, blockMs: 2 * 60 * 1000 });
+const registerLimiter = createRateLimiter({ max: 5, windowMs: 10 * 60 * 1000, blockMs: 10 * 60 * 1000 });
+const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs: 60 * 1000 });
 
 app.get('/', (req, res) => {
   users.recordPageVisit();
@@ -600,7 +608,12 @@ io.on('connection', (socket) => {
   // below except this one registration call and the username getter.
   registerMultiHandlers(io, socket, { getUsername: () => username, users });
 
-  function onAuthenticated(rec) {
+  // onAuthenticated logs the socket in and tells the client a session
+  // token to remember it by. `token` is either a freshly-minted one
+  // (register/login) or the same token the client already had (a
+  // loginWithToken reconnect) — either way it's the only thing ever
+  // persisted client-side now; the account password itself never is.
+  function onAuthenticated(rec, token) {
     username = rec.username;
     userSockets.set(username, socket.id);
     socket.join(LOBBY_ROOM);
@@ -609,24 +622,48 @@ io.on('connection', (socket) => {
     // one signal among several, not proof by itself (shared households,
     // NAT, and VPNs all produce the same signal innocently).
     users.recordLoginIp(username, socket.handshake.address);
-    socket.emit('registered', rec);
+    socket.emit('registered', { ...rec, sessionToken: token || null });
     socket.emit('openRoomsUpdated', listOpenRooms());
     socket.emit('leaderboardsData', users.getLeaderboards());
   }
 
   socket.on('register', ({ username: name, password }) => {
+    const rl = registerLimiter.check(socket.handshake.address || socket.id);
+    if (!rl.allowed) return sendError(socket, 'Pārāk daudz mēģinājumu. Pamēģini vēlreiz pēc brīža.');
     if (!password || password.length < users.MIN_PASSWORD_LEN) {
       return sendError(socket, `Parolei jābūt vismaz ${users.MIN_PASSWORD_LEN} rakstzīmes garai`);
     }
     const rec = users.createAccount(name, password);
     if (!rec) return sendError(socket, 'Šis lietotājvārds jau ir aizņemts (vai ir nederīgs)');
-    onAuthenticated(rec);
+    const token = users.createSessionToken(rec.username);
+    onAuthenticated(rec, token);
   });
 
   socket.on('login', ({ username: name, password }) => {
+    const rl = loginLimiter.check(socket.handshake.address || socket.id);
+    if (!rl.allowed) return sendError(socket, 'Pārāk daudz mēģinājumu. Pamēģini vēlreiz pēc brīža.');
     const rec = users.verifyLogin(name, password);
     if (!rec) return sendError(socket, 'Nepareizs lietotājvārds vai parole');
-    onAuthenticated(rec);
+    const token = users.createSessionToken(rec.username);
+    onAuthenticated(rec, token);
+  });
+
+  // Token-based "remember me" reconnect — used instead of storing the
+  // account password in localStorage. Rate-limited the same as a normal
+  // login since a leaked/guessed token attempt looks identical.
+  socket.on('loginWithToken', ({ username: name, token }) => {
+    const rl = loginLimiter.check(socket.handshake.address || socket.id);
+    if (!rl.allowed) return sendError(socket, 'Pārāk daudz mēģinājumu. Pamēģini vēlreiz pēc brīža.');
+    const rec = users.verifySessionToken(name, token);
+    if (!rec) return sendError(socket, 'Sesija vairs nav derīga, lūdzu piesakies no jauna');
+    onAuthenticated(rec, token);
+  });
+
+  // Explicit logout: invalidate just this one device's token so a stolen
+  // token can't be used again, without touching the account's other
+  // logged-in devices.
+  socket.on('logout', ({ username: name, token } = {}) => {
+    if (name && token) users.invalidateSessionToken(name, token);
   });
 
   socket.on('checkUsername', ({ username: name }) => {
@@ -1111,6 +1148,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('getProfile', ({ username: target }) => {
+    // Profile stats are intentionally public (that's how the leaderboard's
+    // clickable names work, for guests too) — the fix here is throttling,
+    // not an auth wall, so this stays usable without complicating login.
+    const rl = profileLimiter.check(socket.handshake.address || socket.id);
+    if (!rl.allowed) return sendError(socket, 'Pārāk daudz pieprasījumu. Pamēģini vēlreiz pēc brīža.');
     const stats = users.getStats(target);
     if (!stats) return sendError(socket, 'Profils nav atrasts');
     const history = users.getGameHistory(target, 50);

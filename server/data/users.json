@@ -271,9 +271,16 @@
       "knownIps": [
         {
           "ip": "::1",
-          "count": 1,
+          "count": 3,
           "firstSeen": 1789856787361,
-          "lastSeen": 1789856787361
+          "lastSeen": 1789858600032
+        }
+      ],
+      "sessionTokens": [
+        {
+          "hash": "6c1155ea8279baa78f78287053c3e149e09b1c7317d39d7054dc057fd1c25600",
+          "createdAt": 1789858600032,
+          "expiresAt": 1792450600032
         }
       ]
     },
@@ -532,10 +539,10 @@
       "date": "2026-09-19",
       "played": 2
     },
-    "pageVisitsAllTime": 107,
+    "pageVisitsAllTime": 109,
     "pageVisitsDaily": {
       "date": "2026-09-19",
-      "count": 20
+      "count": 22
     }
   }
 }
