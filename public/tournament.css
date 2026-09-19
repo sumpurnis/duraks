@@ -144,6 +144,18 @@
 .checkbox-field input { width: auto; }
 .checkbox-field:has(input:disabled) { opacity: 0.45; }
 
+/* Several short checkbox-fields side by side (e.g. Privāti / Ranked /
+   Padošana at room creation) instead of each on its own line — wraps on
+   narrow screens rather than overflowing. */
+.checkbox-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 22px;
+  row-gap: 6px;
+  margin: 4px 0 18px;
+}
+.checkbox-field-row .checkbox-field { margin: 0; }
+
 .hint {
   font-size: 0.72rem;
   color: var(--muted);

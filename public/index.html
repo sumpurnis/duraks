@@ -317,18 +317,20 @@
         <span>Datora pretinieku skaits</span>
         <div id="multiCreateAiCountGroup" class="btn-group" role="group"></div>
       </div>
-      <label class="checkbox-field">
-        <input id="multiCreatePrivate" type="checkbox" />
-        <span>Padarīt istabu privātu (pievienoties var tikai ar paroli)</span>
-      </label>
-      <label class="checkbox-field">
-        <input id="multiCreateRanked" type="checkbox" />
-        <span>🏅 Ranked (ietekmē ELO reitingu — tikai reģistrētiem, bez datora pretiniekiem)</span>
-      </label>
-      <label id="multiCreateTransferField" class="checkbox-field">
-        <input id="multiCreateTransfer" type="checkbox" />
-        <span>🔄 Padošana (var padot tālāk kārti ar tādu pašu vērtību, nevis tikai atsist — pagaidām tikai 2 spēlētājiem)</span>
-      </label>
+      <div class="checkbox-field-row">
+        <label class="checkbox-field" title="Padarīt istabu privātu (pievienoties var tikai ar paroli)">
+          <input id="multiCreatePrivate" type="checkbox" />
+          <span>🔒 Privāti</span>
+        </label>
+        <label class="checkbox-field" title="Ietekmē ELO reitingu — tikai reģistrētiem, bez datora pretiniekiem">
+          <input id="multiCreateRanked" type="checkbox" />
+          <span>🏅 Ranked</span>
+        </label>
+        <label id="multiCreateTransferField" class="checkbox-field" title="Var padot tālāk kārti ar tādu pašu vērtību — pagaidām tikai 2 spēlētājiem">
+          <input id="multiCreateTransfer" type="checkbox" />
+          <span>🔄 Padošana</span>
+        </label>
+      </div>
       <div class="rematch-choice-row">
         <button id="multiRoomCreateSubmitBtn" class="btn btn-primary">Izveidot</button>
         <button id="multiRoomCreateCancelBtn" class="btn btn-secondary">Atcelt</button>
