@@ -179,11 +179,25 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     io.to(MULTI_LOBBY_ROOM).emit('leaderboardsData', users.getLeaderboards());
   }
 
+  // Rough "did they have a real defense and take anyway?" check — same
+  // approximate heuristic as server.js's 2-player path (per-slot existence,
+  // not a true simultaneous-assignment solver). See that copy's comment
+  // for the full rationale; kept duplicated here since the two modules
+  // don't otherwise share game-engine helpers.
+  function isAvoidableTake(game, playerId) {
+    const openSlots = game.table.filter((s) => !s.defend);
+    if (openSlots.length === 0) return false;
+    const hand = game.hands[playerId] || [];
+    return openSlots.every((slot) => hand.some((card) => game.beats(slot.attack, card)));
+  }
+
   function recordMultiGameHistory(room) {
     if (room.historyRecorded) return;
     room.historyRecorded = true;
     const game = room.game;
     if (!game || game.status !== 'finished') return;
+    const durationMs = room.startedAt ? Date.now() - room.startedAt : undefined;
+    const endReason = room.endReason || 'normal';
 
     const placementOf = {};
     game.safeOrder.forEach((username, idx) => {
@@ -250,6 +264,9 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
         eloBefore: eloEntry ? eloEntry.before : undefined,
         eloAfter: eloEntry ? eloEntry.after : undefined,
         eloChange: eloEntry ? eloEntry.delta : undefined,
+        endReason,
+        durationMs,
+        avoidableTakes: (room.avoidableTakes && room.avoidableTakes[username]) || 0,
       });
     }
 
@@ -278,6 +295,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
       room.game.status = 'finished';
       room.game.durakId = stalled.username;
       room.game.log.push(`${stalled.username} nereaģēja laikā — spēle beigusies`);
+      room.endReason = 'timeout';
       broadcastMultiState(room);
       recordMultiGameHistory(room);
       scheduleMultiCleanup(room);
@@ -350,6 +368,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
 
   function startMultiRoomGame(room) {
     room.status = 'active';
+    room.startedAt = Date.now();
     room.bots = BOT_NAMES.slice(0, room.aiCount);
     const seating = [...room.humans.map((h) => h.username), ...room.bots];
     room.game = new Game(seating, { deferAutoResolve: true, deckSize: room.deckSize || 52 });
@@ -529,7 +548,12 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   socket.on('multiTakeCards', () => {
     const room = currentRoom();
     if (!room) return;
-    const res = room.game.takeCards(effectiveUsername());
+    const username = effectiveUsername();
+    if (room.game.status === 'active' && isAvoidableTake(room.game, username)) {
+      room.avoidableTakes = room.avoidableTakes || {};
+      room.avoidableTakes[username] = (room.avoidableTakes[username] || 0) + 1;
+    }
+    const res = room.game.takeCards(username);
     if (res.error) return sendMultiError(res.error);
     broadcastMultiState(room);
     driveBots(room);
@@ -543,6 +567,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     room.game.status = 'finished';
     room.game.durakId = username;
     room.game.log.push(`${username} padevās`);
+    room.endReason = 'surrender';
     broadcastMultiState(room);
     clearMultiMoveTimer(room);
     recordMultiGameHistory(room);
@@ -589,6 +614,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     if (!room.game || room.game.status !== 'active') return;
     room.game.status = 'finished';
     room.game.durakId = username;
+    room.endReason = 'disconnect';
     clearMultiMoveTimer(room);
     if (room.botTimer) clearTimeout(room.botTimer);
     recordMultiGameHistory(room);

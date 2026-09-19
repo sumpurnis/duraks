@@ -699,6 +699,26 @@ function profileRelativeTime(ts) {
 
 const PROFILE_OUTCOME_LABELS = { won: 'Uzvara', lost: 'Zaudējums', placed: 'Ievietojās', draw: 'Neizšķirts' };
 
+const ELO_MIDPOINT = 1000;
+// Full red/green saturation is reached this many ELO points away from the
+// midpoint in either direction; anything further just clamps to the pole
+// color rather than continuing to shift.
+const ELO_COLOR_SPAN = 200;
+
+// Maps an ELO value to a color that shifts smoothly from red (well below
+// 1000) through amber/yellow (near 1000) to green (well above 1000) —
+// interpolated through HSL hue so the midpoint doesn't turn into a muddy
+// red+green blend the way a straight RGB lerp would.
+function eloColor(value) {
+  let t = (value - ELO_MIDPOINT) / ELO_COLOR_SPAN;
+  t = Math.max(-1, Math.min(1, t));
+  const u = (t + 1) / 2; // 0 = worst (red) .. 1 = best (green)
+  const hue = 4 + u * (142 - 4);
+  const sat = 45 + u * 8;
+  const light = 60 - u * 5;
+  return 'hsl(' + hue.toFixed(0) + ', ' + sat.toFixed(0) + '%, ' + light.toFixed(0) + '%)';
+}
+
 function renderEloChart(history) {
   const container = el('profileEloChart');
   const rankedEntries = history.filter((e) => typeof e.eloAfter === 'number').slice().reverse();
@@ -716,36 +736,89 @@ function renderEloChart(history) {
   const padSide = 6;
   const minVal = Math.min.apply(null, values);
   const maxVal = Math.max.apply(null, values);
-  const range = Math.max(1, maxVal - minVal);
+  // The y-scale always includes 1000, even if every game so far has been
+  // entirely above or below it, so the midpoint reference line is always
+  // visible for context rather than clipped off the chart.
+  const domainMin = Math.min(minVal, ELO_MIDPOINT);
+  const domainMax = Math.max(maxVal, ELO_MIDPOINT);
+  const range = Math.max(1, domainMax - domainMin);
 
   function xFor(i) {
     if (values.length === 1) return width / 2;
     return padSide + (i / (values.length - 1)) * (width - 2 * padSide);
   }
   function yFor(v) {
-    return height - padBottom - ((v - minVal) / range) * (height - padTop - padBottom);
+    return height - padBottom - ((v - domainMin) / range) * (height - padTop - padBottom);
   }
 
+  const xs = values.map((v, i) => xFor(i));
+  const gradientId = 'eloGrad' + Math.random().toString(36).slice(2, 9);
+  const gradientStops = values.map((v, i) => {
+    const offsetPct = values.length === 1 ? 0 : ((xs[i] - padSide) / (width - 2 * padSide)) * 100;
+    return '<stop offset="' + offsetPct.toFixed(1) + '%" stop-color="' + eloColor(v) + '" />';
+  }).join('');
+
   const points = values.map((v, i) => xFor(i).toFixed(1) + ',' + yFor(v).toFixed(1)).join(' ');
-  const lastChange = rankedEntries[rankedEntries.length - 1].eloChange;
-  const lineColor = lastChange >= 0 ? '#4caf6d' : '#c95c5c';
+
+  // First occurrence of the min/max value — marked directly on the chart
+  // (rather than just quoted in a fixed left/right legend row) so it's
+  // unambiguous *where in time* that peak/dip actually happened, instead of
+  // making people guess from a number sitting at a fixed screen position
+  // that has nothing to do with the game it came from.
+  let minIdx = 0;
+  let maxIdx = 0;
+  values.forEach((v, i) => {
+    if (v < values[minIdx]) minIdx = i;
+    if (v > values[maxIdx]) maxIdx = i;
+  });
+  const hasDistinctExtremes = minVal !== maxVal;
 
   const dots = values.map((v, i) => {
     const isLast = i === values.length - 1;
     const r = isLast ? 3 : 1.6;
-    const color = isLast ? lineColor : '#c9a24b';
-    return '<circle cx="' + xFor(i).toFixed(1) + '" cy="' + yFor(v).toFixed(1) + '" r="' + r + '" fill="' + color + '" />';
+    const cx = xFor(i).toFixed(1);
+    const cy = yFor(v).toFixed(1);
+    const change = rankedEntries[i].eloChange;
+    const changeLabel = typeof change === 'number' ? ' (' + (change > 0 ? '+' : '') + change + ')' : '';
+    let extremeLabel = '';
+    if (hasDistinctExtremes && i === maxIdx) extremeLabel = ' · augstākais';
+    else if (hasDistinctExtremes && i === minIdx) extremeLabel = ' · zemākais';
+    const tooltip = 'ELO: ' + v + changeLabel + extremeLabel;
+    // A larger, invisible hit-circle carries the native mouse-over tooltip
+    // (<title>) so hovering doesn't require pinpointing the tiny visible
+    // dot — the visible dot is drawn on top, purely decorative.
+    let marker = '';
+    if (hasDistinctExtremes && i === maxIdx) {
+      marker = '<text x="' + cx + '" y="' + (Number(cy) - 4) + '" text-anchor="middle" font-size="7" fill="rgba(250,246,236,0.8)" pointer-events="none">▲</text>';
+    } else if (hasDistinctExtremes && i === minIdx) {
+      marker = '<text x="' + cx + '" y="' + (Number(cy) + 10) + '" text-anchor="middle" font-size="7" fill="rgba(250,246,236,0.8)" pointer-events="none">▼</text>';
+    }
+    return (
+      '<circle cx="' + cx + '" cy="' + cy + '" r="7" fill="transparent" stroke="none">' +
+      '<title>' + tooltip + '</title>' +
+      '</circle>' +
+      '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + eloColor(v) + '" pointer-events="none" />' +
+      marker
+    );
   }).join('');
+
+  const y1000 = yFor(ELO_MIDPOINT).toFixed(1);
+  const midLine =
+    '<line x1="' + padSide + '" y1="' + y1000 + '" x2="' + (width - padSide) + '" y2="' + y1000 +
+    '" stroke="rgba(250,246,236,0.32)" stroke-width="1" stroke-dasharray="3,3" vector-effect="non-scaling-stroke" />' +
+    '<text x="' + (width - padSide) + '" y="' + (Number(y1000) - 3) + '" text-anchor="end" font-size="7" fill="rgba(250,246,236,0.55)">' + ELO_MIDPOINT + '</text>';
 
   container.innerHTML =
     '<svg viewBox="0 0 ' + width + ' ' + height + '" class="profile-elo-chart-svg" preserveAspectRatio="none">' +
-    '<polyline points="' + points + '" fill="none" stroke="' + lineColor + '" stroke-width="2" vector-effect="non-scaling-stroke" />' +
+    '<defs><linearGradient id="' + gradientId + '" x1="0" y1="0" x2="' + width + '" y2="0" gradientUnits="userSpaceOnUse">' + gradientStops + '</linearGradient></defs>' +
+    midLine +
+    '<polyline points="' + points + '" fill="none" stroke="url(#' + gradientId + ')" stroke-width="2" vector-effect="non-scaling-stroke" />' +
     dots +
     '</svg>' +
     '<div class="profile-elo-chart-labels">' +
-    '<span>' + minVal + '</span>' +
-    '<span>Pēdējās ' + values.length + ' ranked spēles</span>' +
-    '<span>' + maxVal + '</span>' +
+    '<div class="profile-elo-stat profile-elo-stat-low"><span class="profile-elo-stat-label">▼ Zemākais</span><span class="profile-elo-stat-value">' + minVal + '</span></div>' +
+    '<div class="profile-elo-stat profile-elo-stat-current"><span class="profile-elo-stat-label">Tagad</span><span class="profile-elo-stat-value">' + values[values.length - 1] + '</span></div>' +
+    '<div class="profile-elo-stat profile-elo-stat-high"><span class="profile-elo-stat-label">▲ Augstākais</span><span class="profile-elo-stat-value">' + maxVal + '</span></div>' +
     '</div>';
 }
 
@@ -762,6 +835,10 @@ function renderProfileHistory(history) {
   history.forEach((entry) => {
     const row = document.createElement('div');
     row.className = 'profile-history-row profile-history-' + (entry.outcome || 'lost');
+
+    if (Array.isArray(entry.opponents) && entry.opponents.length > 0) {
+      row.title = 'Pretinieki: ' + entry.opponents.join(', ');
+    }
 
     const outcomeLabel = PROFILE_OUTCOME_LABELS[entry.outcome] || entry.outcome;
     const placementLabel = entry.placement ? ` (${entry.placement}. vieta)` : '';

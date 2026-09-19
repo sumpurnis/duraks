@@ -224,6 +224,34 @@ function getGameHistory(username, limit) {
   return record.history.slice(0, n);
 }
 
+// Tracks which IP addresses a registered account has connected from — one
+// signal (among several) for the anomaly-detection tool
+// (server/tools/anomaly-report.js), which flags different accounts that
+// always share an IP. Capped list, most-recently-seen first; each entry
+// also keeps a running count and first/last-seen timestamps so the report
+// can tell "logged in once from a friend's house" apart from "every single
+// session is from this IP". Silently no-ops for guests/non-existent
+// accounts, same convention as the rest of this file. Not itself proof of
+// anything — shared households, NAT and VPNs all produce the same signal.
+const KNOWN_IPS_LIMIT = 20;
+
+function recordLoginIp(username, ip) {
+  const name = normalize(username);
+  if (!name || !store.users[name] || !ip) return;
+  const record = store.users[name];
+  const knownIps = Array.isArray(record.knownIps) ? record.knownIps : [];
+  const existing = knownIps.find((e) => e.ip === ip);
+  if (existing) {
+    existing.count += 1;
+    existing.lastSeen = Date.now();
+  } else {
+    knownIps.unshift({ ip, count: 1, firstSeen: Date.now(), lastSeen: Date.now() });
+  }
+  knownIps.sort((a, b) => b.lastSeen - a.lastSeen);
+  record.knownIps = knownIps.slice(0, KNOWN_IPS_LIMIT);
+  save();
+}
+
 // Remembers a registered user's most recently used room-creation settings
 // (button-group choices in the create-room modal), so the next time they
 // open that modal it can be pre-filled for them. Silently no-ops for
@@ -431,6 +459,7 @@ module.exports = {
   recordGameHistoryEntry,
   getGameHistory,
   saveLastRoomSettings,
+  recordLoginIp,
   getElo,
   applyRankedGameResult,
   MIN_PASSWORD_LEN,

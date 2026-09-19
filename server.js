@@ -171,7 +171,7 @@ function recordNormalResult(room) {
     users.recordVsBotGameCompleted();
     broadcastLeaderboards();
   }
-  recordTwoPlayerHistory(room, winnerId, durakId, draw, false);
+  recordTwoPlayerHistory(room, winnerId, durakId, draw, false, 'normal');
   handleTournamentGameResult(room, room.game.winnerId);
 }
 
@@ -179,8 +179,14 @@ function recordNormalResult(room) {
 // vs-bot games (vs-bot games just don't touch the competitive
 // leaderboard/win-loss counters above). Silently no-ops per-player for
 // guests, same as recordResult.
-function recordTwoPlayerHistory(room, winnerId, durakId, draw, forfeit) {
+//
+// durationMs/endReason/avoidableTakes feed the anomaly-detection tool (see
+// server/tools/anomaly-report.js) — they're not used anywhere else, so a
+// missing room.startedAt (shouldn't happen, but defensively handled) just
+// means that one entry is skipped by duration-based checks there.
+function recordTwoPlayerHistory(room, winnerId, durakId, draw, forfeit, endReason) {
   const usernames = room.players.map((p) => p.username).filter((u) => u !== AI_ID);
+  const durationMs = room.startedAt ? Date.now() - room.startedAt : undefined;
   for (const username of usernames) {
     let outcome;
     if (draw) outcome = 'draw';
@@ -194,6 +200,9 @@ function recordTwoPlayerHistory(room, winnerId, durakId, draw, forfeit) {
       placement: outcome === 'won' ? 1 : outcome === 'draw' ? null : 2,
       vsBots: !!room.vsAI,
       forfeit: !!forfeit,
+      endReason: endReason || 'normal',
+      durationMs,
+      avoidableTakes: (room.avoidableTakes && room.avoidableTakes[username]) || 0,
       opponents: room.players.map((p) => p.username).filter((u) => u !== username),
     });
   }
@@ -201,6 +210,23 @@ function recordTwoPlayerHistory(room, winnerId, durakId, draw, forfeit) {
 
 function finishIfGameOver(room) {
   if (room.game && room.game.status === 'finished') recordNormalResult(room);
+}
+
+// Rough "did they have a real defense and take anyway?" check, fed into the
+// anomaly-detection tool as one signal among several (see
+// server/tools/anomaly-report.js). Deliberately approximate: it checks that
+// every still-open table slot has *some* card in hand that could beat it,
+// without verifying those could all be different physical cards at once
+// (a true assignment check needs bipartite matching) — good enough to flag
+// "took with an obvious defend sitting right there", not meant to be a
+// perfect solver. A single occurrence proves nothing; the tool only flags
+// players whose *avoidableTakes* count is elevated across several games
+// against the same opponent.
+function isAvoidableTake(game, playerId) {
+  const openSlots = game.table.filter((s) => !s.defend);
+  if (openSlots.length === 0) return false;
+  const hand = game.hands[playerId] || [];
+  return openSlots.every((slot) => hand.some((card) => game.beats(slot.attack, card)));
 }
 
 function endByForfeit(room, loserUsername, reason) {
@@ -223,7 +249,7 @@ function endByForfeit(room, loserUsername, reason) {
       users.recordVsBotGameCompleted();
       broadcastLeaderboards();
     }
-    recordTwoPlayerHistory(room, winnerUsername, loserUsername, false, true);
+    recordTwoPlayerHistory(room, winnerUsername, loserUsername, false, true, reason);
     handleTournamentGameResult(room, winnerUsername);
   }
 
@@ -327,6 +353,7 @@ function startTournamentGameForHuman(humanUsername, tournamentId, matchId) {
   });
   const room = rooms.get(code);
   room.game = gamesRegistry.getGame(room.gameId).createEngine(room.players.map((p) => p.username));
+  room.startedAt = Date.now();
   maybeTriggerAI(room); // in case the AI goes first
   tournaments.markMatchInProgress(tournamentId, matchId);
 
@@ -371,6 +398,7 @@ function startTournamentGameForHumans(player1Username, player2Username, tourname
   });
   const room = rooms.get(code);
   room.game = gamesRegistry.getGame(room.gameId).createEngine(room.players.map((p) => p.username));
+  room.startedAt = Date.now();
   tournaments.markMatchInProgress(tournamentId, matchId);
 
   socket1.emit('tournamentGameStarting', { code, vsBot: false });
@@ -576,6 +604,11 @@ io.on('connection', (socket) => {
     username = rec.username;
     userSockets.set(username, socket.id);
     socket.join(LOBBY_ROOM);
+    // Fed into the anomaly-detection tool (server/tools/anomaly-report.js)
+    // to flag accounts that always connect from the same IP as each other —
+    // one signal among several, not proof by itself (shared households,
+    // NAT, and VPNs all produce the same signal innocently).
+    users.recordLoginIp(username, socket.handshake.address);
     socket.emit('registered', rec);
     socket.emit('openRoomsUpdated', listOpenRooms());
     socket.emit('leaderboardsData', users.getLeaderboards());
@@ -892,6 +925,7 @@ io.on('connection', (socket) => {
     socket.join(code);
 
     room.game = gamesRegistry.getGame(room.gameId).createEngine(room.players.map((p) => p.username));
+    room.startedAt = Date.now();
     // Tells the client this is a guest session (no account) — used to show
     // the "reģistrēties ar šo vārdu" offer after the game ends.
     socket.emit('guestPlayStarted', { username: guestName });
@@ -927,6 +961,7 @@ io.on('connection', (socket) => {
     socket.leave(LOBBY_ROOM);
 
     room.game = gamesRegistry.getGame(room.gameId).createEngine(room.players.map((p) => p.username));
+    room.startedAt = Date.now();
     socket.emit('gameStarted', { names: namesFor(room) });
     broadcastState(code);
     maybeTriggerAI(room);
@@ -971,6 +1006,7 @@ io.on('connection', (socket) => {
     socket.leave(LOBBY_ROOM);
 
     room.game = gamesRegistry.getGame(room.gameId || gamesRegistry.DEFAULT_GAME_ID).createEngine(room.players.map((p) => p.username));
+    room.startedAt = Date.now();
     room.statsRecorded = false;
     room.endReason = null;
     io.to(code).emit('gameStarted', { names: namesFor(room) });
@@ -1019,6 +1055,10 @@ io.on('connection', (socket) => {
   socket.on('takeCards', () => {
     const room = rooms.get(joinedCode);
     if (!room || !room.game) return;
+    if (room.game.status === 'active' && isAvoidableTake(room.game, playerId)) {
+      room.avoidableTakes = room.avoidableTakes || {};
+      room.avoidableTakes[playerId] = (room.avoidableTakes[playerId] || 0) + 1;
+    }
     const result = room.game.takeCards(playerId);
     if (result.error) return sendError(socket, result.error);
     finishIfGameOver(room);
@@ -1110,6 +1150,7 @@ function startRematch(room) {
   room.statsRecorded = false;
   room.endReason = null;
   room.game = gamesRegistry.getGame(room.gameId || gamesRegistry.DEFAULT_GAME_ID).createEngine(room.players.map((p) => p.username));
+  room.startedAt = Date.now();
   io.to(room.code).emit('gameStarted', { names: namesFor(room) });
   broadcastState(room.code);
   maybeTriggerAI(room);

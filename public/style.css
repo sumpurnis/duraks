@@ -832,10 +832,25 @@ html, body {
   color: var(--muted);
   font-size: 0.72rem;
 }
-.profile-elo-chart-labels span {
+.profile-elo-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   min-width: 0;
-  overflow-wrap: break-word;
+  flex: 1;
 }
+.profile-elo-stat-label {
+  overflow-wrap: break-word;
+  text-align: center;
+}
+.profile-elo-stat-value {
+  font-weight: 700;
+  font-size: 0.85rem;
+  margin-top: 2px;
+}
+.profile-elo-stat-low .profile-elo-stat-value { color: #c95c5c; }
+.profile-elo-stat-high .profile-elo-stat-value { color: #4caf6d; }
+.profile-elo-stat-current .profile-elo-stat-value { color: var(--gold-bright); }
 .profile-history-list {
   display: flex;
   flex-direction: column;
@@ -853,6 +868,7 @@ html, body {
   border-left: 3px solid var(--muted);
   font-size: 0.85rem;
   min-width: 0;
+  cursor: help;
 }
 .profile-history-row.profile-history-won { border-left-color: #4caf6d; }
 .profile-history-row.profile-history-lost { border-left-color: #c95c5c; }
