@@ -26,6 +26,19 @@
         {
           "mode": "multi",
           "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "timestamp": 1789853593108
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
           "deckSize": 52,
           "ranked": true,
           "outcome": "lost",
@@ -186,7 +199,14 @@
           "timestamp": 1789638210212
         }
       ],
-      "elo": 999
+      "elo": 999,
+      "lastRoomSettings": {
+        "totalPlayers": 4,
+        "aiCount": 0,
+        "deckSize": 52,
+        "isPrivate": false,
+        "ranked": false
+      }
     },
     "nezivs": {
       "createdAt": 1789240302595,
@@ -383,15 +403,15 @@
       "date": "2026-09-17",
       "played": 5
     },
-    "vsBotAllTime": 11,
+    "vsBotAllTime": 12,
     "vsBotDaily": {
-      "date": "2026-09-13",
-      "played": 3
+      "date": "2026-09-19",
+      "played": 1
     },
-    "pageVisitsAllTime": 87,
+    "pageVisitsAllTime": 91,
     "pageVisitsDaily": {
-      "date": "2026-09-17",
-      "count": 19
+      "date": "2026-09-19",
+      "count": 4
     }
   }
 }

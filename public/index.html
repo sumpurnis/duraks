@@ -40,6 +40,14 @@
         <div class="divider"><span>vai</span></div>
         <button id="playGuestBtn" class="btn btn-secondary">🤖 Spēlēt pret datoru (bez reģistrācijas)</button>
         <button id="createRoomGuestBtn" class="btn btn-secondary">👥 Izveidot istabu (bez reģistrācijas)</button>
+
+        <div class="quick-presets">
+          <p class="quick-presets-title">Ātrā istabas izveide</p>
+          <div class="quick-presets-row">
+            <button id="quickPresetGuest2p36" class="btn btn-quick" type="button" data-preset="2p36">⚡ 2 spēlētāji · 36 kārtis</button>
+            <button id="quickPresetGuest4p52" class="btn btn-quick" type="button" data-preset="4p52">⚡ 3-4 spēlētāji · 52 kārtis</button>
+          </div>
+        </div>
       </div>
 
       <div id="playStep" class="hidden">
@@ -48,6 +56,14 @@
         <div class="lobby-actions">
           <button id="createBtn" class="btn btn-primary">Izveidot istabu</button>
           <button id="tournamentOpenBtn" class="btn btn-secondary">🏆 Turnīri</button>
+        </div>
+
+        <div class="quick-presets">
+          <p class="quick-presets-title">Ātrā istabas izveide</p>
+          <div class="quick-presets-row">
+            <button id="quickPreset2p36" class="btn btn-quick" type="button" data-preset="2p36">⚡ 2 spēlētāji · 36 kārtis</button>
+            <button id="quickPreset4p52" class="btn btn-quick" type="button" data-preset="4p52">⚡ 3-4 spēlētāji · 52 kārtis</button>
+          </div>
         </div>
       </div>
 
@@ -282,25 +298,25 @@
   <div id="multiRoomCreateModal" class="modal hidden">
     <div class="modal-card">
       <h2>Izveidot istabu</h2>
-      <label class="field">
+      <div class="field">
         <span>Kopējais spēlētāju skaits</span>
-        <select id="multiCreateTotalPlayers">
-          <option value="2">2</option>
-          <option value="3" selected>3</option>
-          <option value="4">4</option>
-        </select>
-      </label>
-      <label class="field">
+        <div id="multiCreateTotalPlayersGroup" class="btn-group" role="group">
+          <button type="button" class="btn-option" data-value="2">2</button>
+          <button type="button" class="btn-option" data-value="3">3</button>
+          <button type="button" class="btn-option" data-value="4">4</button>
+        </div>
+      </div>
+      <div class="field">
         <span>Kāršu kava</span>
-        <select id="multiCreateDeckSize">
-          <option value="52">52 kārtis</option>
-          <option value="36">36 kārtis (tikai 2 spēlētājiem)</option>
-        </select>
-      </label>
-      <label class="field">
+        <div id="multiCreateDeckSizeGroup" class="btn-group" role="group">
+          <button type="button" class="btn-option" data-value="36">36 kārtis</button>
+          <button type="button" class="btn-option" data-value="52">52 kārtis</button>
+        </div>
+      </div>
+      <div class="field">
         <span>Datora pretinieku skaits</span>
-        <select id="multiCreateAiCount"></select>
-      </label>
+        <div id="multiCreateAiCountGroup" class="btn-group" role="group"></div>
+      </div>
       <label class="checkbox-field">
         <input id="multiCreatePrivate" type="checkbox" />
         <span>Padarīt istabu privātu (pievienoties var tikai ar paroli)</span>

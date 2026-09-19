@@ -409,6 +409,14 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
       return sendMultiError('Ranked istabas var izveidot tikai reģistrēti lietotāji');
     }
 
+    // Remember these choices for next time, but only for registered users
+    // (guests have no account to attach them to). This only stores a
+    // snapshot for pre-filling the modal later — it never auto-creates a
+    // room by itself.
+    if (getUsername()) {
+      users.saveLastRoomSettings(username, { totalPlayers: n, aiCount: ai, deckSize: deck, isPrivate: !!isPrivate, ranked: isRanked });
+    }
+
     const code = makeMultiRoomCode();
     const room = {
       code,

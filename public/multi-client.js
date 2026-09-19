@@ -158,68 +158,134 @@ el('multiRoomsRefreshBtn').addEventListener('click', function () {
   socket.emit('listMultiRooms');
 });
 
-function multiPopulateAiCountOptions() {
-  const total = parseInt(el('multiCreateTotalPlayers').value, 10);
-  const aiSelect = el('multiCreateAiCount');
-  const prevValue = aiSelect.value;
-  aiSelect.innerHTML = '';
+// ================= Room-creation modal: button-group option pickers =================
+// Replaces the old <select> dropdowns with clickable buttons (the chosen
+// option gets an .active highlight). All three groups interact the same
+// way they did as selects: a 36-card deck locks the player count to 2, and
+// a ranked room locks the AI count to 0 — just expressed as disabled
+// buttons instead of a disabled/forced select value.
+
+const multiCreateState = { totalPlayers: 3, aiCount: 0, deckSize: 52 };
+
+function multiSetActiveButton(groupEl, value) {
+  Array.from(groupEl.children).forEach(function (btn) {
+    btn.classList.toggle('active', Number(btn.dataset.value) === value);
+  });
+}
+
+function multiBuildAiCountButtons(total) {
+  const group = el('multiCreateAiCountGroup');
+  group.innerHTML = '';
   for (let i = 0; i <= total - 1; i++) {
-    aiSelect.add(new Option(String(i), String(i)));
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-option';
+    btn.dataset.value = String(i);
+    btn.textContent = String(i);
+    group.appendChild(btn);
   }
-  if (prevValue && Number(prevValue) <= total - 1) aiSelect.value = prevValue;
 }
-multiPopulateAiCountOptions();
-el('multiCreateTotalPlayers').addEventListener('change', multiPopulateAiCountOptions);
 
-function multiApplyDeckSizeConstraint() {
-  const is36 = el('multiCreateDeckSize').value === '36';
-  const totalSelect = el('multiCreateTotalPlayers');
-  if (is36) {
-    totalSelect.value = '2';
-    totalSelect.disabled = true;
-  } else {
-    totalSelect.disabled = false;
-  }
-  multiPopulateAiCountOptions();
-}
-el('multiCreateDeckSize').addEventListener('change', multiApplyDeckSizeConstraint);
+// Single source of truth: rebuilds every group's active/disabled state from
+// multiCreateState + the ranked checkbox, in the right order so the
+// deck-size -> player-count -> AI-count constraint chain stays consistent
+// no matter which control was just touched (or when the modal was just
+// pre-filled from a preset / a remembered settings snapshot).
+function multiRefreshCreateModal() {
+  const is36 = multiCreateState.deckSize === 36;
+  if (is36) multiCreateState.totalPlayers = 2;
 
-function multiApplyRankedConstraint() {
+  multiSetActiveButton(el('multiCreateDeckSizeGroup'), multiCreateState.deckSize);
+
+  const totalGroup = el('multiCreateTotalPlayersGroup');
+  Array.from(totalGroup.children).forEach(function (btn) {
+    btn.disabled = is36 && Number(btn.dataset.value) !== 2;
+  });
+  multiSetActiveButton(totalGroup, multiCreateState.totalPlayers);
+
+  multiBuildAiCountButtons(multiCreateState.totalPlayers);
   const isRanked = el('multiCreateRanked').checked;
-  const aiSelect = el('multiCreateAiCount');
-  if (isRanked) {
-    aiSelect.value = '0';
-    aiSelect.disabled = true;
-  } else {
-    aiSelect.disabled = false;
+  if (isRanked) multiCreateState.aiCount = 0;
+  if (multiCreateState.aiCount > multiCreateState.totalPlayers - 1) {
+    multiCreateState.aiCount = multiCreateState.totalPlayers - 1;
   }
+  const aiGroup = el('multiCreateAiCountGroup');
+  Array.from(aiGroup.children).forEach(function (btn) {
+    btn.disabled = isRanked && Number(btn.dataset.value) !== 0;
+  });
+  multiSetActiveButton(aiGroup, multiCreateState.aiCount);
 }
-el('multiCreateRanked').addEventListener('change', multiApplyRankedConstraint);
+
+el('multiCreateDeckSizeGroup').addEventListener('click', function (e) {
+  const btn = e.target.closest('.btn-option');
+  if (!btn || btn.disabled) return;
+  multiCreateState.deckSize = Number(btn.dataset.value);
+  multiRefreshCreateModal();
+});
+el('multiCreateTotalPlayersGroup').addEventListener('click', function (e) {
+  const btn = e.target.closest('.btn-option');
+  if (!btn || btn.disabled) return;
+  multiCreateState.totalPlayers = Number(btn.dataset.value);
+  multiRefreshCreateModal();
+});
+el('multiCreateAiCountGroup').addEventListener('click', function (e) {
+  const btn = e.target.closest('.btn-option');
+  if (!btn || btn.disabled) return;
+  multiCreateState.aiCount = Number(btn.dataset.value);
+  multiRefreshCreateModal();
+});
+el('multiCreateRanked').addEventListener('change', multiRefreshCreateModal);
 
 // createBtn now opens this modal — it replaces the old direct 2p-only room
 // creation, since totalPlayers:2/aiCount:0 covers that exact case too.
 // createRoomGuestBtn (pre-login) opens the exact same modal, so guests can
-// create rooms too without needing to register.
-function multiOpenRoomCreateModal() {
-  el('multiCreateDeckSize').value = '52';
-  el('multiCreateTotalPlayers').disabled = false;
-  multiPopulateAiCountOptions();
-  el('multiCreatePrivate').checked = false;
-  el('multiCreateRanked').checked = false;
-  el('multiCreateAiCount').disabled = false;
+// create rooms too without needing to register. A quick-preset button
+// (see below) also opens this same modal, just pre-filled with that
+// preset's values instead of defaults/remembered settings — either way,
+// nothing is actually created until "Izveidot" is clicked.
+//
+// For a registered user with no explicit preset, the modal is pre-filled
+// with their last-used settings (window.lastRoomSettings, populated from
+// the server on login/registration) rather than the hardcoded defaults —
+// purely a convenience so returning hosts don't have to re-pick the same
+// options every time. It never auto-submits.
+function multiOpenRoomCreateModal(preset) {
+  const settings = preset || window.lastRoomSettings || { totalPlayers: 3, aiCount: 0, deckSize: 52, isPrivate: false, ranked: false };
+  multiCreateState.deckSize = settings.deckSize === 36 ? 36 : 52;
+  multiCreateState.totalPlayers = settings.totalPlayers || 3;
+  multiCreateState.aiCount = settings.aiCount || 0;
+  el('multiCreatePrivate').checked = !!settings.isPrivate;
+  el('multiCreateRanked').checked = !!settings.ranked;
+  multiRefreshCreateModal();
   el('multiRoomCreateModal').classList.remove('hidden');
 }
-el('createBtn').addEventListener('click', multiOpenRoomCreateModal);
-el('createRoomGuestBtn').addEventListener('click', multiOpenRoomCreateModal);
+el('createBtn').addEventListener('click', function () { multiOpenRoomCreateModal(); });
+el('createRoomGuestBtn').addEventListener('click', function () { multiOpenRoomCreateModal(); });
+
+// Quick presets (main lobby page, both for guests and registered users):
+// jump straight to the two most popular setups without touching any
+// button group by hand. Still just pre-fills the same create modal — the
+// user must still press "Izveidot" themselves to actually host the room.
+function multiOpenPresetModal(presetName) {
+  if (presetName === '2p36') {
+    multiOpenRoomCreateModal({ totalPlayers: 2, aiCount: 0, deckSize: 36, isPrivate: false, ranked: false });
+  } else if (presetName === '4p52') {
+    multiOpenRoomCreateModal({ totalPlayers: 4, aiCount: 0, deckSize: 52, isPrivate: false, ranked: false });
+  }
+}
+['quickPreset2p36', 'quickPreset4p52', 'quickPresetGuest2p36', 'quickPresetGuest4p52'].forEach(function (id) {
+  const btn = document.getElementById(id);
+  if (btn) btn.addEventListener('click', function () { multiOpenPresetModal(btn.dataset.preset); });
+});
 
 el('multiRoomCreateCancelBtn').addEventListener('click', function () {
   el('multiRoomCreateModal').classList.add('hidden');
 });
 el('multiRoomCreateSubmitBtn').addEventListener('click', function () {
-  const totalPlayers = parseInt(el('multiCreateTotalPlayers').value, 10);
-  const aiCount = parseInt(el('multiCreateAiCount').value, 10);
+  const totalPlayers = multiCreateState.totalPlayers;
+  const aiCount = multiCreateState.aiCount;
   const isPrivate = el('multiCreatePrivate').checked;
-  const deckSize = parseInt(el('multiCreateDeckSize').value, 10);
+  const deckSize = multiCreateState.deckSize;
   const ranked = el('multiCreateRanked').checked;
   el('multiRoomCreateModal').classList.add('hidden');
   socket.emit('createMultiRoom', { totalPlayers: totalPlayers, aiCount: aiCount, isPrivate: isPrivate, deckSize: deckSize, ranked: ranked });

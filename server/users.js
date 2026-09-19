@@ -116,7 +116,12 @@ function publicStats(record) {
 
 function toPublic(username, record) {
   // Never send salt/hash to the client.
-  return { username, email: record.email || null, stats: publicStats(record) };
+  return {
+    username,
+    email: record.email || null,
+    stats: publicStats(record),
+    lastRoomSettings: record.lastRoomSettings || null,
+  };
 }
 
 function usernameExists(username) {
@@ -217,6 +222,27 @@ function getGameHistory(username, limit) {
   if (!record || !Array.isArray(record.history)) return [];
   const n = Number.isInteger(limit) && limit > 0 ? limit : HISTORY_LIMIT;
   return record.history.slice(0, n);
+}
+
+// Remembers a registered user's most recently used room-creation settings
+// (button-group choices in the create-room modal), so the next time they
+// open that modal it can be pre-filled for them. Silently no-ops for
+// guests/non-existent accounts, same convention as the rest of this file.
+// This only ever stores a settings snapshot — it never creates or starts a
+// room by itself, and the client still requires an explicit "Izveidot"
+// click to actually host.
+function saveLastRoomSettings(username, settings) {
+  const name = normalize(username);
+  if (!name || !store.users[name]) return;
+  const record = store.users[name];
+  record.lastRoomSettings = {
+    totalPlayers: settings.totalPlayers,
+    aiCount: settings.aiCount,
+    deckSize: settings.deckSize,
+    isPrivate: !!settings.isPrivate,
+    ranked: !!settings.ranked,
+  };
+  save();
 }
 
 // ---------- ELO rating ----------
@@ -404,6 +430,7 @@ module.exports = {
   getLeaderboards,
   recordGameHistoryEntry,
   getGameHistory,
+  saveLastRoomSettings,
   getElo,
   applyRankedGameResult,
   MIN_PASSWORD_LEN,

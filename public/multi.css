@@ -89,6 +89,78 @@
   100% { opacity: 0; }
 }
 
+/* ---------- lobby: quick presets ---------- */
+
+.quick-presets {
+  margin-top: 18px;
+  text-align: left;
+}
+.quick-presets-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.quick-presets-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.btn-quick {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  background: rgba(255,255,255,0.05);
+  color: var(--cream);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: transform 0.08s ease, filter 0.15s ease, border-color 0.15s ease;
+}
+.btn-quick:hover { border-color: var(--gold); filter: brightness(1.1); }
+.btn-quick:active { transform: scale(0.98); }
+
+/* ---------- room-creation modal: button-group option pickers ---------- */
+/* Replaces plain <select> dropdowns for player count / AI count / deck
+   size with clickable buttons, so the chosen option is visible at a
+   glance and matches the touch-friendly style used elsewhere. */
+
+.btn-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.btn-option {
+  flex: 1 1 0;
+  min-width: 44px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  background: rgba(255,255,255,0.05);
+  color: var(--cream);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: transform 0.08s ease, filter 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.btn-option:hover:not(:disabled) { border-color: var(--gold); filter: brightness(1.1); }
+.btn-option:active:not(:disabled) { transform: scale(0.97); }
+.btn-option.active {
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  border-color: var(--gold-bright);
+  color: #2a2005;
+}
+.btn-option:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 /* ---------- lobby: multiplayer room creation / list / waiting ---------- */
 
 .multi-lobby-section {

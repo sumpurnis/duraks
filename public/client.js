@@ -106,6 +106,7 @@ el('switchUserLink').addEventListener('click', (e) => {
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(PASS_KEY);
   myUsername = null;
+  window.lastRoomSettings = null;
   el('playStep').classList.add('hidden');
   el('authStep').classList.remove('hidden');
   el('passwordFields').classList.add('hidden');
@@ -122,6 +123,11 @@ socket.on('registered', (rec) => {
   el('authStep').classList.add('hidden');
   el('playStep').classList.remove('hidden');
   el('lobbyError').classList.add('hidden');
+
+  // Read by multi-client.js to pre-fill the room-creation modal with this
+  // registered user's last-used settings. null for a brand-new account
+  // (nothing hosted yet) — the modal just falls back to its own defaults.
+  window.lastRoomSettings = rec.lastRoomSettings || null;
 
   if (urlRoomCode) socket.emit('joinRoom', { code: urlRoomCode });
 });
