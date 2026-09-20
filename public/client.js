@@ -1,5 +1,26 @@
 'use strict';
 
+// Card deck selection — plumbing for a future "choose your card design"
+// profile setting (not built yet, and no UI exposes this today). The CSS
+// default is already the current deck (cards-sprite-hq.png); setting
+// data-card-deck="classic" on <html> switches every card-face element and
+// its aspect-ratio over to the original deck (cards-sprite-classic.png)
+// via the [data-card-deck="classic"] rules in style.css. Reads from
+// localStorage only for now — once there's an actual profile UI for this,
+// swap the read/write here for the server-stored preference (the same
+// pattern users.js already uses for lastRoomSettings) so it follows the
+// account across devices instead of just this browser.
+const CARD_DECK_KEY = 'duraks_card_deck';
+function applyCardDeckPreference() {
+  const deck = localStorage.getItem(CARD_DECK_KEY);
+  if (deck === 'classic') {
+    document.documentElement.dataset.cardDeck = 'classic';
+  } else {
+    delete document.documentElement.dataset.cardDeck;
+  }
+}
+applyCardDeckPreference();
+
 // Mobile browsers (especially Chrome/Brave on Android) report `100vh` against
 // the viewport size with the address bar collapsed, not what's actually
 // visible — this pushes bottom UI (action buttons) below the visible area

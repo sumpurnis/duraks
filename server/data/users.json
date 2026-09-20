@@ -28,6 +28,230 @@
           "totalPlayers": 2,
           "deckSize": 36,
           "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "disconnect",
+          "durationMs": 24857,
+          "avoidableTakes": 0,
+          "timestamp": 1789900603331
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "disconnect",
+          "durationMs": 32812,
+          "avoidableTakes": 0,
+          "timestamp": 1789900200407
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "timeout",
+          "durationMs": 85417,
+          "avoidableTakes": 0,
+          "timestamp": 1789899984325
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "timeout",
+          "durationMs": 64991,
+          "avoidableTakes": 0,
+          "timestamp": 1789899000670
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "surrender",
+          "durationMs": 34568,
+          "avoidableTakes": 0,
+          "timestamp": 1789898663799
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "disconnect",
+          "durationMs": 10980,
+          "avoidableTakes": 0,
+          "timestamp": 1789898155580
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "surrender",
+          "durationMs": 48490,
+          "avoidableTakes": 1,
+          "timestamp": 1789897719968
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "surrender",
+          "durationMs": 6481,
+          "avoidableTakes": 0,
+          "timestamp": 1789897549655
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "timeout",
+          "durationMs": 62702,
+          "avoidableTakes": 0,
+          "timestamp": 1789897490139
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "timeout",
+          "durationMs": 60026,
+          "avoidableTakes": 0,
+          "timestamp": 1789897017134
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "timeout",
+          "durationMs": 109415,
+          "avoidableTakes": 0,
+          "timestamp": 1789896746346
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "surrender",
+          "durationMs": 28311,
+          "avoidableTakes": 0,
+          "timestamp": 1789896257079
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "timeout",
+          "durationMs": 64712,
+          "avoidableTakes": 0,
+          "timestamp": 1789894682080
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": true,
+          "opponents": [
+            "Dators 1 🤖"
+          ],
+          "endReason": "surrender",
+          "durationMs": 15050,
+          "avoidableTakes": 0,
+          "timestamp": 1789894436210
+        },
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 36,
+          "ranked": false,
           "outcome": "won",
           "placement": 1,
           "vsBots": true,
@@ -335,16 +559,16 @@
       "knownIps": [
         {
           "ip": "::1",
-          "count": 9,
+          "count": 20,
           "firstSeen": 1789856787361,
-          "lastSeen": 1789862036643
+          "lastSeen": 1789900576349
         }
       ],
       "sessionTokens": [
         {
           "hash": "6c1155ea8279baa78f78287053c3e149e09b1c7317d39d7054dc057fd1c25600",
           "createdAt": 1789858600032,
-          "expiresAt": 1792454036642
+          "expiresAt": 1792492576349
         }
       ]
     },
@@ -598,15 +822,15 @@
       "date": "2026-09-19",
       "played": 3
     },
-    "vsBotAllTime": 17,
+    "vsBotAllTime": 31,
     "vsBotDaily": {
-      "date": "2026-09-19",
-      "played": 6
+      "date": "2026-09-20",
+      "played": 14
     },
-    "pageVisitsAllTime": 115,
+    "pageVisitsAllTime": 126,
     "pageVisitsDaily": {
-      "date": "2026-09-19",
-      "count": 28
+      "date": "2026-09-20",
+      "count": 11
     }
   }
 }

@@ -279,7 +279,7 @@ html, body {
   top: 4cqw;
   left: 4cqw;
   width: 11cqw; /* matches .slot exactly, so it reads as the same card size as the table */
-  aspect-ratio: 84 / 122;
+  aspect-ratio: 5 / 7; /* standard poker-card proportions (2.5in x 3.5in); the active deck art is stretched to fit via background-size — see [data-card-deck="classic"] below */
   transform: rotate(-45deg);
   z-index: 1; /* beneath the stack image */
   display: block;
@@ -424,7 +424,7 @@ html, body {
 .slot {
   position: relative;
   width: 11cqw;
-  aspect-ratio: 84 / 122;
+  aspect-ratio: 5 / 7; /* standard poker-card proportions (2.5in x 3.5in); the active deck art is stretched to fit via background-size — see [data-card-deck="classic"] below */
   flex-shrink: 0;
   color-scheme: light;
 }
@@ -452,7 +452,7 @@ html, body {
 
 .card {
   width: 10.7cqw;
-  aspect-ratio: 116 / 168;
+  aspect-ratio: 5 / 7; /* standard poker-card proportions (2.5in x 3.5in); the active deck art is stretched to fit via background-size — see [data-card-deck="classic"] below */
   background: var(--cream);
   border-radius: 12px;
   display: flex;
@@ -914,9 +914,19 @@ html, body {
   margin: 16px 0;
 }
 
-/* Auto-generated card-face sprite positions (13 ranks x 4 suits) */
+/* Card deck art. Default is the higher-quality deck (cards-sprite-hq.png,
+   supplied 2026-09-20) — its row order was re-arranged at import time to
+   match this file's existing per-rank/per-suit background-position grid
+   exactly (hearts/diamonds/clubs/spades top to bottom), so those position
+   rules below work unchanged for either deck; only the image and the
+   aspect-ratio (.card / .slot / .deck-trump-card above) differ per deck.
+   The original deck is kept as cards-sprite-classic.png and stays
+   selectable via [data-card-deck="classic"] on <html> — see
+   applyCardDeckPreference() in client.js. There's no UI to switch decks
+   yet (planned for a future profile setting); for now this only matters
+   if that attribute gets set some other way. */
 .card-face {
-  background-image: url("/images/cards-sprite.png");
+  background-image: url("/images/cards-sprite-hq.png");
   background-repeat: no-repeat;
   background-size: 1300% 400%;
   color-scheme: light;
@@ -977,3 +987,16 @@ html, body {
 .card-face-Q-spades { background-position: 83.3333% 100.0%; }
 .card-face-K-spades { background-position: 91.6667% 100.0%; }
 .card-face-A-spades { background-position: 100.0% 100.0%; }
+
+/* Original (pre-2026-09-20) card deck, kept available for a future
+   profile switcher — activated by [data-card-deck="classic"] on <html>. */
+[data-card-deck="classic"] .card-face {
+  background-image: url("/images/cards-sprite-classic.png");
+}
+[data-card-deck="classic"] .card {
+  aspect-ratio: 116 / 168;
+}
+[data-card-deck="classic"] .slot,
+[data-card-deck="classic"] .deck-trump-card {
+  aspect-ratio: 84 / 122;
+}
