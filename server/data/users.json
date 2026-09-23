@@ -4,25 +4,45 @@
       "createdAt": 1787498110767,
       "email": null,
       "stats": {
-        "played": 9,
+        "played": 10,
         "won": 5,
-        "lost": 4,
+        "lost": 5,
         "wonByForfeit": 0,
         "lostByForfeit": 1,
         "currentStreak": 0,
         "longestStreak": 4,
         "daily": {
-          "date": "2026-09-19",
-          "played": 3,
-          "won": 1,
-          "lost": 2,
+          "date": "2026-09-23",
+          "played": 1,
+          "won": 0,
+          "lost": 1,
           "currentStreak": 0,
-          "longestStreak": 1
+          "longestStreak": 0
         }
       },
       "salt": "04f78cf8bc516dc56a40392986bb976f",
       "hash": "4af31bbb4e627d1703e8c28e56c236424f0df62eb3c0a5dfd4537bc64c055eed0ac3bf155f8af17c7c910b7be598aa50c6406ed1c9bf935aa28fcef5abf4f0cf",
       "history": [
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 52,
+          "ranked": true,
+          "outcome": "lost",
+          "placement": 2,
+          "vsBots": false,
+          "opponents": [
+            "nezivs"
+          ],
+          "eloPool": "oneVOne",
+          "eloBefore": 1000,
+          "eloAfter": 984,
+          "eloChange": -16,
+          "endReason": "surrender",
+          "durationMs": 9081,
+          "avoidableTakes": 0,
+          "timestamp": 1790189972072
+        },
         {
           "mode": "multi",
           "totalPlayers": 4,
@@ -693,9 +713,9 @@
       "knownIps": [
         {
           "ip": "::1",
-          "count": 36,
+          "count": 41,
           "firstSeen": 1789856787361,
-          "lastSeen": 1790188557525
+          "lastSeen": 1790191062352
         }
       ],
       "sessionTokens": [
@@ -707,33 +727,56 @@
         {
           "hash": "6c1155ea8279baa78f78287053c3e149e09b1c7317d39d7054dc057fd1c25600",
           "createdAt": 1789858600032,
-          "expiresAt": 1792780557524
+          "expiresAt": 1792783062352
         }
-      ]
+      ],
+      "eloByPool": {
+        "oneVOne": 984
+      }
     },
     "nezivs": {
       "createdAt": 1789240302595,
       "email": null,
       "stats": {
-        "played": 9,
-        "won": 4,
+        "played": 10,
+        "won": 5,
         "lost": 5,
         "wonByForfeit": 1,
         "lostByForfeit": 0,
-        "currentStreak": 2,
-        "longestStreak": 2,
+        "currentStreak": 3,
+        "longestStreak": 3,
         "daily": {
-          "date": "2026-09-19",
-          "played": 3,
-          "won": 2,
-          "lost": 1,
-          "currentStreak": 2,
-          "longestStreak": 2
+          "date": "2026-09-23",
+          "played": 1,
+          "won": 1,
+          "lost": 0,
+          "currentStreak": 1,
+          "longestStreak": 1
         }
       },
       "salt": "c2c025bcb015502ae580fc0f7cd6977c",
       "hash": "1eedcce2850116c590d2c20f50fd12bf83558fcde7a20a579311e6b2f47d4d28794740dba991e4babeb3e394b311f67d1f16c73acabc023b3d308dc3c408ab56",
       "history": [
+        {
+          "mode": "multi",
+          "totalPlayers": 2,
+          "deckSize": 52,
+          "ranked": true,
+          "outcome": "won",
+          "placement": 1,
+          "vsBots": false,
+          "opponents": [
+            "zivs"
+          ],
+          "eloPool": "oneVOne",
+          "eloBefore": 1000,
+          "eloAfter": 1016,
+          "eloChange": 16,
+          "endReason": "surrender",
+          "durationMs": 9081,
+          "avoidableTakes": 0,
+          "timestamp": 1790189972073
+        },
         {
           "mode": "multi",
           "totalPlayers": 2,
@@ -952,24 +995,42 @@
         "deckSize": 36,
         "isPrivate": false,
         "ranked": true
+      },
+      "sessionTokens": [
+        {
+          "hash": "03c1c5e230e749fb23235203365564b09f8cb624e7621b8f92a28bc5346ea178",
+          "createdAt": 1790189959997,
+          "expiresAt": 1792781959997
+        }
+      ],
+      "knownIps": [
+        {
+          "ip": "::1",
+          "count": 1,
+          "firstSeen": 1790189959997,
+          "lastSeen": 1790189959997
+        }
+      ],
+      "eloByPool": {
+        "oneVOne": 1016
       }
     }
   },
   "global": {
-    "allTimePlayed": 9,
+    "allTimePlayed": 10,
     "daily": {
-      "date": "2026-09-19",
-      "played": 3
+      "date": "2026-09-23",
+      "played": 1
     },
     "vsBotAllTime": 39,
     "vsBotDaily": {
       "date": "2026-09-23",
       "played": 6
     },
-    "pageVisitsAllTime": 143,
+    "pageVisitsAllTime": 149,
     "pageVisitsDaily": {
       "date": "2026-09-23",
-      "count": 15
+      "count": 21
     }
   }
 }

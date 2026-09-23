@@ -397,10 +397,12 @@
   </div>
 
   <div id="profileModal" class="modal hidden">
-    <div class="modal-card">
+    <div class="modal-card modal-card-scrollable">
+      <div class="modal-scroll-body">
       <h2 id="profileTitle">Profils</h2>
       <div class="profile-stats">
-        <div class="profile-stat-row"><span>ELO reitings</span><strong id="statElo">—</strong></div>
+        <div class="profile-stat-row"><span><span class="elo-swatch elo-swatch-oneVOne"></span>ELO (1v1)</span><strong id="statEloOneVOne">—</strong></div>
+        <div class="profile-stat-row"><span><span class="elo-swatch elo-swatch-multi"></span>ELO (3-4 spēlētāji)</span><strong id="statEloMulti">—</strong></div>
         <div class="profile-stat-row"><span>Spēles spēlētas</span><strong id="statPlayed">—</strong></div>
         <div class="profile-stat-row"><span>Spēles uzvarētas</span><strong id="statWon">—</strong></div>
         <div class="profile-stat-row"><span>Spēles zaudētas</span><strong id="statLost">—</strong></div>
@@ -415,9 +417,15 @@
         <div class="profile-stat-row"><span>Garākā sērija šodien</span><strong id="statLongestStreakToday">—</strong></div>
       </div>
       <div class="profile-elo-chart">
-        <p class="profile-stats-divider">ELO svārstības</p>
+        <div class="profile-elo-chart-header">
+          <p class="profile-stats-divider profile-elo-chart-divider">ELO svārstības</p>
+          <div class="elo-toggle-row" id="profileEloToggles">
+            <label class="elo-toggle"><input type="checkbox" data-pool="oneVOne" checked /><span class="elo-swatch elo-swatch-oneVOne"></span>1v1</label>
+            <label class="elo-toggle"><input type="checkbox" data-pool="multi" checked /><span class="elo-swatch elo-swatch-multi"></span>3-4 spēlētāji</label>
+          </div>
+        </div>
         <div id="profileEloChart">
-          <p class="muted small">Nepietiek ranked spēļu grafikam (vajag vismaz 2)</p>
+          <p class="muted small">Nepietiek ranked spēļu grafikam (vajag vismaz 2 izvēlētajā skatā)</p>
         </div>
       </div>
       <div class="profile-history">
@@ -425,6 +433,7 @@
         <div id="profileHistoryList" class="profile-history-list">
           <p class="muted small">Nav vēl izspēlētu spēļu…</p>
         </div>
+      </div>
       </div>
       <button id="profileCloseBtn" class="btn btn-secondary">Aizvērt</button>
     </div>

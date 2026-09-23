@@ -218,13 +218,19 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     const isDraw = !game.durakId && game.activePlayers.length === 0;
     const vsBots = room.bots.length > 0;
 
+    // Which independent ELO pool this table's result feeds — 2-player
+    // tables update the 'oneVOne' rating, 3-4 player tables update
+    // 'multi'; see the ELO_POOLS comment in users.js for why they're kept
+    // separate rather than one shared number.
+    const eloPool = room.totalPlayers === 2 ? 'oneVOne' : 'multi';
+
     let eloResult = null;
     if (room.ranked && !isDraw) {
       const placements = room.humans.map((h) => ({
         username: h.username,
         placement: placementOf[h.username] || room.totalPlayers,
       }));
-      eloResult = users.applyRankedGameResult(placements);
+      eloResult = users.applyRankedGameResult(placements, eloPool);
     }
 
     // Feed the classic games-played/won/lost stats and TOP10 leaderboard
@@ -262,6 +268,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
         placement,
         vsBots,
         opponents: game.players.filter((p) => p !== username),
+        eloPool: room.ranked ? eloPool : undefined,
         eloBefore: eloEntry ? eloEntry.before : undefined,
         eloAfter: eloEntry ? eloEntry.after : undefined,
         eloChange: eloEntry ? eloEntry.delta : undefined,

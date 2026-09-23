@@ -716,9 +716,11 @@ el('opponentName').addEventListener('click', () => {
   socket.emit('getProfile', { username: lastState.opponent });
 });
 
-socket.on('profileData', ({ username: name, stats, history, elo }) => {
+socket.on('profileData', ({ username: name, stats, history, eloByPool }) => {
   el('profileTitle').textContent = name;
-  el('statElo').textContent = typeof elo === 'number' ? elo : '—';
+  const eb = eloByPool || {};
+  el('statEloOneVOne').textContent = typeof eb.oneVOne === 'number' ? eb.oneVOne : '—';
+  el('statEloMulti').textContent = typeof eb.multi === 'number' ? eb.multi : '—';
   el('statPlayed').textContent = stats.played;
   el('statWon').textContent = stats.won;
   el('statLost').textContent = stats.lost;
@@ -746,107 +748,156 @@ function profileRelativeTime(ts) {
 const PROFILE_OUTCOME_LABELS = { won: 'Uzvara', lost: 'Zaudējums', placed: 'Ievietojās', draw: 'Neizšķirts' };
 
 const ELO_MIDPOINT = 1000;
-// Full red/green saturation is reached this many ELO points away from the
-// midpoint in either direction; anything further just clamps to the pole
-// color rather than continuing to shift.
-const ELO_COLOR_SPAN = 200;
 
-// Maps an ELO value to a color that shifts smoothly from red (well below
-// 1000) through amber/yellow (near 1000) to green (well above 1000) —
-// interpolated through HSL hue so the midpoint doesn't turn into a muddy
-// red+green blend the way a straight RGB lerp would.
-function eloColor(value) {
-  let t = (value - ELO_MIDPOINT) / ELO_COLOR_SPAN;
-  t = Math.max(-1, Math.min(1, t));
-  const u = (t + 1) / 2; // 0 = worst (red) .. 1 = best (green)
-  const hue = 4 + u * (142 - 4);
-  const sat = 45 + u * 8;
-  const light = 60 - u * 5;
-  return 'hsl(' + hue.toFixed(0) + ', ' + sat.toFixed(0) + '%, ' + light.toFixed(0) + '%)';
+// Two independent rating pools, drawn as separately-colored, independently
+// toggleable lines on ONE shared chart (shared time axis, shared value
+// axis) — rather than one blended number, or two entirely separate
+// charts. Colors must match the --elo-onevone/--elo-multi custom
+// properties in style.css (used for the checkbox swatches); kept as plain
+// hex here rather than var() because these get baked into inline SVG
+// attribute strings, not CSS.
+const ELO_POOL_META = {
+  oneVOne: { label: '1v1', color: '#e8b84b' },
+  multi: { label: '3-4 spēlētāji', color: '#5ac8e0' },
+};
+
+// Which pools are currently checked on — persists across chart re-renders
+// within the session (not per-profile) so flipping between two players'
+// profiles keeps whatever view you last chose.
+let eloPoolVisible = { oneVOne: true, multi: true };
+// Cached so toggling a checkbox re-draws instantly from what profileData
+// already delivered, instead of round-tripping to the server again.
+let lastProfileHistory = [];
+
+// A ranked game's history entry carries eloPool going forward; older
+// entries (recorded before the pool split) fall back to inferring it from
+// totalPlayers, so existing history doesn't just vanish from the chart.
+function eloEntriesForPool(history, pool) {
+  return history
+    .filter((e) => {
+      if (typeof e.eloAfter !== 'number') return false;
+      const entryPool = e.eloPool || (e.totalPlayers === 2 ? 'oneVOne' : 'multi');
+      return entryPool === pool;
+    })
+    .slice()
+    .reverse(); // oldest -> newest, for left-to-right plotting
 }
 
 function renderEloChart(history) {
+  lastProfileHistory = history;
   const container = el('profileEloChart');
-  const rankedEntries = history.filter((e) => typeof e.eloAfter === 'number').slice().reverse();
 
-  if (rankedEntries.length < 2) {
-    container.innerHTML = '<p class="muted small">Nepietiek ranked spēļu grafikam (vajag vismaz 2)</p>';
+  const checkedPools = Object.keys(ELO_POOL_META).filter((pool) => eloPoolVisible[pool]);
+  if (checkedPools.length === 0) {
+    container.innerHTML = '<p class="muted small">Atzīmē vismaz vienu skatu augstāk, lai redzētu grafiku</p>';
     return;
   }
 
-  const values = rankedEntries.map((e) => e.eloAfter);
+  const series = checkedPools
+    .map((pool) => ({ pool, meta: ELO_POOL_META[pool], entries: eloEntriesForPool(history, pool) }))
+    .filter((s) => s.entries.length >= 2);
+
+  if (series.length === 0) {
+    container.innerHTML = '<p class="muted small">Nepietiek ranked spēļu grafikam izvēlētajā skatā (vajag vismaz 2)</p>';
+    return;
+  }
+
   const width = 300;
   const height = 90;
   const padTop = 10;
   const padBottom = 10;
   const padSide = 6;
-  const minVal = Math.min.apply(null, values);
-  const maxVal = Math.max.apply(null, values);
+
+  // X-axis is per-series game *index*, evenly spread across the full
+  // width — same as the original single-line chart, not real elapsed
+  // time. A handful of games played in one sitting (common — someone
+  // plays 5 ranked games in 10 minutes, then comes back two days later)
+  // would otherwise all collapse into a sliver of a real time axis,
+  // turning most of the line into near-vertical spikes between that
+  // cluster and the next one. Index-based spacing keeps every step
+  // reading as "the next game", which is what makes the trend legible.
+  // The y-domain still stays shared across every visible series, so two
+  // lines on the same chart remain honestly comparable in height, even
+  // though they aren't aligned to the same real moments in time.
+  const allValues = series.flatMap((s) => s.entries.map((e) => e.eloAfter));
   // The y-scale always includes 1000, even if every game so far has been
   // entirely above or below it, so the midpoint reference line is always
   // visible for context rather than clipped off the chart.
-  const domainMin = Math.min(minVal, ELO_MIDPOINT);
-  const domainMax = Math.max(maxVal, ELO_MIDPOINT);
-  const range = Math.max(1, domainMax - domainMin);
+  const domainMin = Math.min(Math.min.apply(null, allValues), ELO_MIDPOINT);
+  const domainMax = Math.max(Math.max.apply(null, allValues), ELO_MIDPOINT);
+  const vRange = Math.max(1, domainMax - domainMin);
 
-  function xFor(i) {
-    if (values.length === 1) return width / 2;
-    return padSide + (i / (values.length - 1)) * (width - 2 * padSide);
+  function xForIndex(i, count) {
+    if (count === 1) return width / 2;
+    return padSide + (i / (count - 1)) * (width - 2 * padSide);
   }
   function yFor(v) {
-    return height - padBottom - ((v - domainMin) / range) * (height - padTop - padBottom);
+    return height - padBottom - ((v - domainMin) / vRange) * (height - padTop - padBottom);
   }
 
-  const xs = values.map((v, i) => xFor(i));
-  const gradientId = 'eloGrad' + Math.random().toString(36).slice(2, 9);
-  const gradientStops = values.map((v, i) => {
-    const offsetPct = values.length === 1 ? 0 : ((xs[i] - padSide) / (width - 2 * padSide)) * 100;
-    return '<stop offset="' + offsetPct.toFixed(1) + '%" stop-color="' + eloColor(v) + '" />';
-  }).join('');
+  let svgSeries = '';
+  let legendHtml = '';
 
-  const points = values.map((v, i) => xFor(i).toFixed(1) + ',' + yFor(v).toFixed(1)).join(' ');
+  series.forEach((s) => {
+    const values = s.entries.map((e) => e.eloAfter);
+    const minVal = Math.min.apply(null, values);
+    const maxVal = Math.max.apply(null, values);
+    // First occurrence of this series' min/max — marked directly on the
+    // chart (rather than just quoted in a legend row) so it's unambiguous
+    // *where in time* that peak/dip actually happened.
+    let minIdx = 0;
+    let maxIdx = 0;
+    values.forEach((v, i) => {
+      if (v < values[minIdx]) minIdx = i;
+      if (v > values[maxIdx]) maxIdx = i;
+    });
+    const hasDistinctExtremes = minVal !== maxVal;
 
-  // First occurrence of the min/max value — marked directly on the chart
-  // (rather than just quoted in a fixed left/right legend row) so it's
-  // unambiguous *where in time* that peak/dip actually happened, instead of
-  // making people guess from a number sitting at a fixed screen position
-  // that has nothing to do with the game it came from.
-  let minIdx = 0;
-  let maxIdx = 0;
-  values.forEach((v, i) => {
-    if (v < values[minIdx]) minIdx = i;
-    if (v > values[maxIdx]) maxIdx = i;
+    const points = s.entries.map((e, i) => xForIndex(i, s.entries.length).toFixed(1) + ',' + yFor(e.eloAfter).toFixed(1)).join(' ');
+
+    const dots = s.entries.map((e, i) => {
+      const isLast = i === s.entries.length - 1;
+      const r = isLast ? 3 : 1.6;
+      const cx = xForIndex(i, s.entries.length).toFixed(1);
+      const cy = yFor(e.eloAfter).toFixed(1);
+      const change = e.eloChange;
+      const changeLabel = typeof change === 'number' ? ' (' + (change > 0 ? '+' : '') + change + ')' : '';
+      let extremeLabel = '';
+      if (hasDistinctExtremes && i === maxIdx) extremeLabel = ' · augstākais';
+      else if (hasDistinctExtremes && i === minIdx) extremeLabel = ' · zemākais';
+      const tooltip = s.meta.label + ' ELO: ' + e.eloAfter + changeLabel + extremeLabel;
+      // A larger, invisible hit-circle carries the native mouse-over
+      // tooltip (<title>) so hovering doesn't require pinpointing the
+      // tiny visible dot — the visible dot is drawn on top, purely
+      // decorative.
+      let marker = '';
+      if (hasDistinctExtremes && i === maxIdx) {
+        marker = '<text x="' + cx + '" y="' + (Number(cy) - 4) + '" text-anchor="middle" font-size="7" fill="' + s.meta.color + '" pointer-events="none">▲</text>';
+      } else if (hasDistinctExtremes && i === minIdx) {
+        marker = '<text x="' + cx + '" y="' + (Number(cy) + 10) + '" text-anchor="middle" font-size="7" fill="' + s.meta.color + '" pointer-events="none">▼</text>';
+      }
+      return (
+        '<circle cx="' + cx + '" cy="' + cy + '" r="7" fill="transparent" stroke="none">' +
+        '<title>' + tooltip + '</title>' +
+        '</circle>' +
+        '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + s.meta.color + '" pointer-events="none" />' +
+        marker
+      );
+    }).join('');
+
+    svgSeries +=
+      '<polyline points="' + points + '" fill="none" stroke="' + s.meta.color + '" stroke-width="2" vector-effect="non-scaling-stroke" />' +
+      dots;
+
+    legendHtml +=
+      '<div class="profile-elo-series-legend">' +
+      '<p class="profile-elo-series-legend-title" style="color:' + s.meta.color + '"><span class="elo-swatch elo-swatch-' + s.pool + '"></span>' + s.meta.label + '</p>' +
+      '<div class="profile-elo-chart-labels">' +
+      '<div class="profile-elo-stat profile-elo-stat-low"><span class="profile-elo-stat-label">▼ Zemākais</span><span class="profile-elo-stat-value">' + minVal + '</span></div>' +
+      '<div class="profile-elo-stat profile-elo-stat-high"><span class="profile-elo-stat-label">▲ Augstākais</span><span class="profile-elo-stat-value">' + maxVal + '</span></div>' +
+      '<div class="profile-elo-stat profile-elo-stat-current"><span class="profile-elo-stat-label">Tagad</span><span class="profile-elo-stat-value">' + values[values.length - 1] + '</span></div>' +
+      '</div></div>';
   });
-  const hasDistinctExtremes = minVal !== maxVal;
-
-  const dots = values.map((v, i) => {
-    const isLast = i === values.length - 1;
-    const r = isLast ? 3 : 1.6;
-    const cx = xFor(i).toFixed(1);
-    const cy = yFor(v).toFixed(1);
-    const change = rankedEntries[i].eloChange;
-    const changeLabel = typeof change === 'number' ? ' (' + (change > 0 ? '+' : '') + change + ')' : '';
-    let extremeLabel = '';
-    if (hasDistinctExtremes && i === maxIdx) extremeLabel = ' · augstākais';
-    else if (hasDistinctExtremes && i === minIdx) extremeLabel = ' · zemākais';
-    const tooltip = 'ELO: ' + v + changeLabel + extremeLabel;
-    // A larger, invisible hit-circle carries the native mouse-over tooltip
-    // (<title>) so hovering doesn't require pinpointing the tiny visible
-    // dot — the visible dot is drawn on top, purely decorative.
-    let marker = '';
-    if (hasDistinctExtremes && i === maxIdx) {
-      marker = '<text x="' + cx + '" y="' + (Number(cy) - 4) + '" text-anchor="middle" font-size="7" fill="rgba(250,246,236,0.8)" pointer-events="none">▲</text>';
-    } else if (hasDistinctExtremes && i === minIdx) {
-      marker = '<text x="' + cx + '" y="' + (Number(cy) + 10) + '" text-anchor="middle" font-size="7" fill="rgba(250,246,236,0.8)" pointer-events="none">▼</text>';
-    }
-    return (
-      '<circle cx="' + cx + '" cy="' + cy + '" r="7" fill="transparent" stroke="none">' +
-      '<title>' + tooltip + '</title>' +
-      '</circle>' +
-      '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + eloColor(v) + '" pointer-events="none" />' +
-      marker
-    );
-  }).join('');
 
   const y1000 = yFor(ELO_MIDPOINT).toFixed(1);
   const midLine =
@@ -856,17 +907,17 @@ function renderEloChart(history) {
 
   container.innerHTML =
     '<svg viewBox="0 0 ' + width + ' ' + height + '" class="profile-elo-chart-svg" preserveAspectRatio="none">' +
-    '<defs><linearGradient id="' + gradientId + '" x1="0" y1="0" x2="' + width + '" y2="0" gradientUnits="userSpaceOnUse">' + gradientStops + '</linearGradient></defs>' +
-    midLine +
-    '<polyline points="' + points + '" fill="none" stroke="url(#' + gradientId + ')" stroke-width="2" vector-effect="non-scaling-stroke" />' +
-    dots +
+    midLine + svgSeries +
     '</svg>' +
-    '<div class="profile-elo-chart-labels">' +
-    '<div class="profile-elo-stat profile-elo-stat-low"><span class="profile-elo-stat-label">▼ Zemākais</span><span class="profile-elo-stat-value">' + minVal + '</span></div>' +
-    '<div class="profile-elo-stat profile-elo-stat-current"><span class="profile-elo-stat-label">Tagad</span><span class="profile-elo-stat-value">' + values[values.length - 1] + '</span></div>' +
-    '<div class="profile-elo-stat profile-elo-stat-high"><span class="profile-elo-stat-label">▲ Augstākais</span><span class="profile-elo-stat-value">' + maxVal + '</span></div>' +
-    '</div>';
+    legendHtml;
 }
+
+document.querySelectorAll('#profileEloToggles input[type="checkbox"]').forEach((cb) => {
+  cb.addEventListener('change', () => {
+    eloPoolVisible[cb.dataset.pool] = cb.checked;
+    renderEloChart(lastProfileHistory);
+  });
+});
 
 function renderProfileHistory(history) {
   const container = el('profileHistoryList');

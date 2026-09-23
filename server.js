@@ -1268,8 +1268,8 @@ io.on('connection', (socket) => {
     const stats = users.getStats(target);
     if (!stats) return sendError(socket, 'Profils nav atrasts');
     const history = users.getGameHistory(target, 50);
-    const elo = users.getElo(target);
-    socket.emit('profileData', { username: target, stats, history, elo });
+    const eloByPool = { oneVOne: users.getElo(target, 'oneVOne'), multi: users.getElo(target, 'multi') };
+    socket.emit('profileData', { username: target, stats, history, eloByPool });
   });
 
   socket.on('disconnect', () => {

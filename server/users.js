@@ -343,46 +343,61 @@ function saveLastRoomSettings(username, settings) {
 
 // ---------- ELO rating ----------
 //
-// One rating, shared across all player counts (2-4) — a ranked game
-// always counts toward it regardless of how many people were at the
-// table, same spirit as Age of Empires 2's ranked queue. There's no
-// separate "team" concept here, just N individuals with a placement
-// (1 = best) each. Extended to N>2 by treating the game as every
-// possible pair of participants playing a virtual 1v1: each pair
-// contributes a standard expected-score comparison based on the ELO gap,
-// and a player's own rating change is the sum of their pairwise deltas
-// averaged across their (N-1) opponents — this keeps a typical change
-// roughly the same size regardless of table size, rather than a 4-player
-// game swinging ratings 3x harder than a 2-player one for the same K.
+// Two independent ratings — 'oneVOne' and 'multi' — rather than one
+// number shared across every table size. A ranked game only ever updates
+// the pool matching its own player count (see multi-rooms.js, which picks
+// the pool from room.totalPlayers), because a player's 1v1 duelling skill
+// and their 3-4 player free-for-all skill are different things, and
+// blending them into one figure would make that figure represent neither
+// very well (same reasoning chess sites apply to Bullet/Blitz/Rapid being
+// separate ratings, not one number). There's no "team" concept in the
+// multi pool — for a given ranked game, every present pool's rating is
+// updated from every participant's placement (1 = best) at the table.
+// Extended to N>2 by treating the game as every possible pair of
+// participants playing a virtual 1v1: each pair contributes a standard
+// expected-score comparison based on the ELO gap, and a player's own
+// rating change is the sum of their pairwise deltas averaged across their
+// (N-1) opponents — this keeps a typical change roughly the same size
+// regardless of table size, rather than a 4-player game swinging ratings
+// 3x harder than a 2-player one for the same K.
 //
-// New accounts don't get an elo field until their first ranked game —
-// getElo and applyRankedGameResult both treat a missing field as
-// DEFAULT_ELO, so this needs no migration for existing accounts.
+// New accounts don't get an eloByPool field (or a given pool inside it)
+// until their first ranked game in that pool — getElo and
+// applyRankedGameResult both treat a missing value as DEFAULT_ELO, so
+// this needs no migration for existing accounts. (Older accounts may
+// still carry a legacy single `elo` field from before the pool split —
+// it's simply no longer read; nothing currently in production depends on
+// it, so there's nothing to migrate.)
 const DEFAULT_ELO = 1000;
 const ELO_K = 32;
+const ELO_POOLS = ['oneVOne', 'multi'];
 
-function getElo(username) {
+function getElo(username, pool) {
   const name = normalize(username);
   const record = store.users[name];
   if (!record) return null;
-  return typeof record.elo === 'number' ? record.elo : DEFAULT_ELO;
+  const val = record.eloByPool && record.eloByPool[pool];
+  return typeof val === 'number' ? val : DEFAULT_ELO;
 }
 
 // placements: array of { username, placement } (1 = best place at the
-// table). Only entries whose account actually exists are rated — guests
+// table). pool: which independent rating to update — 'oneVOne' or 'multi'
+// (see ELO_POOLS above); the caller picks it from the table's player
+// count. Only entries whose account actually exists are rated — guests
 // are silently excluded, same as everywhere else. Requires at least 2
 // ratable participants. Returns { [username]: { before, after, delta } }
 // for each rated participant, or null if fewer than 2 were ratable.
 // Does NOT decide whether a game qualifies as ranked — that's the
 // caller's job (see multi-rooms.js's ranked-room restrictions).
-function applyRankedGameResult(placements) {
+function applyRankedGameResult(placements, pool) {
+  if (!ELO_POOLS.includes(pool)) throw new Error(`applyRankedGameResult: unknown elo pool '${pool}'`);
   const eligible = (placements || [])
     .map((p) => ({ username: normalize(p.username), placement: p.placement }))
     .filter((p) => p.username && store.users[p.username]);
   if (eligible.length < 2) return null;
 
   const before = {};
-  for (const p of eligible) before[p.username] = getElo(p.username);
+  for (const p of eligible) before[p.username] = getElo(p.username, pool);
 
   const deltaSum = {};
   for (const p of eligible) deltaSum[p.username] = 0;
@@ -401,7 +416,9 @@ function applyRankedGameResult(placements) {
   for (const p of eligible) {
     const avgDelta = Math.round(deltaSum[p.username] / n);
     const newElo = before[p.username] + avgDelta;
-    store.users[p.username].elo = newElo;
+    const record = store.users[p.username];
+    record.eloByPool = record.eloByPool || {};
+    record.eloByPool[pool] = newElo;
     result[p.username] = { before: before[p.username], after: newElo, delta: avgDelta };
   }
   save();
@@ -533,5 +550,6 @@ module.exports = {
   recordLoginIp,
   getElo,
   applyRankedGameResult,
+  ELO_POOLS,
   MIN_PASSWORD_LEN,
 };
