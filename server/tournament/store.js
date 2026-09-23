@@ -25,7 +25,10 @@ const path = require('path');
 const crypto = require('crypto');
 const { Tournament, ABSOLUTE_MIN_PARTICIPANTS } = require('./tournament');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+// Same DURAKS_DATA_DIR override as users.js — kept in sync so both files
+// land in the same place, whether that's the default in-repo folder or an
+// external persistent volume.
+const DATA_DIR = process.env.DURAKS_DATA_DIR || path.join(__dirname, '..', 'data');
 const TOURNAMENTS_FILE = path.join(DATA_DIR, 'tournaments.json');
 const RESULTS_FILE = path.join(DATA_DIR, 'tournament-results.json');
 

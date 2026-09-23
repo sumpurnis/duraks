@@ -4,7 +4,13 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const DATA_DIR = path.join(__dirname, 'data');
+// DATA_DIR defaults to a folder next to this file, but can be pointed
+// somewhere else entirely via DURAKS_DATA_DIR — e.g. a Railway Volume
+// mounted outside the deployed code, so that every redeploy (which
+// replaces the code on disk with a fresh copy) doesn't also wipe out
+// player accounts, stats and ELO history stored here. See the deploy
+// notes in README / the message this was introduced in for setup steps.
+const DATA_DIR = process.env.DURAKS_DATA_DIR || path.join(__dirname, 'data');
 const FILE = path.join(DATA_DIR, 'users.json');
 const MIN_PASSWORD_LEN = 8;
 const LEADERBOARD_SIZE = 10;

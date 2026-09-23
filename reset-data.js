@@ -18,7 +18,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = path.join(__dirname, 'server', 'data');
+// Same DURAKS_DATA_DIR override as server/users.js — if the server is
+// pointed at an external volume, run this with that same env var set so
+// it resets the right files.
+const DATA_DIR = process.env.DURAKS_DATA_DIR || path.join(__dirname, 'server', 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const TOURNAMENTS_FILE = path.join(DATA_DIR, 'tournaments.json');
 const TOURNAMENT_RESULTS_FILE = path.join(DATA_DIR, 'tournament-results.json');

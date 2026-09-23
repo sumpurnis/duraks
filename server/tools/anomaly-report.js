@@ -43,7 +43,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const FILE = path.join(__dirname, '..', 'data', 'users.json');
+// Same DURAKS_DATA_DIR override as users.js, so this admin tool reads
+// whichever location the running server is actually writing to.
+const FILE = path.join(process.env.DURAKS_DATA_DIR || path.join(__dirname, '..', 'data'), 'users.json');
 
 // ---------- Tunables ----------
 const MIN_GAMES_FOR_PAIR_FLAG = 4; // don't flag pairs with too few games to say anything meaningful
