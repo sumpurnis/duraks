@@ -203,6 +203,12 @@ html, body {
   outline: none;
   border-color: var(--gold);
 }
+/* Native datetime-local calendar/clock icon renders dark by default —
+   invert it so it's visible against our dark field background. */
+.field input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+  cursor: pointer;
+}
 
 .btn {
   width: 100%;

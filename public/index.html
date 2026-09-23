@@ -94,24 +94,6 @@
     <div id="statsPanel" class="stats-panel">
       <p class="stats-title">Statistika</p>
 
-      <p class="stats-line">
-        Spēles izspēlētas:
-        <span class="stats-highlight">Šodien: <strong id="gamesToday">—</strong></span>
-        <span class="stats-highlight">Kopā: <strong id="gamesAllTime">—</strong></span>
-      </p>
-
-      <p class="stats-line">
-        Spēles pret datoru:
-        <span class="stats-highlight">Šodien: <strong id="gamesVsBotToday">—</strong></span>
-        <span class="stats-highlight">Kopā: <strong id="gamesVsBotAllTime">—</strong></span>
-      </p>
-
-      <p class="stats-line hidden" id="pageVisitsLine">
-        Apmeklējumi:
-        <span class="stats-highlight">Šodien: <strong id="pageVisitsToday">—</strong></span>
-        <span class="stats-highlight">Kopā: <strong id="pageVisitsAllTime">—</strong></span>
-      </p>
-
       <div class="open-rooms" id="multiRoomsSection">
         <div class="open-rooms-title-row">
           <p class="open-rooms-title">Atvērtās spēles</p>
@@ -120,6 +102,40 @@
         <div id="multiRoomsList" class="open-rooms-list">
           <p class="muted small">Nav atvērtu spēļu…</p>
         </div>
+      </div>
+
+      <div class="stats-block" id="publicTournamentsBlock">
+        <div class="stats-block-header">
+          <span class="stats-block-title">🏆 Turnīri</span>
+          <div class="stats-tabs" id="publicTournamentsTabs">
+            <button class="stats-tab active" data-status="registration" type="button">Atvērti</button>
+            <button class="stats-tab" data-status="active" type="button">Notiekoši</button>
+            <button class="stats-tab" data-status="completed" type="button">Aizvadītie</button>
+          </div>
+        </div>
+        <div id="publicTournamentsList" class="tournament-list">
+          <p class="muted small">Nav atvērtu turnīru…</p>
+        </div>
+      </div>
+
+      <div class="stats-block">
+        <p class="stats-line">
+          Spēles izspēlētas:
+          <span class="stats-highlight">Šodien: <strong id="gamesToday">—</strong></span>
+          <span class="stats-highlight">Kopā: <strong id="gamesAllTime">—</strong></span>
+        </p>
+
+        <p class="stats-line">
+          Spēles pret datoru:
+          <span class="stats-highlight">Šodien: <strong id="gamesVsBotToday">—</strong></span>
+          <span class="stats-highlight">Kopā: <strong id="gamesVsBotAllTime">—</strong></span>
+        </p>
+
+        <p class="stats-line hidden" id="pageVisitsLine">
+          Apmeklējumi:
+          <span class="stats-highlight">Šodien: <strong id="pageVisitsToday">—</strong></span>
+          <span class="stats-highlight">Kopā: <strong id="pageVisitsAllTime">—</strong></span>
+        </p>
       </div>
 
       <div class="stats-block">
@@ -230,7 +246,30 @@
           <button id="tournamentCreateOpenBtn" class="btn btn-primary btn-small">+ Izveidot turnīru</button>
           <button id="tournamentResultsOpenBtn" class="btn btn-secondary btn-small">Mani rezultāti</button>
           <button id="tournamentDeleteAllBtn" class="btn btn-ghost-danger btn-small hidden">🗑 Dzēst visus pabeigtos</button>
+          <button id="tCleanupToggleBtn" class="btn btn-ghost-danger btn-small hidden">🧹 Tīrīšanas rīks</button>
         </div>
+
+        <div id="tCleanupPanel" class="tournament-cleanup-panel hidden">
+          <p class="hint small">Atzīmē kritērijus, priekšskati, tad dzēs atlasītos turnīrus. Aktīvi (notiekoši) turnīri nekad netiek skarti.</p>
+
+          <div class="cleanup-criterion-row">
+            <label class="checkbox-field"><input id="tCleanupMinEnabled" type="checkbox" checked /><span>Par maz dalībnieku, mazāk par</span></label>
+            <input id="tCleanupMinValue" type="number" min="0" max="64" value="3" class="cleanup-inline-input" />
+          </div>
+          <label class="checkbox-field"><input id="tCleanupStuckEnabled" type="checkbox" checked /><span>Iestrēguši reģistrācijā pēc sākuma laika</span></label>
+          <div class="cleanup-criterion-row">
+            <label class="checkbox-field"><input id="tCleanupOldEnabled" type="checkbox" checked /><span>Veci/nepabeigti, vecāki par (dienās)</span></label>
+            <input id="tCleanupOldValue" type="number" min="1" max="365" value="7" class="cleanup-inline-input" />
+          </div>
+          <label class="checkbox-field"><input id="tCleanupEmptyPrivateEnabled" type="checkbox" checked /><span>Privāti turnīri bez dalībniekiem</span></label>
+
+          <div class="tournament-form-actions">
+            <button id="tCleanupPreviewBtn" class="btn btn-secondary btn-small">Priekšskatīt</button>
+            <button id="tCleanupDeleteBtn" class="btn btn-danger btn-small hidden">Dzēst atlasītos</button>
+          </div>
+          <div id="tCleanupPreviewList" class="tournament-list"></div>
+        </div>
+
         <div class="tournament-join-code-row">
           <input id="tournamentCodeInput" type="text" placeholder="Ielūguma kods" maxlength="6" style="text-transform:uppercase" />
           <button id="tournamentJoinCodeBtn" class="btn btn-secondary btn-small">Pievienoties ar kodu</button>
@@ -243,40 +282,44 @@
       <div id="tournamentCreateView" class="hidden">
         <button class="btn btn-secondary btn-small tournament-back-btn" data-back-to="list">← Atpakaļ</button>
         <label class="field"><span>Nosaukums</span><input id="tCreateName" type="text" maxlength="60" placeholder="Rudens kauss" /></label>
-        <label class="field"><span>Maksimālais dalībnieku skaits</span><input id="tCreateMax" type="number" min="3" max="64" value="8" /></label>
-        <p class="hint small">Minimālais dalībnieku skaits vienmēr ir 3.</p>
-        <label class="field"><span>Formāts</span>
-          <select id="tCreateFormat">
-            <option value="bo3">Bo3 (labākais no 3)</option>
-            <option value="bo5">Bo5 (labākais no 5)</option>
-          </select>
-        </label>
-        <label class="field hidden" id="tCreateGameField"><span>Spēle</span>
-          <select id="tCreateGame"></select>
-        </label>
-        <label class="field"><span>Reģistrācija slēdzas (DD/MM/GGGG, 24h)</span></label>
-        <div class="datetime-row">
-          <select id="tCreateRegEndDay" class="datetime-day"></select>
-          <span class="datetime-slash">/</span>
-          <select id="tCreateRegEndMonth" class="datetime-month"></select>
-          <span class="datetime-slash">/</span>
-          <select id="tCreateRegEndYear" class="datetime-year"></select>
-          <select id="tCreateRegEndHour" class="datetime-hour"></select>
-          <span class="datetime-colon">:</span>
-          <select id="tCreateRegEndMinute" class="datetime-minute"></select>
+        <div class="field">
+          <span>Maksimālais dalībnieku skaits: <strong id="tCreateMaxValue">8</strong></span>
+          <input id="tCreateMax" type="range" min="4" max="16" step="1" value="8" class="slider" />
         </div>
+        <div class="field">
+          <span>Formāts</span>
+          <div id="tCreateFormatGroup" class="btn-group" role="group">
+            <button type="button" class="btn-option" data-value="bo3">Bo3</button>
+            <button type="button" class="btn-option" data-value="bo5">Bo5</button>
+          </div>
+        </div>
+        <div class="field">
+          <span>Kāršu kava</span>
+          <div id="tCreateGameGroup" class="btn-group" role="group">
+            <button type="button" class="btn-option" data-value="duraks-36">36 kārtis</button>
+            <button type="button" class="btn-option" data-value="duraks-52">52 kārtis</button>
+          </div>
+        </div>
+        <div class="field">
+          <span>Sākas pēc</span>
+          <div id="tCreateStartPresetGroup" class="btn-group" role="group">
+            <button type="button" class="btn-option" data-value="5">5 min.</button>
+            <button type="button" class="btn-option" data-value="30">30 min.</button>
+            <button type="button" class="btn-option" data-value="60">1 st.</button>
+            <button type="button" class="btn-option" data-value="180">3 st.</button>
+            <button type="button" class="btn-option" data-value="1440">24 st.</button>
+            <button type="button" class="btn-option" data-value="custom">Cits laiks</button>
+          </div>
+        </div>
+        <label class="field hidden" id="tCreateStartCustomField"><span>Turnīra sākums</span><input id="tCreateStart" type="datetime-local" /></label>
 
-        <label class="field"><span>Turnīra sākums (DD/MM/GGGG, 24h)</span></label>
-        <div class="datetime-row">
-          <select id="tCreateStartDay" class="datetime-day"></select>
-          <span class="datetime-slash">/</span>
-          <select id="tCreateStartMonth" class="datetime-month"></select>
-          <span class="datetime-slash">/</span>
-          <select id="tCreateStartYear" class="datetime-year"></select>
-          <select id="tCreateStartHour" class="datetime-hour"></select>
-          <span class="datetime-colon">:</span>
-          <select id="tCreateStartMinute" class="datetime-minute"></select>
-        </div>
+        <label class="checkbox-field" id="tCreateRegEndToggleField">
+          <input id="tCreateRegEndToggle" type="checkbox" />
+          <span>Iestatīt atsevišķu reģistrācijas termiņu</span>
+        </label>
+        <label class="field hidden" id="tCreateRegEndField"><span>Reģistrācija slēdzas</span><input id="tCreateRegEnd" type="datetime-local" /></label>
+
+        <p id="tCreateTimesSummary" class="hint small"></p>
 
         <label class="checkbox-field"><input id="tCreatePrivate" type="checkbox" /><span>Privāts turnīrs (ar ielūguma kodu)</span></label>
         <button id="tCreateSubmitBtn" class="btn btn-primary">Izveidot turnīru</button>

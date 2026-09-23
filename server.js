@@ -546,6 +546,52 @@ function sendTournamentsTo(socket, forUsername) {
   socket.emit('tournamentsData', tournaments.listForUser(forUsername).map((t) => serializeTournament(t, forUsername)));
 }
 
+// Stripped-down public tournament info for the main lobby page — visible
+// to every visitor, including guests and people who haven't registered.
+// Never includes invite codes, private tournaments, or anything else
+// gated behind login (see serializeTournament for the full member view
+// used inside the Tournaments modal).
+function serializePublicTournamentSummary(t) {
+  return {
+    id: t.id,
+    name: t.name,
+    createdBy: t.createdBy,
+    maxParticipants: t.maxParticipants,
+    participantCount: t.participants.length,
+    seriesFormat: t.seriesFormat,
+    gameId: t.gameId,
+    gameName: gamesRegistry.getGame(t.gameId).name,
+    startTime: t.startTime.toISOString(),
+    registrationEndTime: t.registrationEndTime.toISOString(),
+    status: t.status,
+  };
+}
+
+// Grouped into the three sections the lobby page shows: open for
+// registration, currently being played, and finished. Only ever draws from
+// listPublic() (private tournaments are never included here, member or
+// not) and caps the completed list so a long-running server's history
+// doesn't grow the lobby page without bound.
+const PUBLIC_TOURNAMENTS_COMPLETED_LIMIT = 10;
+function getPublicTournamentsSummary() {
+  const all = tournaments.listPublic();
+  const registration = all
+    .filter((t) => t.status === 'registration')
+    .sort((a, b) => a.startTime - b.startTime);
+  const active = all
+    .filter((t) => t.status === 'active')
+    .sort((a, b) => a.startTime - b.startTime);
+  const completed = all
+    .filter((t) => t.status === 'completed')
+    .sort((a, b) => b.startTime - a.startTime)
+    .slice(0, PUBLIC_TOURNAMENTS_COMPLETED_LIMIT);
+  return {
+    registration: registration.map(serializePublicTournamentSummary),
+    active: active.map(serializePublicTournamentSummary),
+    completed: completed.map(serializePublicTournamentSummary),
+  };
+}
+
 // Sweeps for tournaments whose registration window has passed: generates
 // the bracket if the minimum was met, otherwise cancels it. This covers the
 // "automatically once it's tournament time" half of the original spec —
@@ -603,6 +649,15 @@ io.on('connection', (socket) => {
   let playerId = null; // == username once authenticated
   let username = null;
 
+  // Every socket joins the lobby broadcast room immediately, logged in or
+  // not — guests and not-yet-registered visitors still need to receive
+  // public tournament/open-room updates on the main page. (Sockets already
+  // leave this room the moment they join an actual game room, and rejoin
+  // on the way back out — see the socket.leave(LOBBY_ROOM) calls below and
+  // in multi-rooms.js — so this doesn't change that bookkeeping.)
+  socket.join(LOBBY_ROOM);
+  socket.emit('publicTournamentsData', getPublicTournamentsSummary());
+
   // Fully separate room/event system for the 3-4 player vs-bots mode —
   // see server/multi-rooms.js. Shares nothing with the 2-player game
   // below except this one registration call and the username getter.
@@ -616,7 +671,6 @@ io.on('connection', (socket) => {
   function onAuthenticated(rec, token) {
     username = rec.username;
     userSockets.set(username, socket.id);
-    socket.join(LOBBY_ROOM);
     // Fed into the anomaly-detection tool (server/tools/anomaly-report.js)
     // to flag accounts that always connect from the same IP as each other —
     // one signal among several, not proof by itself (shared households,
@@ -677,6 +731,13 @@ io.on('connection', (socket) => {
     sendTournamentsTo(socket, username);
   });
 
+  // Deliberately ungated — this is the read-only lobby-page summary (open,
+  // ongoing, and finished PUBLIC tournaments only), shown to every visitor
+  // including guests and people who haven't registered yet.
+  socket.on('listPublicTournaments', () => {
+    socket.emit('publicTournamentsData', getPublicTournamentsSummary());
+  });
+
   socket.on('listGames', () => {
     if (!username) return sendError(socket, 'Vispirms ielogojies');
     const isAdmin = username === ADMIN_USERNAME;
@@ -693,7 +754,13 @@ io.on('connection', (socket) => {
     if (!tournaments.canCreateTournament(stats)) {
       return sendError(
         socket,
-        `Lai izveidotu turnīru, nepieciešams nospēlēt vismaz ${tournaments.MIN_GAMES_TO_CREATE} spēles`
+        `Lai izveidotu turnīru, nepieciešams nospēlēt vismaz ${tournaments.MIN_GAMES_TO_CREATE} spēles pret dzīvu pretinieku`
+      );
+    }
+    if (tournaments.hasOpenTournament(username)) {
+      return sendError(
+        socket,
+        'Tev jau ir atvērts turnīrs. Pabeidz vai atceļ to, pirms izveido nākamo.'
       );
     }
     try {
@@ -717,11 +784,11 @@ io.on('connection', (socket) => {
       const isPrivate = !!(config && config.isPrivate);
       const seriesFormat = config && config.seriesFormat === 'bo5' ? 'bo5' : 'bo3';
 
-      // Game selection is hidden from regular users for now — even if a
-      // request tries to sneak a different value through, only the admin
-      // account can actually create a tournament for a non-default game.
+      // Deck size (36 vs 52 cards) is now a standard choice in the creation
+      // form for every user — still validated against the registry so an
+      // unknown/forged id can't sneak through.
       let gameId = gamesRegistry.DEFAULT_GAME_ID;
-      if (username === ADMIN_USERNAME && config && config.gameId && gamesRegistry.isValidGameId(config.gameId)) {
+      if (config && config.gameId && gamesRegistry.isValidGameId(config.gameId)) {
         gameId = config.gameId;
       }
 
@@ -908,6 +975,51 @@ io.on('connection', (socket) => {
     const count = tournaments.deleteAllCompleted();
     sendTournamentsTo(socket, username);
     socket.emit('adminBulkDeleteResult', { count });
+    io.to(LOBBY_ROOM).emit('tournamentUpdated', { bulkDeleted: true });
+  });
+
+  // Admin cleanup tool: normalizes the raw {enabled, value} shape the
+  // client sends per-criterion into the {minParticipants: number|null, ...}
+  // shape findCleanupCandidates/deleteCleanupCandidates expect.
+  function normalizeCleanupCriteria(raw) {
+    const c = raw || {};
+    const minP = c.minParticipants;
+    const days = c.olderThanDays;
+    return {
+      minParticipants: minP && minP.enabled && Number.isFinite(Number(minP.value))
+        ? Math.max(0, Math.floor(Number(minP.value))) : null,
+      stuckPastStart: !!(c.stuckPastStart && c.stuckPastStart.enabled),
+      olderThanDays: days && days.enabled && Number.isFinite(Number(days.value))
+        ? Math.max(0, Math.floor(Number(days.value))) : null,
+      emptyPrivate: !!(c.emptyPrivate && c.emptyPrivate.enabled),
+    };
+  }
+
+  socket.on('adminPreviewCleanup', (criteria) => {
+    if (!username) return sendError(socket, 'Vispirms ielogojies');
+    if (username !== ADMIN_USERNAME) return sendError(socket, 'Tikai administrators var dzēst turnīrus');
+    const matches = tournaments.findCleanupCandidates(normalizeCleanupCriteria(criteria));
+    socket.emit('adminCleanupPreview', {
+      items: matches.map(({ tournament: t, reasons }) => ({
+        id: t.id,
+        name: t.name,
+        status: t.status,
+        participantCount: t.participants.length,
+        maxParticipants: t.maxParticipants,
+        isPrivate: t.isPrivate,
+        createdAt: t.createdAt.toISOString(),
+        startTime: t.startTime.toISOString(),
+        reasons,
+      })),
+    });
+  });
+
+  socket.on('adminRunCleanup', (criteria) => {
+    if (!username) return sendError(socket, 'Vispirms ielogojies');
+    if (username !== ADMIN_USERNAME) return sendError(socket, 'Tikai administrators var dzēst turnīrus');
+    const count = tournaments.deleteCleanupCandidates(normalizeCleanupCriteria(criteria));
+    sendTournamentsTo(socket, username);
+    socket.emit('adminCleanupResult', { count });
     io.to(LOBBY_ROOM).emit('tournamentUpdated', { bulkDeleted: true });
   });
 

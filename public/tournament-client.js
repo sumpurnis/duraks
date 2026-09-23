@@ -12,6 +12,12 @@
 let tCurrentView = 'list';
 let tLastList = [];
 let tOpenDetailId = null;
+// Each tournament item carries the requesting user's isAdmin flag (it's
+// per-request, not per-tournament), but an empty list carries no items at
+// all — cache the last known value so admin-only controls don't flicker
+// hidden just because the tournament list happens to be empty right now
+// (e.g. right after the admin cleanup tool clears everything out).
+let tIsAdminCache = false;
 
 function tShowView(view) {
   tCurrentView = view;
@@ -60,7 +66,9 @@ function tRenderList(list) {
   const container = el('tournamentList');
   container.innerHTML = '';
 
-  el('tournamentDeleteAllBtn').classList.toggle('hidden', !(list.length > 0 && list[0].isAdmin));
+  if (list.length > 0) tIsAdminCache = !!list[0].isAdmin;
+  el('tournamentDeleteAllBtn').classList.toggle('hidden', !tIsAdminCache);
+  el('tCleanupToggleBtn').classList.toggle('hidden', !tIsAdminCache);
 
   if (list.length === 0) {
     container.innerHTML = '<p class="muted small">Vēl nav neviena turnīra. Izveido pirmo!</p>';
@@ -109,6 +117,89 @@ function tRenderList(list) {
   });
 }
 
+// ---------- public lobby-page tournaments section ----------
+// A read-only summary shown on the main page itself — outside the modal —
+// so it's visible to every visitor, including guests and people who
+// haven't registered. Split into three tabs (open/ongoing/finished) rather
+// than three always-visible lists, to match the existing TOP10 stats-block
+// tab pattern and keep the sidebar from getting too tall.
+
+let tPublicScope = 'registration';
+let tLastPublicData = { registration: [], active: [], completed: [] };
+
+const tPublicEmptyMessage = {
+  registration: 'Nav atvērtu turnīru, kuros var pieteikties…',
+  active: 'Šobrīd nav notiekošu turnīru…',
+  completed: 'Vēl nav aizvadītu turnīru…',
+};
+
+function tPublicMetaLine(t) {
+  const deckLabel = t.gameName || (t.gameId === 'duraks-36' ? '36 kārtis' : '52 kārtis');
+  const base = `${t.participantCount}/${t.maxParticipants} dalībnieki · ${t.seriesFormat.toUpperCase()} · ${deckLabel}`;
+  if (t.status === 'registration') return `${base} · sākums ${tFormatDateTime(t.startTime)}`;
+  if (t.status === 'active') return `${base} · sākās ${tFormatDateTime(t.startTime)}`;
+  return `${base} · sākums bija ${tFormatDateTime(t.startTime)}`;
+}
+
+function tRenderPublicTournaments() {
+  const container = el('publicTournamentsList');
+  const list = tLastPublicData[tPublicScope] || [];
+  container.innerHTML = '';
+
+  if (list.length === 0) {
+    container.innerHTML = `<p class="muted small">${tPublicEmptyMessage[tPublicScope]}</p>`;
+    return;
+  }
+
+  list.forEach((t) => {
+    const row = document.createElement('div');
+    row.className = 'tournament-row';
+
+    const info = document.createElement('div');
+    info.className = 'tournament-row-info';
+    const title = document.createElement('div');
+    title.className = 'tournament-row-title';
+    title.textContent = t.name;
+    const meta = document.createElement('div');
+    meta.className = 'tournament-row-meta';
+    meta.textContent = tPublicMetaLine(t);
+    info.appendChild(title);
+    info.appendChild(meta);
+
+    const openBtn = document.createElement('button');
+    openBtn.className = 'btn btn-secondary btn-small';
+    openBtn.textContent = 'Skatīt';
+    openBtn.addEventListener('click', () => {
+      // myUsername is client.js's shared login-state global — guests (and
+      // anyone not logged in) get nudged toward registering instead of
+      // silently failing the gated getTournamentDetail request.
+      if (typeof myUsername !== 'undefined' && myUsername) {
+        tOpenModal();
+        tOpenDetail(t.id);
+      } else {
+        showToast('Ielogojies vai reģistrējies, lai skatītu turnīra detaļas');
+      }
+    });
+
+    row.appendChild(info);
+    row.appendChild(openBtn);
+    container.appendChild(row);
+  });
+}
+
+socket.on('publicTournamentsData', (data) => {
+  tLastPublicData = data;
+  tRenderPublicTournaments();
+});
+
+document.querySelectorAll('#publicTournamentsTabs .stats-tab').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    tPublicScope = btn.dataset.status;
+    document.querySelectorAll('#publicTournamentsTabs .stats-tab').forEach((b) => b.classList.toggle('active', b === btn));
+    tRenderPublicTournaments();
+  });
+});
+
 el('tournamentOpenBtn').addEventListener('click', tOpenModal);
 el('tournamentCloseBtn').addEventListener('click', tCloseModal);
 
@@ -119,92 +210,139 @@ document.querySelectorAll('.tournament-back-btn').forEach((btn) => {
   });
 });
 
-function tPopulateDateSelects(prefix) {
+// A native <input type="datetime-local"> takes/returns "YYYY-MM-DDTHH:mm"
+// in the browser's local time zone (no timezone suffix) — exactly what we
+// need here, so no custom picker UI or state is required any more.
+function tSetDateTimeInput(id, date) {
   const pad = (n) => String(n).padStart(2, '0');
-  const dayEl = el(`${prefix}Day`);
-  const monthEl = el(`${prefix}Month`);
-  const yearEl = el(`${prefix}Year`);
-  const hourEl = el(`${prefix}Hour`);
-  const minuteEl = el(`${prefix}Minute`);
-
-  if (dayEl.options.length === 0) {
-    for (let d = 1; d <= 31; d++) dayEl.add(new Option(pad(d), String(d)));
-    const monthNames = [
-      'Janvāris', 'Februāris', 'Marts', 'Aprīlis', 'Maijs', 'Jūnijs',
-      'Jūlijs', 'Augusts', 'Septembris', 'Oktobris', 'Novembris', 'Decembris',
-    ];
-    monthNames.forEach((label, i) => monthEl.add(new Option(label, String(i + 1))));
-    const thisYear = new Date().getFullYear();
-    for (let y = thisYear; y <= thisYear + 2; y++) yearEl.add(new Option(String(y), String(y)));
-    for (let h = 0; h <= 23; h++) hourEl.add(new Option(pad(h), String(h)));
-    for (let mi = 0; mi < 60; mi += 5) minuteEl.add(new Option(pad(mi), String(mi)));
-  }
+  const local = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  el(id).value = local;
 }
 
-function tSetDateSelects(prefix, date) {
-  el(`${prefix}Day`).value = String(date.getDate());
-  el(`${prefix}Month`).value = String(date.getMonth() + 1);
-  el(`${prefix}Year`).value = String(date.getFullYear());
-  el(`${prefix}Hour`).value = String(date.getHours());
-  // Minute select steps by 5 — snap the default to the nearest step.
-  el(`${prefix}Minute`).value = String(Math.round(date.getMinutes() / 5) * 5 % 60);
-}
-
-function tReadDateSelects(prefix) {
-  const day = el(`${prefix}Day`).value;
-  const month = el(`${prefix}Month`).value;
-  const year = el(`${prefix}Year`).value;
-  const hour = el(`${prefix}Hour`).value;
-  const minute = el(`${prefix}Minute`).value;
-  if (!day || !month || !year || hour === '' || minute === '') return null;
-  const d = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), 0, 0);
+function tReadDateTimeInput(id) {
+  const raw = el(id).value;
+  if (!raw) return null;
+  const d = new Date(raw);
   return isNaN(d.getTime()) ? null : d;
 }
 
-let tGamesListCache = [];
+// Format and deck-size are button-group pickers (same visual pattern as the
+// multiplayer room-creation modal) instead of <select> dropdowns — this
+// object is their single source of truth, mirroring multiCreateState.
+// startPreset holds either a number of minutes-from-now (as a string, e.g.
+// '1440' for 24 hours) or 'custom', in which case the actual moment comes
+// from the datetime-local field instead.
+const tCreateState = { seriesFormat: 'bo3', gameId: 'duraks-52', startPreset: '1440' };
 
-function tOpenCreateForm() {
-  tPopulateDateSelects('tCreateRegEnd');
-  tPopulateDateSelects('tCreateStart');
-  // Sensible defaults: registration closes in 24h, tournament starts 1h after that.
-  const regEnd = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  const start = new Date(Date.now() + 25 * 60 * 60 * 1000);
-  el('tCreateName').value = '';
-  el('tCreateMax').value = 8;
-  el('tCreateFormat').value = 'bo3';
-  tSetDateSelects('tCreateRegEnd', regEnd);
-  tSetDateSelects('tCreateStart', start);
-  el('tCreatePrivate').checked = false;
-  tShowView('create');
-  socket.emit('listGames');
+function tSetActiveOption(groupEl, value) {
+  Array.from(groupEl.children).forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.value === value);
+  });
 }
 
-socket.on('gamesData', ({ isAdmin, games }) => {
-  tGamesListCache = games;
-  el('tCreateGameField').classList.toggle('hidden', !isAdmin);
-  if (!isAdmin) return;
-  const select = el('tCreateGame');
-  const previousValue = select.value;
-  select.innerHTML = '';
-  games.forEach((g) => select.add(new Option(g.name, g.id)));
-  if (previousValue && games.some((g) => g.id === previousValue)) select.value = previousValue;
+// The tournament's actual start moment: either "now + N minutes" from the
+// preset buttons, or whatever's in the custom datetime-local field.
+function tComputeStartDate() {
+  if (tCreateState.startPreset === 'custom') return tReadDateTimeInput('tCreateStart');
+  return new Date(Date.now() + Number(tCreateState.startPreset) * 60 * 1000);
+}
+
+// Registration close defaults to the start moment itself (no separate field
+// shown) unless the organizer explicitly opts into a separate cutoff via
+// the checkbox, which reveals its own datetime-local field.
+function tComputeRegEndDate(startDate) {
+  if (el('tCreateRegEndToggle').checked) return tReadDateTimeInput('tCreateRegEnd');
+  return startDate;
+}
+
+function tUpdateTimesSummary() {
+  const startDate = tComputeStartDate();
+  const regEndDate = startDate ? tComputeRegEndDate(startDate) : null;
+  const summary = el('tCreateTimesSummary');
+  if (!startDate || !regEndDate) {
+    summary.textContent = 'Ievadi turnīra sākuma laiku.';
+    return;
+  }
+  const sameAsStart = regEndDate.getTime() === startDate.getTime();
+  summary.textContent = sameAsStart
+    ? `Sākums (un reģistrācijas termiņš): ${tFormatDateTime(startDate.toISOString())}`
+    : `Reģistrācija slēdzas: ${tFormatDateTime(regEndDate.toISOString())} · Sākums: ${tFormatDateTime(startDate.toISOString())}`;
+}
+
+function tOpenCreateForm() {
+  el('tCreateName').value = '';
+  el('tCreateMax').value = 8;
+  el('tCreateMaxValue').textContent = '8';
+  tCreateState.seriesFormat = 'bo3';
+  tCreateState.gameId = 'duraks-52';
+  tCreateState.startPreset = '1440';
+  tSetActiveOption(el('tCreateFormatGroup'), tCreateState.seriesFormat);
+  tSetActiveOption(el('tCreateGameGroup'), tCreateState.gameId);
+  tSetActiveOption(el('tCreateStartPresetGroup'), tCreateState.startPreset);
+  el('tCreateStartCustomField').classList.add('hidden');
+  tSetDateTimeInput('tCreateStart', new Date(Date.now() + 24 * 60 * 60 * 1000));
+  el('tCreateRegEndToggle').checked = false;
+  el('tCreateRegEndField').classList.add('hidden');
+  tSetDateTimeInput('tCreateRegEnd', new Date(Date.now() + 24 * 60 * 60 * 1000));
+  el('tCreatePrivate').checked = false;
+  tUpdateTimesSummary();
+  tShowView('create');
+}
+
+el('tCreateMax').addEventListener('input', () => {
+  el('tCreateMaxValue').textContent = el('tCreateMax').value;
 });
+el('tCreateFormatGroup').addEventListener('click', (e) => {
+  const btn = e.target.closest('.btn-option');
+  if (!btn) return;
+  tCreateState.seriesFormat = btn.dataset.value;
+  tSetActiveOption(el('tCreateFormatGroup'), tCreateState.seriesFormat);
+});
+el('tCreateGameGroup').addEventListener('click', (e) => {
+  const btn = e.target.closest('.btn-option');
+  if (!btn) return;
+  tCreateState.gameId = btn.dataset.value;
+  tSetActiveOption(el('tCreateGameGroup'), tCreateState.gameId);
+});
+el('tCreateStartPresetGroup').addEventListener('click', (e) => {
+  const btn = e.target.closest('.btn-option');
+  if (!btn) return;
+  tCreateState.startPreset = btn.dataset.value;
+  tSetActiveOption(el('tCreateStartPresetGroup'), tCreateState.startPreset);
+  const isCustom = tCreateState.startPreset === 'custom';
+  el('tCreateStartCustomField').classList.toggle('hidden', !isCustom);
+  if (isCustom && !el('tCreateStart').value) {
+    tSetDateTimeInput('tCreateStart', new Date(Date.now() + 24 * 60 * 60 * 1000));
+  }
+  tUpdateTimesSummary();
+});
+el('tCreateStart').addEventListener('input', tUpdateTimesSummary);
+el('tCreateRegEndToggle').addEventListener('change', () => {
+  const show = el('tCreateRegEndToggle').checked;
+  el('tCreateRegEndField').classList.toggle('hidden', !show);
+  if (show) {
+    const startDate = tComputeStartDate() || new Date(Date.now() + 24 * 60 * 60 * 1000);
+    tSetDateTimeInput('tCreateRegEnd', startDate);
+  }
+  tUpdateTimesSummary();
+});
+el('tCreateRegEnd').addEventListener('input', tUpdateTimesSummary);
 
 el('tournamentCreateOpenBtn').addEventListener('click', tOpenCreateForm);
 
 el('tCreateSubmitBtn').addEventListener('click', () => {
   const name = el('tCreateName').value.trim();
   const maxParticipants = parseInt(el('tCreateMax').value, 10);
-  const seriesFormat = el('tCreateFormat').value;
-  const gameId = el('tCreateGame').value || undefined;
-  const regEndDate = tReadDateSelects('tCreateRegEnd');
-  const startDate = tReadDateSelects('tCreateStart');
+  const seriesFormat = tCreateState.seriesFormat;
+  const gameId = tCreateState.gameId;
+  const startDate = tComputeStartDate();
+  const regEndDate = startDate ? tComputeRegEndDate(startDate) : null;
   const registrationEndTime = regEndDate ? regEndDate.toISOString() : null;
   const startTime = startDate ? startDate.toISOString() : null;
   const isPrivate = el('tCreatePrivate').checked;
 
   if (!name) return showToast('Ievadi turnīra nosaukumu');
-  if (!registrationEndTime || !startTime) return showToast('Ievadi abus laikus');
+  if (!registrationEndTime || !startTime) return showToast('Ievadi turnīra sākuma laiku');
 
   socket.emit('createTournament', { name, maxParticipants, seriesFormat, gameId, registrationEndTime, startTime, isPrivate });
 });
@@ -604,6 +742,11 @@ socket.on('tournamentResultsData', (results) => {
 // Any tournament change (someone else joining, registration closing, etc.)
 // refreshes whichever tournament view is currently open.
 socket.on('tournamentUpdated', ({ id, deleted, bulkDeleted }) => {
+  // The lobby-page public tournaments section is always mounted (even for
+  // guests, who never open the modal at all), so it refreshes on every
+  // change regardless of what's happening inside the modal below.
+  socket.emit('listPublicTournaments');
+
   if (bulkDeleted) {
     if (tCurrentView === 'detail') {
       tOpenDetailId = null;
@@ -628,6 +771,79 @@ socket.on('tournamentUpdated', ({ id, deleted, bulkDeleted }) => {
 
 socket.on('adminBulkDeleteResult', ({ count }) => {
   showToast(count > 0 ? `Dzēsti ${count} pabeigti turnīri` : 'Nav neviena pabeigta turnīra dzēšanai');
+});
+
+// ---------- admin cleanup tool (kritērijos balstīta turnīru dzēšana) ----------
+
+const tCleanupReasonLabel = {
+  few_participants: 'par maz dalībnieku',
+  stuck_past_start: 'iestrēdzis reģistrācijā',
+  stale: 'vecs/neaktīvs',
+  empty_private: 'privāts, bez dalībniekiem',
+};
+
+function tReadCleanupCriteria() {
+  return {
+    minParticipants: { enabled: el('tCleanupMinEnabled').checked, value: el('tCleanupMinValue').value },
+    stuckPastStart: { enabled: el('tCleanupStuckEnabled').checked },
+    olderThanDays: { enabled: el('tCleanupOldEnabled').checked, value: el('tCleanupOldValue').value },
+    emptyPrivate: { enabled: el('tCleanupEmptyPrivateEnabled').checked },
+  };
+}
+
+el('tCleanupToggleBtn').addEventListener('click', () => {
+  const panel = el('tCleanupPanel');
+  const nowHidden = !panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', nowHidden);
+  if (nowHidden) {
+    el('tCleanupPreviewList').innerHTML = '';
+    el('tCleanupDeleteBtn').classList.add('hidden');
+  }
+});
+
+el('tCleanupPreviewBtn').addEventListener('click', () => {
+  socket.emit('adminPreviewCleanup', tReadCleanupCriteria());
+});
+
+socket.on('adminCleanupPreview', ({ items }) => {
+  const list = el('tCleanupPreviewList');
+  list.innerHTML = '';
+  el('tCleanupDeleteBtn').classList.toggle('hidden', items.length === 0);
+  el('tCleanupDeleteBtn').textContent = `Dzēst atlasītos (${items.length})`;
+
+  if (items.length === 0) {
+    list.innerHTML = '<p class="muted small">Neviens turnīrs neatbilst atzīmētajiem kritērijiem.</p>';
+    return;
+  }
+
+  items.forEach((t) => {
+    const row = document.createElement('div');
+    row.className = 'cleanup-preview-row';
+    const title = document.createElement('div');
+    title.className = 'cleanup-preview-row-title';
+    title.textContent = t.name + (t.isPrivate ? ' 🔒' : '');
+    const meta = document.createElement('div');
+    meta.className = 'cleanup-preview-row-meta';
+    const reasons = t.reasons.map((r) => tCleanupReasonLabel[r] || r).join(', ');
+    meta.textContent =
+      `${t.participantCount}/${t.maxParticipants} dalībnieki · ${tStatusLabel(t)} · ` +
+      `sākums ${tFormatDateTime(t.startTime)} · iemesls: ${reasons}`;
+    row.appendChild(title);
+    row.appendChild(meta);
+    list.appendChild(row);
+  });
+});
+
+el('tCleanupDeleteBtn').addEventListener('click', () => {
+  const count = el('tCleanupPreviewList').children.length;
+  if (!confirm(`Dzēst ${count} turnīru(s)? Šo darbību nevar atsaukt.`)) return;
+  socket.emit('adminRunCleanup', tReadCleanupCriteria());
+});
+
+socket.on('adminCleanupResult', ({ count }) => {
+  showToast(count > 0 ? `Dzēsti ${count} turnīri` : 'Neviens turnīrs neatbilda kritērijiem');
+  el('tCleanupPreviewList').innerHTML = '';
+  el('tCleanupDeleteBtn').classList.add('hidden');
 });
 
 socket.on('tournamentPlayerWithdrew', ({ username: withdrawnUsername, tournamentName }) => {

@@ -29,12 +29,14 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
 const TOURNAMENTS_FILE = path.join(DATA_DIR, 'tournaments.json');
 const RESULTS_FILE = path.join(DATA_DIR, 'tournament-results.json');
 
-// A player must have at least this many completed real games before they're
-// allowed to CREATE a tournament (Duraks has no formal rank/rating system
-// yet, so "established player" is approximated by games played). Tunable —
-// separate from requiredRank, which is a per-tournament JOIN gate the
-// organizer sets themselves.
-const MIN_GAMES_TO_CREATE = 0;
+// A player must have at least this many completed real games — against a
+// live human opponent, specifically; stats.played only counts games with
+// zero bots involved (see users.js/recordResult and multi-rooms.js's
+// vsBots check) — before they're allowed to CREATE a tournament (Duraks has
+// no formal rank/rating system yet, so "established player" is approximated
+// by games played). Tunable — separate from requiredRank, which is a
+// per-tournament JOIN gate the organizer sets themselves.
+const MIN_GAMES_TO_CREATE = 3;
 
 // --- persistence -----------------------------------------------------------
 
@@ -139,6 +141,16 @@ function canCreateTournament(stats) {
   return !!stats && stats.played >= MIN_GAMES_TO_CREATE;
 }
 
+/** A user may only have one tournament "open" (i.e. not yet completed or
+ *  cancelled) that THEY created at a time — this checks by createdBy, not
+ *  by participation, so someone can still join as many other organizers'
+ *  tournaments as they like; it only limits how many they're running. */
+function hasOpenTournament(username) {
+  return [...registry.values()].some(
+    (t) => t.createdBy === username && t.status !== 'completed' && t.status !== 'cancelled'
+  );
+}
+
 // --- CRUD ------------------------------------------------------------------
 
 /**
@@ -205,6 +217,65 @@ function deleteAllCompleted() {
   }
   if (count > 0) persistTournaments();
   return count;
+}
+
+/**
+ * Admin cleanup tool: finds tournaments matching any of a set of
+ * criteria the admin can toggle on/off. A tournament matches (and is
+ * therefore a deletion candidate) if it satisfies ANY enabled criterion —
+ * this is meant for clearing out junk/abandoned tournaments, not a
+ * precise single-purpose filter.
+ *
+ * 'active' tournaments (a series actually being played right now) are
+ * always excluded, regardless of criteria — deleting one out from under
+ * players mid-match would break their games.
+ *
+ * @param {object} criteria
+ * @param {number|null} criteria.minParticipants - flag tournaments with
+ *   fewer than this many participants, any status (except active).
+ * @param {boolean} criteria.stuckPastStart - flag tournaments still in
+ *   'registration' whose start time has already passed (registration was
+ *   never closed / bracket never generated).
+ * @param {number|null} criteria.olderThanDays - flag not-yet-completed
+ *   tournaments created more than this many days ago.
+ * @param {boolean} criteria.emptyPrivate - flag private tournaments with
+ *   zero participants.
+ * @returns {Array<{tournament: Tournament, reasons: string[]}>}
+ */
+function findCleanupCandidates(criteria) {
+  const now = Date.now();
+  const results = [];
+  for (const t of listAll()) {
+    if (t.status === 'active') continue;
+    const reasons = [];
+    if (criteria.minParticipants != null && t.participants.length < criteria.minParticipants) {
+      reasons.push('few_participants');
+    }
+    if (criteria.stuckPastStart && t.status === 'registration' && t.startTime.getTime() < now) {
+      reasons.push('stuck_past_start');
+    }
+    if (criteria.olderThanDays != null && t.status !== 'completed') {
+      const ageMs = now - t.createdAt.getTime();
+      if (ageMs > criteria.olderThanDays * 24 * 60 * 60 * 1000) reasons.push('stale');
+    }
+    if (criteria.emptyPrivate && t.isPrivate && t.participants.length === 0) {
+      reasons.push('empty_private');
+    }
+    if (reasons.length > 0) results.push({ tournament: t, reasons });
+  }
+  return results;
+}
+
+/** Deletes every tournament matching findCleanupCandidates(criteria) in one
+ *  pass. Returns the count removed. Access control is enforced by the
+ *  caller. Re-derives the match set itself (rather than trusting a list of
+ *  ids from the client) so a stale preview can't delete something that no
+ *  longer matches. */
+function deleteCleanupCandidates(criteria) {
+  const matches = findCleanupCandidates(criteria);
+  matches.forEach(({ tournament }) => registry.delete(tournament.id));
+  if (matches.length > 0) persistTournaments();
+  return matches.length;
 }
 
 function joinTournament(id, player) {
@@ -440,6 +511,7 @@ module.exports = {
   MIN_GAMES_TO_CREATE,
   statsToRating,
   canCreateTournament,
+  hasOpenTournament,
   createTournament,
   getTournament,
   getTournamentByInviteCode,
@@ -450,6 +522,8 @@ module.exports = {
   leaveTournament,
   deleteTournament,
   deleteAllCompleted,
+  findCleanupCandidates,
+  deleteCleanupCandidates,
   cancelTournament,
   closeRegistrationAndGenerateBracket,
   recordTournamentPlacement,

@@ -76,36 +76,6 @@
   color: var(--cream);
 }
 
-.datetime-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 14px;
-}
-.datetime-row select {
-  padding: 8px 6px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(201, 162, 75, 0.3);
-  border-radius: 6px;
-  color: var(--cream);
-  font-family: var(--font-ui);
-  font-size: 0.85rem;
-}
-.datetime-row select option {
-  background-color: var(--felt);
-  color: var(--cream);
-}
-.datetime-row .datetime-day,
-.datetime-row .datetime-hour,
-.datetime-row .datetime-minute { width: 58px; }
-.datetime-row .datetime-month { width: 110px; }
-.datetime-row .datetime-year { width: 78px; margin-right: 8px; }
-.datetime-row .datetime-slash,
-.datetime-row .datetime-colon {
-  color: var(--muted);
-  font-weight: bold;
-}
-
 .tournament-list {
   display: flex;
   flex-direction: column;
@@ -155,6 +125,87 @@
   margin: 4px 0 18px;
 }
 .checkbox-field-row .checkbox-field { margin: 0; }
+
+/* ---------- admin cleanup tool (tournament list view) ---------- */
+
+.tournament-cleanup-panel {
+  margin: 4px 0 16px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(201, 162, 75, 0.25);
+  border-radius: 8px;
+}
+.cleanup-criterion-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 18px;
+}
+.cleanup-criterion-row .checkbox-field { margin: 0; flex-shrink: 0; }
+.cleanup-inline-input {
+  width: 64px;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  border-radius: 6px;
+  color: var(--cream);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+}
+.cleanup-preview-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(201, 162, 75, 0.18);
+  border-radius: 6px;
+}
+.cleanup-preview-row-title {
+  font-family: var(--font-display);
+  color: var(--gold-bright);
+  font-size: 0.88rem;
+}
+.cleanup-preview-row-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* Range slider for tournament max-participant count — styled to match the
+   gold/cream palette used everywhere else, in both WebKit and Firefox. */
+input[type="range"].slider {
+  width: 100%;
+  margin: 8px 0 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.12);
+  outline: none;
+}
+input[type="range"].slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  border: 2px solid rgba(0,0,0,0.25);
+  cursor: pointer;
+  margin-top: -1px;
+}
+input[type="range"].slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  border: 2px solid rgba(0,0,0,0.25);
+  cursor: pointer;
+}
+input[type="range"].slider::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.12);
+}
 
 .hint {
   font-size: 0.72rem;

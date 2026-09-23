@@ -42,7 +42,7 @@ const GAMES = {
     id: 'duraks-36',
     name: 'Duraks (36 kārtis)',
     description: 'Duraks variants ar mazāku, 36 kāršu kavu (6 līdz A).',
-    public: false,
+    public: true,
     createEngine: (playerUsernames) => new duraks36.Game(playerUsernames),
   },
 
