@@ -1,0 +1,54 @@
+{
+  "posts": [
+    {
+      "id": "5c4fe8de41a5baef",
+      "type": "atsauksme",
+      "text": "Testa atsauksme",
+      "author": "zivs",
+      "isGuest": false,
+      "status": "jauns",
+      "createdAt": 1790461800277,
+      "editedAt": null,
+      "comments": []
+    },
+    {
+      "id": "3e65d91d2481cc22",
+      "type": "ieteikums",
+      "text": "Testa ieteikums",
+      "author": "zivs",
+      "isGuest": false,
+      "status": "jauns",
+      "createdAt": 1790461817372,
+      "editedAt": null,
+      "comments": []
+    },
+    {
+      "id": "05003710a30d07b1",
+      "type": "kluda",
+      "text": "Testa kļūda",
+      "author": "zivs",
+      "isGuest": false,
+      "status": "jauns",
+      "createdAt": 1790461826653,
+      "editedAt": null,
+      "comments": [
+        {
+          "id": "ffb93cc6b5027513",
+          "text": "Komentārs",
+          "author": "zivs",
+          "isGuest": false,
+          "createdAt": 1790461843270,
+          "editedAt": null
+        },
+        {
+          "id": "daa744f76c91d69e",
+          "text": "Komentārs 2",
+          "author": "nezivs",
+          "isGuest": false,
+          "createdAt": 1790461868261,
+          "editedAt": null
+        }
+      ]
+    }
+  ]
+}

@@ -713,12 +713,18 @@
       "knownIps": [
         {
           "ip": "::1",
-          "count": 42,
+          "count": 62,
           "firstSeen": 1789856787361,
-          "lastSeen": 1790443137661
+          "lastSeen": 1790462527874
         }
       ],
-      "sessionTokens": [],
+      "sessionTokens": [
+        {
+          "hash": "db9dbc02946c58c46cbaedb82f0c104cfe5ff07264c2ab820644436aeb6e9660",
+          "createdAt": 1790461492694,
+          "expiresAt": 1793054527874
+        }
+      ],
       "eloByPool": {
         "oneVOne": 984
       }
@@ -987,6 +993,11 @@
       },
       "sessionTokens": [
         {
+          "hash": "f364091b582798ec2149cfd0f794ea8a705f33de8e0e5742ac84d02c6db9f845",
+          "createdAt": 1790461857842,
+          "expiresAt": 1793053876706
+        },
+        {
           "hash": "03c1c5e230e749fb23235203365564b09f8cb624e7621b8f92a28bc5346ea178",
           "createdAt": 1790189959997,
           "expiresAt": 1792781959997
@@ -995,9 +1006,9 @@
       "knownIps": [
         {
           "ip": "::1",
-          "count": 1,
+          "count": 5,
           "firstSeen": 1790189959997,
-          "lastSeen": 1790189959997
+          "lastSeen": 1790461876707
         }
       ],
       "eloByPool": {
@@ -1043,15 +1054,15 @@
       "date": "2026-09-23",
       "played": 1
     },
-    "vsBotAllTime": 39,
+    "vsBotAllTime": 41,
     "vsBotDaily": {
-      "date": "2026-09-23",
-      "played": 6
+      "date": "2026-09-26",
+      "played": 2
     },
-    "pageVisitsAllTime": 157,
+    "pageVisitsAllTime": 173,
     "pageVisitsDaily": {
       "date": "2026-09-26",
-      "count": 8
+      "count": 24
     }
   }
 }

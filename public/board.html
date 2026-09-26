@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light" />
+<title>Atsauksmes — Duraks</title>
+<link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="multi.css" />
+<link rel="stylesheet" href="board.css" />
+</head>
+<body>
+
+<div class="board-page">
+  <header class="board-header">
+    <a href="/" class="board-back">&larr; Atpakaļ uz spēli</a>
+    <h1 class="wordmark board-title">Atsauksmes<span class="accent">.</span></h1>
+    <p class="tagline">Ziņo par kļūdām, dalies ar ieteikumiem, saki, kas patīk vai nepatīk</p>
+  </header>
+
+  <section class="board-card">
+    <h2 class="board-section-title">Jauns ieraksts</h2>
+    <div class="field">
+      <span>Veids</span>
+      <div class="board-type-group" id="newPostTypeGroup">
+        <button type="button" class="btn-option" data-value="atsauksme">💬 Atsauksme</button>
+        <button type="button" class="btn-option" data-value="ieteikums">💡 Ieteikums</button>
+        <button type="button" class="btn-option" data-value="kluda">🐞 Kļūda</button>
+      </div>
+    </div>
+    <label class="field" id="guestNameField">
+      <span>Tavs vārds (nav obligāts)</span>
+      <input id="newPostGuestName" type="text" maxlength="40" placeholder="Anonīms" />
+    </label>
+    <label class="field">
+      <span>Teksts</span>
+      <textarea id="newPostText" rows="4" maxlength="2000" placeholder="Apraksti savu ieteikumu, atsauksmi vai novēroto kļūdu..."></textarea>
+    </label>
+    <!-- Honeypot: real users never see or fill this in (hidden via CSS,
+         off-canvas, no label) — a generic form-filling bot usually will. -->
+    <label class="board-honeypot" aria-hidden="true">
+      <span>Website</span>
+      <input id="newPostHoneypot" type="text" tabindex="-1" autocomplete="off" />
+    </label>
+    <button id="newPostSubmitBtn" class="btn btn-primary">Publicēt</button>
+    <p id="newPostStatus" class="board-status hidden"></p>
+  </section>
+
+  <section class="board-list-section">
+    <h2 class="board-section-title">Ieraksti</h2>
+    <div id="boardEmpty" class="board-empty hidden">Vēl nav neviena ieraksta — esi pirmais!</div>
+    <div id="boardList" class="board-list"></div>
+  </section>
+</div>
+
+<div id="boardToast" class="toast hidden"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="board-client.js"></script>
+</body>
+</html>
