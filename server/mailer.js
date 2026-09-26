@@ -31,11 +31,18 @@ const configured = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
 
 let transporter = null;
 if (configured) {
+//  transporter = nodemailer.createTransport({
+//    host: SMTP_HOST,
+//    port: SMTP_PORT,
+//    secure: SMTP_PORT === 465,
+//    auth: { user: SMTP_USER, pass: SMTP_PASS },
+//  });
   transporter = nodemailer.createTransport({
     host: SMTP_HOST,
     port: SMTP_PORT,
     secure: SMTP_PORT === 465,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
+    family: 4,   // forces IPv4 — Railway has no outbound IPv6 route
   });
 }
 
