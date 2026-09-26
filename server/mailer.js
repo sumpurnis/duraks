@@ -1,60 +1,55 @@
 'use strict';
 
-// Thin wrapper around nodemailer for the two transactional emails this app
-// sends: a password-reset link and a username reminder. Configured purely
-// through environment variables so no credentials ever live in code or in
-// chat — set these on the host (e.g. Railway's Variables tab):
+// Thin wrapper around the Resend HTTPS email API for the two transactional
+// emails this app sends: a password-reset link and a username reminder.
 //
-//   SMTP_HOST   e.g. smtp.gmail.com
-//   SMTP_PORT   e.g. 465 (SSL) or 587 (STARTTLS) — defaults to 587
-//   SMTP_USER   the sending account's address
-//   SMTP_PASS   an app password (NOT the account's normal login password —
-//               Gmail and most providers require a separate 16-character
-//               "app password" for SMTP, generated in the account's
-//               security settings)
-//   MAIL_FROM   optional; defaults to SMTP_USER
+// Why Resend's HTTPS API instead of raw SMTP: many cloud hosts (Railway
+// included) block outbound SMTP ports (25/465/587) entirely to prevent
+// spam abuse, so nodemailer-over-SMTP just times out there no matter how
+// it's configured. An HTTPS API call on port 443 isn't affected by that,
+// and Resend's free tier (3,000 emails/month) is enough for this app.
+// Uses Node's built-in fetch, so no extra dependency is needed.
+//
+// Configured purely through environment variables so no credentials ever
+// live in code or in chat — set these on the host (e.g. Railway's
+// Variables tab):
+//
+//   RESEND_API_KEY   from https://resend.com/api-keys
+//   MAIL_FROM        the verified sending address, e.g.
+//                     "Duraks <info@yourdomain.com>", or Resend's shared
+//                     "onboarding@resend.dev" sender while testing before
+//                     you've verified your own domain
 //
 // If these aren't set (e.g. in local dev, or this sandbox), emails aren't
 // actually sent — the content is logged to the console instead, so the
 // reset-link/username-reminder flow can still be developed and tested
 // end-to-end without a real mailbox.
 
-const nodemailer = require('nodemailer');
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const MAIL_FROM = process.env.MAIL_FROM || 'onboarding@resend.dev';
 
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
-const MAIL_FROM = process.env.MAIL_FROM || SMTP_USER;
-
-const configured = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
-
-let transporter = null;
-if (configured) {
-//  transporter = nodemailer.createTransport({
-//    host: SMTP_HOST,
-//    port: SMTP_PORT,
-//    secure: SMTP_PORT === 465,
-//    auth: { user: SMTP_USER, pass: SMTP_PASS },
-//  });
-  transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-    family: 4,   // forces IPv4 — Railway has no outbound IPv6 route
-  });
-}
+const configured = !!RESEND_API_KEY;
 
 async function send(to, subject, text, html) {
   if (!configured) {
     console.log(
-      `\n[mailer] SMTP nav konfigurēts (trūkst SMTP_HOST/SMTP_USER/SMTP_PASS) — e-pasts NAV nosūtīts.\n` +
+      `\n[mailer] RESEND_API_KEY nav konfigurēts — e-pasts NAV nosūtīts.\n` +
         `Būtu nosūtīts uz: ${to}\nTēma: ${subject}\n${text}\n`
     );
     return;
   }
-  await transporter.sendMail({ from: MAIL_FROM, to, subject, text, html });
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from: MAIL_FROM, to, subject, text, html }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Resend API error ${res.status}: ${body}`);
+  }
 }
 
 function sendPasswordResetEmail(to, username, link) {
