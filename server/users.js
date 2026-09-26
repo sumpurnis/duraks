@@ -71,6 +71,35 @@ function normalize(username) {
   return String(username || '').trim().slice(0, 20);
 }
 
+// Deliberately simple/lenient (not full RFC 5322) — good enough to catch
+// typos and missing @ / domain, without rejecting valid-but-unusual
+// addresses. Lowercased so lookups and uniqueness checks are
+// case-insensitive, matching how virtually every real mail provider
+// treats the address anyway.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeEmail(email) {
+  const trimmed = String(email || '').trim().toLowerCase();
+  if (!trimmed || !EMAIL_RE.test(trimmed)) return null;
+  return trimmed;
+}
+
+function isValidEmail(email) {
+  return !!normalizeEmail(email);
+}
+
+// Linear scan over all accounts — fine at this app's scale (hundreds to
+// low thousands of accounts), and avoids keeping a second persisted index
+// in sync with store.users by hand.
+function findUsernameByEmail(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
+  for (const [name, record] of Object.entries(store.users)) {
+    if (record.email === normalized) return name;
+  }
+  return null;
+}
+
 function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString('hex');
 }
@@ -125,6 +154,7 @@ function toPublic(username, record) {
   return {
     username,
     email: record.email || null,
+    linkedProviders: record.oauth ? Object.keys(record.oauth) : [],
     stats: publicStats(record),
     lastRoomSettings: record.lastRoomSettings || null,
   };
@@ -135,18 +165,43 @@ function usernameExists(username) {
 }
 
 // Creates a brand-new account. Returns the public record, or null if the
-// name is invalid, the password is too short, or the name is already taken.
-function createAccount(username, password) {
+// name is invalid, the password is too short, the name is already taken,
+// or the email is missing/invalid/already used by another account. Email
+// is required from here on so every new account can use the password/
+// username recovery flow below — existing accounts created before this
+// (with email: null) keep working and can add one later via updateEmail.
+function createAccount(username, password, email) {
   const name = normalize(username);
   if (!name) return null;
   if (!password || password.length < MIN_PASSWORD_LEN) return null;
   if (store.users[name]) return null;
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+  if (findUsernameByEmail(normalizedEmail)) return null;
 
-  const record = { createdAt: Date.now(), email: null, stats: blankStats() };
+  const record = { createdAt: Date.now(), email: normalizedEmail, stats: blankStats() };
   setPassword(record, password);
   store.users[name] = record;
   save();
   return toPublic(name, record);
+}
+
+// Adds or changes an existing account's email — the only way a
+// pre-existing account (registered back when email wasn't collected) gets
+// one on file, and how anyone updates it later. Returns
+// { ok: true, email } on success, or { ok: false, error } with a
+// user-facing Latvian message otherwise.
+function updateEmail(username, email) {
+  const name = normalize(username);
+  const record = store.users[name];
+  if (!record) return { ok: false, error: 'Lietotājs nav atrasts' };
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return { ok: false, error: 'Nederīga e-pasta adrese' };
+  const owner = findUsernameByEmail(normalizedEmail);
+  if (owner && owner !== name) return { ok: false, error: 'Šis e-pasts jau tiek izmantots citam kontam' };
+  record.email = normalizedEmail;
+  save();
+  return { ok: true, email: normalizedEmail };
 }
 
 // Verifies an existing account's password. Returns the public record, or
@@ -225,6 +280,114 @@ function invalidateSessionToken(username, token) {
   const hash = hashToken(token);
   record.sessionTokens = tokens.filter((t) => t.hash !== hash);
   save();
+}
+
+// ---------- Password reset tokens ----------
+//
+// Same shape/reasoning as session tokens above (single-use, hashed at
+// rest, expiring) but much shorter-lived and single-purpose: proving
+// "whoever clicked this link controls the account's email inbox", not
+// "keep this browser logged in". A fresh token replaces any unused one
+// for that account, so only the most recently requested reset link ever
+// works — requesting a new one silently invalidates an older email still
+// sitting in an inbox.
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function createPasswordResetToken(username) {
+  const name = normalize(username);
+  const record = store.users[name];
+  if (!record) return null;
+  const token = crypto.randomBytes(32).toString('hex');
+  record.resetToken = { hash: hashToken(token), expiresAt: Date.now() + RESET_TOKEN_TTL_MS };
+  save();
+  return token;
+}
+
+// Looks up which account a reset token belongs to, without consuming it —
+// used to validate a token before showing the "set new password" form.
+function findUsernameByResetToken(token) {
+  if (!token) return null;
+  const hash = hashToken(token);
+  const now = Date.now();
+  for (const [name, record] of Object.entries(store.users)) {
+    if (record.resetToken && record.resetToken.hash === hash && record.resetToken.expiresAt > now) {
+      return name;
+    }
+  }
+  return null;
+}
+
+// Validates the token, sets the new password, and consumes the token (and
+// every existing session — a password reset is exactly the moment to log
+// out any device someone else might be using). Returns true on success.
+function resetPasswordWithToken(token, newPassword) {
+  if (!newPassword || newPassword.length < MIN_PASSWORD_LEN) return false;
+  const name = findUsernameByResetToken(token);
+  if (!name) return false;
+  const record = store.users[name];
+  setPassword(record, newPassword);
+  delete record.resetToken;
+  record.sessionTokens = [];
+  save();
+  return true;
+}
+
+// ---------- OAuth (Google / Facebook) linked accounts ----------
+//
+// Each account can optionally have one identity per provider linked to it:
+// record.oauth = { google: { id, email }, facebook: { id, email } }.
+// Lookup is a linear scan, same reasoning as findUsernameByEmail above —
+// fine at this app's scale, and avoids a second index to keep in sync.
+
+function findUsernameByOAuth(provider, providerId) {
+  if (!provider || !providerId) return null;
+  for (const [name, record] of Object.entries(store.users)) {
+    const link = record.oauth && record.oauth[provider];
+    if (link && link.id === providerId) return name;
+  }
+  return null;
+}
+
+// Links a provider identity to an already-existing account (used both
+// right after createAccountFromOAuth, and when someone signs in with a
+// provider whose email matches an account they already have). If that
+// account has no email on file yet, adopts the provider's verified email
+// for it too — a free upgrade for pre-existing no-email accounts, as long
+// as that email isn't already claimed by some other account.
+function linkOAuth(username, provider, providerId, email) {
+  const name = normalize(username);
+  const record = store.users[name];
+  if (!record) return false;
+  const normalizedEmail = normalizeEmail(email);
+  record.oauth = record.oauth || {};
+  record.oauth[provider] = { id: providerId, email: normalizedEmail };
+  if (!record.email && normalizedEmail && !findUsernameByEmail(normalizedEmail)) {
+    record.email = normalizedEmail;
+  }
+  save();
+  return true;
+}
+
+// Creates a brand-new account purely from an OAuth identity. No password
+// is ever shown to the person — a random one is generated internally so
+// the account still fits the existing salt/hash schema, and they can set
+// a real one later via "Aizmirsi paroli" (same reset-token flow as anyone
+// else) if they ever want to log in without the provider.
+function createAccountFromOAuth(username, provider, providerId, email) {
+  const name = normalize(username);
+  if (!name) return null;
+  if (store.users[name]) return null;
+  const normalizedEmail = normalizeEmail(email);
+  const record = {
+    createdAt: Date.now(),
+    email: normalizedEmail,
+    stats: blankStats(),
+    oauth: { [provider]: { id: providerId, email: normalizedEmail } },
+  };
+  setPassword(record, crypto.randomBytes(24).toString('hex'));
+  store.users[name] = record;
+  save();
+  return toPublic(name, record);
 }
 
 function recordResult(username, didWin, isForfeit) {
@@ -558,4 +721,14 @@ module.exports = {
   applyRankedGameResult,
   ELO_POOLS,
   MIN_PASSWORD_LEN,
+  isValidEmail,
+  normalizeEmail,
+  findUsernameByEmail,
+  updateEmail,
+  createPasswordResetToken,
+  findUsernameByResetToken,
+  resetPasswordWithToken,
+  findUsernameByOAuth,
+  linkOAuth,
+  createAccountFromOAuth,
 };

@@ -2,7 +2,7 @@
   "users": {
     "zivs": {
       "createdAt": 1787498110767,
-      "email": null,
+      "email": "girts.linkums@gmail.com",
       "stats": {
         "played": 10,
         "won": 5,
@@ -20,8 +20,8 @@
           "longestStreak": 0
         }
       },
-      "salt": "04f78cf8bc516dc56a40392986bb976f",
-      "hash": "4af31bbb4e627d1703e8c28e56c236424f0df62eb3c0a5dfd4537bc64c055eed0ac3bf155f8af17c7c910b7be598aa50c6406ed1c9bf935aa28fcef5abf4f0cf",
+      "salt": "7c04711ddbeb91c53d30b9ca952ada25",
+      "hash": "eddee924668bc6b514c713f27b5f90689af08dd1654ded50f816893f7bb7da18a0eef187cbf6948ba76dbd9dbbe06094c6f2afac48abfa1384d55071124448a8",
       "history": [
         {
           "mode": "multi",
@@ -713,23 +713,12 @@
       "knownIps": [
         {
           "ip": "::1",
-          "count": 41,
+          "count": 42,
           "firstSeen": 1789856787361,
-          "lastSeen": 1790191062352
+          "lastSeen": 1790443137661
         }
       ],
-      "sessionTokens": [
-        {
-          "hash": "b63842fcebd67c2b8bf9ddbd40bfe83ecccb9e6b50026ea64db7d83949e96452",
-          "createdAt": 1790185658940,
-          "expiresAt": 1792777658940
-        },
-        {
-          "hash": "6c1155ea8279baa78f78287053c3e149e09b1c7317d39d7054dc057fd1c25600",
-          "createdAt": 1789858600032,
-          "expiresAt": 1792783062352
-        }
-      ],
+      "sessionTokens": [],
       "eloByPool": {
         "oneVOne": 984
       }
@@ -1014,6 +1003,38 @@
       "eloByPool": {
         "oneVOne": 1016
       }
+    },
+    "tests": {
+      "createdAt": 1790444474424,
+      "email": "linkums@inbox.lv",
+      "stats": {
+        "played": 0,
+        "won": 0,
+        "lost": 0,
+        "wonByForfeit": 0,
+        "lostByForfeit": 0,
+        "currentStreak": 0,
+        "longestStreak": 0,
+        "daily": {
+          "date": "2026-09-26",
+          "played": 0,
+          "won": 0,
+          "lost": 0,
+          "currentStreak": 0,
+          "longestStreak": 0
+        }
+      },
+      "salt": "e3f35a7523d9bf94fbc0d131f03116b1",
+      "hash": "d7ae6a7d754d08a776cd48800f2aae8d603d5e7e4ae4ee97ed49afe78b689aa57deceb33e53b76cc823dbe89a5eb816ec1c80a29f4c0d2b42eaabf69536a4b7b",
+      "sessionTokens": [],
+      "knownIps": [
+        {
+          "ip": "::1",
+          "count": 1,
+          "firstSeen": 1790444474459,
+          "lastSeen": 1790444474459
+        }
+      ]
     }
   },
   "global": {
@@ -1027,10 +1048,10 @@
       "date": "2026-09-23",
       "played": 6
     },
-    "pageVisitsAllTime": 149,
+    "pageVisitsAllTime": 157,
     "pageVisitsDaily": {
-      "date": "2026-09-23",
-      "count": 21
+      "date": "2026-09-26",
+      "count": 8
     }
   }
 }

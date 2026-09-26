@@ -61,6 +61,8 @@ const gameScreen = el('game');
 
 let myId = null;
 let myUsername = null;
+let myEmail = null;
+let myLinkedProviders = [];
 let selectedCardId = null;
 let lastState = null;
 let authMode = null; // 'login' | 'register'
@@ -102,15 +104,18 @@ socket.on('usernameStatus', ({ exists }) => {
     authMode = 'login';
     el('passwordLabel').textContent = 'Parole';
     el('confirmField').classList.add('hidden');
+    el('emailField').classList.add('hidden');
     el('authBtn').textContent = 'Ielogoties';
   } else {
     authMode = 'register';
     el('passwordLabel').textContent = 'Izvēlies paroli';
     el('confirmField').classList.remove('hidden');
+    el('emailField').classList.remove('hidden');
     el('authBtn').textContent = 'Reģistrēties';
   }
   el('passwordInput').value = '';
   el('confirmInput').value = '';
+  el('emailInput').value = '';
   el('passwordInput').focus();
 });
 
@@ -123,13 +128,204 @@ function submitAuth() {
   const password = el('passwordInput').value;
   if (authMode === 'register') {
     const confirm = el('confirmInput').value;
+    const email = el('emailInput').value.trim();
     if (password.length < 8) return showLobbyError('Parolei jābūt vismaz 8 rakstzīmes garai');
     if (password !== confirm) return showLobbyError('Paroles nesakrīt');
-    socket.emit('register', { username: name, password });
+    if (!email) return showLobbyError('Ievadi e-pasta adresi — tā noder, ja kādreiz aizmirsīsi paroli vai lietotājvārdu');
+    socket.emit('register', { username: name, password, email });
   } else {
     socket.emit('login', { username: name, password });
   }
 }
+
+// ================= Account recovery (forgot password / username) =================
+
+el('forgotLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  el('recoveryEmailInput').value = '';
+  el('recoveryStatus').classList.add('hidden');
+  el('recoveryModal').classList.remove('hidden');
+  el('recoveryEmailInput').focus();
+});
+
+el('recoveryCloseBtn').addEventListener('click', () => {
+  el('recoveryModal').classList.add('hidden');
+});
+
+function recoveryEmailOrWarn() {
+  const email = el('recoveryEmailInput').value.trim();
+  if (!email) {
+    showToast('Ievadi e-pasta adresi');
+    return null;
+  }
+  return email;
+}
+
+el('recoverPasswordBtn').addEventListener('click', () => {
+  const email = recoveryEmailOrWarn();
+  if (!email) return;
+  socket.emit('forgotPassword', { email });
+});
+
+el('recoverUsernameBtn').addEventListener('click', () => {
+  const email = recoveryEmailOrWarn();
+  if (!email) return;
+  socket.emit('forgotUsername', { email });
+});
+
+function showRecoveryStatus(msg) {
+  const p = el('recoveryStatus');
+  p.textContent = msg;
+  p.classList.remove('hidden');
+}
+
+socket.on('forgotPasswordSent', () => {
+  showRecoveryStatus('Ja šis e-pasts pieder kādam kontam, uz to nosūtījām paroles atiestatīšanas saiti (derīga 1 stundu).');
+});
+
+socket.on('forgotUsernameSent', () => {
+  showRecoveryStatus('Ja šis e-pasts pieder kādam kontam, uz to nosūtījām atgādinājumu ar lietotājvārdu.');
+});
+
+// ================= Reset-password screen (?reset=TOKEN in the URL) =================
+
+const resetTokenFromUrl = urlParams.get('reset');
+
+if (resetTokenFromUrl) {
+  el('resetPasswordModal').classList.remove('hidden');
+  socket.emit('checkResetToken', { token: resetTokenFromUrl });
+}
+
+socket.on('resetTokenStatus', ({ valid }) => {
+  if (!resetTokenFromUrl) return;
+  if (valid) {
+    el('resetPasswordFormFields').classList.remove('hidden');
+    el('resetPasswordIntro').classList.remove('hidden');
+    el('resetPasswordInvalid').classList.add('hidden');
+  } else {
+    el('resetPasswordFormFields').classList.add('hidden');
+    el('resetPasswordIntro').classList.add('hidden');
+    el('resetPasswordInvalid').classList.remove('hidden');
+  }
+});
+
+function clearResetTokenFromUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('reset');
+  window.history.replaceState({}, '', url);
+}
+
+el('resetPasswordSubmitBtn').addEventListener('click', () => {
+  const newPassword = el('resetNewPasswordInput').value;
+  const confirm = el('resetConfirmPasswordInput').value;
+  if (newPassword.length < 8) return showToast('Parolei jābūt vismaz 8 rakstzīmes garai');
+  if (newPassword !== confirm) return showToast('Paroles nesakrīt');
+  socket.emit('resetPassword', { token: resetTokenFromUrl, newPassword });
+});
+
+socket.on('passwordResetDone', () => {
+  clearResetTokenFromUrl();
+  el('resetPasswordModal').classList.add('hidden');
+  showToast('Parole nomainīta! Tagad vari ielogoties ar jauno paroli.');
+});
+
+el('resetPasswordCloseBtn').addEventListener('click', () => {
+  clearResetTokenFromUrl();
+  el('resetPasswordModal').classList.add('hidden');
+});
+
+// ================= Email settings (add/change email on an existing account) =================
+
+const OAUTH_PROVIDER_LABELS = { google: 'Google', facebook: 'Facebook' };
+
+el('emailSettingsLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  el('emailSettingsInput').value = myEmail || '';
+  el('emailSettingsStatus').classList.add('hidden');
+  const linkedP = el('emailSettingsLinked');
+  if (myLinkedProviders.length > 0) {
+    linkedP.textContent = 'Saistīti konti: ' + myLinkedProviders.map((p) => OAUTH_PROVIDER_LABELS[p] || p).join(', ');
+    linkedP.classList.remove('hidden');
+  } else {
+    linkedP.classList.add('hidden');
+  }
+  el('emailSettingsModal').classList.remove('hidden');
+  el('emailSettingsInput').focus();
+});
+
+el('emailSettingsCloseBtn').addEventListener('click', () => {
+  el('emailSettingsModal').classList.add('hidden');
+});
+
+el('emailSettingsSaveBtn').addEventListener('click', () => {
+  const email = el('emailSettingsInput').value.trim();
+  if (!email) return showToast('Ievadi e-pasta adresi');
+  socket.emit('updateEmail', { email });
+});
+
+socket.on('emailUpdated', ({ email }) => {
+  myEmail = email;
+  const p = el('emailSettingsStatus');
+  p.textContent = 'Saglabāts!';
+  p.classList.remove('hidden');
+});
+
+// ================= Google / Facebook login =================
+//
+// The actual OAuth dance happens server-side over plain HTTP (see
+// /auth/:provider in server.js) since the provider has to redirect the
+// browser itself — a socket can't receive that. This client's job is
+// just: (a) show the buttons only for providers that are actually
+// configured, and (b) pick up the result once the server redirects back
+// to us with one of three query-param shapes.
+
+fetch('/auth/providers')
+  .then((r) => r.json())
+  .then(({ google, facebook }) => {
+    if (google) el('googleLoginBtn').classList.remove('hidden');
+    if (facebook) el('facebookLoginBtn').classList.remove('hidden');
+    if (google || facebook) el('oauthButtons').classList.remove('hidden');
+  })
+  .catch(() => {}); // no providers configured (or offline) — buttons just stay hidden
+
+function clearOAuthParamsFromUrl() {
+  const url = new URL(window.location.href);
+  ['oauthUser', 'oauthToken', 'oauthChoose', 'suggested', 'oauthError'].forEach((k) => url.searchParams.delete(k));
+  window.history.replaceState({}, '', url);
+}
+
+const oauthUser = urlParams.get('oauthUser');
+const oauthToken = urlParams.get('oauthToken');
+const oauthChooseToken = urlParams.get('oauthChoose');
+const oauthSuggested = urlParams.get('suggested');
+const oauthError = urlParams.get('oauthError');
+
+if (oauthUser && oauthToken) {
+  // Same shape as the normal "remember me" reconnect — just arrived via a
+  // redirect instead of localStorage already having it.
+  localStorage.setItem(USER_KEY, oauthUser);
+  localStorage.setItem(TOKEN_KEY, oauthToken);
+  autoLoginAttempted = true;
+  socket.emit('loginWithToken', { username: oauthUser, token: oauthToken });
+  clearOAuthParamsFromUrl();
+} else if (oauthChooseToken) {
+  el('oauthUsernameInput').value = oauthSuggested || '';
+  el('oauthChooseUsernameModal').classList.remove('hidden');
+  clearOAuthParamsFromUrl();
+  el('oauthUsernameSubmitBtn').addEventListener('click', () => {
+    const chosen = el('oauthUsernameInput').value.trim();
+    if (!chosen) return showToast('Ievadi lietotājvārdu');
+    socket.emit('completeOAuthSignup', { pendingToken: oauthChooseToken, username: chosen });
+  });
+} else if (oauthError) {
+  showToast(oauthError);
+  clearOAuthParamsFromUrl();
+}
+
+// A successful completeOAuthSignup fires the normal 'registered' event
+// (handled above), which shows playStep — just also make sure this modal
+// isn't left sitting open over it.
+socket.on('registered', () => el('oauthChooseUsernameModal').classList.add('hidden'));
 
 el('switchUserLink').addEventListener('click', (e) => {
   e.preventDefault();
@@ -138,6 +334,7 @@ el('switchUserLink').addEventListener('click', (e) => {
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(TOKEN_KEY);
   myUsername = null;
+  myEmail = null;
   window.lastRoomSettings = null;
   el('playStep').classList.add('hidden');
   el('authStep').classList.remove('hidden');
@@ -149,6 +346,8 @@ el('switchUserLink').addEventListener('click', (e) => {
 
 socket.on('registered', (rec) => {
   myUsername = rec.username;
+  myEmail = rec.email || null;
+  myLinkedProviders = rec.linkedProviders || [];
   autoLoginAttempted = false;
   localStorage.setItem(USER_KEY, myUsername);
   // sessionToken is only present on register/login/loginWithToken (not on

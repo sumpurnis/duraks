@@ -1,6 +1,9 @@
 'use strict';
 
+require('dotenv').config();
+
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -11,6 +14,8 @@ const tournaments = require('./server/tournament/store');
 const { generateBracket } = require('./server/tournament/bracket-generator');
 const registerMultiHandlers = require('./server/multi-rooms');
 const { createRateLimiter } = require('./server/rate-limit');
+const mailer = require('./server/mailer');
+const oauth = require('./server/oauth');
 
 const app = express();
 const server = http.createServer(app);
@@ -30,12 +35,117 @@ const AI_MOVE_DELAY_MS = [500, 1100]; // randomized range, feels less instant/ro
 const loginLimiter = createRateLimiter({ max: 8, windowMs: 60 * 1000, blockMs: 2 * 60 * 1000 });
 const registerLimiter = createRateLimiter({ max: 5, windowMs: 10 * 60 * 1000, blockMs: 10 * 60 * 1000 });
 const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs: 60 * 1000 });
+// Covers forgotPassword + forgotUsername together (both just email an
+// existing account, same abuse shape) — generous enough for a genuine
+// "tried the wrong email twice" case, tight enough to blunt using this as
+// a free way to spam someone's inbox.
+const forgotLimiter = createRateLimiter({ max: 5, windowMs: 15 * 60 * 1000, blockMs: 15 * 60 * 1000 });
 
 app.get('/', (req, res) => {
   users.recordPageVisit();
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ---------- Google / Facebook login (OAuth2, plain HTTP redirects) ----------
+//
+// This is the one part of auth that can't go through Socket.io — the
+// provider itself has to redirect the browser back to us with a `code`.
+// Once that round-trip is done, control is handed back to the normal
+// socket-based auth: a successful login redirects to `/?oauthUser=...
+// &oauthToken=...`, which the client picks up exactly like a saved
+// "remember me" token (see loginWithToken) and clears from the URL; a
+// brand-new signup (no existing account matched) redirects to
+// `/?oauthChoose=<pendingToken>&suggested=...` instead, so the client can
+// show a one-field "pick a username" form before the account is created.
+//
+// oauthStates guards against CSRF (a forged callback hit without ever
+// having started the flow); oauthPending holds a just-verified provider
+// identity just long enough for that username step. Both are small,
+// short-lived, and only ever touched from these routes — an in-memory Map
+// is enough, no need for a persisted store.
+const oauthStates = new Map(); // state -> { provider, expiresAt }
+const oauthPending = new Map(); // pendingToken -> { provider, providerId, email, expiresAt }
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const OAUTH_PENDING_TTL_MS = 15 * 60 * 1000;
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of oauthStates) if (v.expiresAt < now) oauthStates.delete(k);
+  for (const [k, v] of oauthPending) if (v.expiresAt < now) oauthPending.delete(k);
+}, 5 * 60 * 1000).unref();
+
+function suggestUsernameFrom(name) {
+  const base = String(name || 'Spēlētājs')
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '') // strip accents so e.g. "Jānis" -> "Janis"
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .slice(0, 16) || 'Speletajs';
+  return users.usernameExists(base) ? `${base}${Math.floor(Math.random() * 900 + 100)}` : base;
+}
+
+app.get('/auth/providers', (req, res) => {
+  res.json({ google: oauth.isConfigured('google'), facebook: oauth.isConfigured('facebook') });
+});
+
+app.get('/auth/:provider', (req, res) => {
+  const { provider } = req.params;
+  if (!oauth.PROVIDERS[provider]) return res.status(404).send('Nezināms pieteikšanās veids');
+  if (!oauth.isConfigured(provider)) {
+    return res.redirect('/?oauthError=' + encodeURIComponent(`${provider} pieteikšanās šeit vēl nav iestatīta`));
+  }
+  const state = crypto.randomBytes(24).toString('hex');
+  oauthStates.set(state, { provider, expiresAt: Date.now() + OAUTH_STATE_TTL_MS });
+  res.redirect(oauth.buildAuthUrl(provider, state));
+});
+
+app.get('/auth/:provider/callback', async (req, res) => {
+  const { provider } = req.params;
+  const { code, state, error } = req.query;
+  if (!oauth.PROVIDERS[provider]) return res.status(404).send('Nezināms pieteikšanās veids');
+  if (error) return res.redirect('/?oauthError=' + encodeURIComponent('Pieteikšanās atcelta'));
+
+  const stateEntry = state && oauthStates.get(state);
+  if (!stateEntry || stateEntry.provider !== provider || stateEntry.expiresAt < Date.now()) {
+    return res.redirect('/?oauthError=' + encodeURIComponent('Pieteikšanās saite vairs nav derīga, mēģini vēlreiz'));
+  }
+  oauthStates.delete(state);
+
+  if (!code) return res.redirect('/?oauthError=' + encodeURIComponent('Pieteikšanās neizdevās'));
+
+  try {
+    const profile = await oauth.exchangeCodeForProfile(provider, code);
+    if (!profile.id) throw new Error('provider returned no id');
+
+    let name = users.findUsernameByOAuth(provider, profile.id);
+
+    if (!name && profile.email) {
+      const emailMatch = users.findUsernameByEmail(profile.email);
+      if (emailMatch) {
+        users.linkOAuth(emailMatch, provider, profile.id, profile.email);
+        name = emailMatch;
+      }
+    }
+
+    if (name) {
+      const token = users.createSessionToken(name);
+      return res.redirect(`/?oauthUser=${encodeURIComponent(name)}&oauthToken=${encodeURIComponent(token)}`);
+    }
+
+    const pendingToken = crypto.randomBytes(24).toString('hex');
+    oauthPending.set(pendingToken, {
+      provider,
+      providerId: profile.id,
+      email: profile.email,
+      expiresAt: Date.now() + OAUTH_PENDING_TTL_MS,
+    });
+    const suggested = suggestUsernameFrom(profile.name);
+    return res.redirect(`/?oauthChoose=${encodeURIComponent(pendingToken)}&suggested=${encodeURIComponent(suggested)}`);
+  } catch (err) {
+    console.error(`${provider} OAuth callback failed:`, err);
+    return res.redirect('/?oauthError=' + encodeURIComponent('Pieteikšanās neizdevās, mēģini vēlreiz'));
+  }
+});
 
 // In-memory rooms, keyed by 4-char code. Players are identified by *username*
 // (stable across reconnects/refreshes) — socketId is just where to reach them right now.
@@ -681,13 +791,19 @@ io.on('connection', (socket) => {
     socket.emit('leaderboardsData', users.getLeaderboards());
   }
 
-  socket.on('register', ({ username: name, password }) => {
+  socket.on('register', ({ username: name, password, email }) => {
     const rl = registerLimiter.check(socket.handshake.address || socket.id);
     if (!rl.allowed) return sendError(socket, 'Pārāk daudz mēģinājumu. Pamēģini vēlreiz pēc brīža.');
     if (!password || password.length < users.MIN_PASSWORD_LEN) {
       return sendError(socket, `Parolei jābūt vismaz ${users.MIN_PASSWORD_LEN} rakstzīmes garai`);
     }
-    const rec = users.createAccount(name, password);
+    if (!users.isValidEmail(email)) {
+      return sendError(socket, 'Nepieciešama derīga e-pasta adrese — tā noder, ja kādreiz aizmirsīsi paroli vai lietotājvārdu');
+    }
+    if (users.findUsernameByEmail(email)) {
+      return sendError(socket, 'Šis e-pasts jau tiek izmantots citam kontam');
+    }
+    const rec = users.createAccount(name, password, email);
     if (!rec) return sendError(socket, 'Šis lietotājvārds jau ir aizņemts (vai ir nederīgs)');
     const token = users.createSessionToken(rec.username);
     onAuthenticated(rec, token);
@@ -722,6 +838,90 @@ io.on('connection', (socket) => {
 
   socket.on('checkUsername', ({ username: name }) => {
     socket.emit('usernameStatus', { username: name, exists: users.usernameExists(name) });
+  });
+
+  // ---------- Account recovery (forgot password / forgot username) ----------
+  //
+  // Both handlers always emit the same "sent" event whether or not the
+  // email actually matched an account — never reveal which emails are
+  // registered (a classic account-enumeration leak) by responding
+  // differently for a match vs a miss.
+
+  function publicBaseUrl() {
+    const h = socket.handshake.headers || {};
+    const origin = h.origin || h.referer;
+    if (origin) return origin.replace(/\/$/, '');
+    return (process.env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, '');
+  }
+
+  socket.on('forgotPassword', ({ email } = {}) => {
+    const rl = forgotLimiter.check(socket.handshake.address || socket.id);
+    if (!rl.allowed) return sendError(socket, 'Pārāk daudz mēģinājumu. Pamēģini vēlreiz pēc brīža.');
+    const name = users.findUsernameByEmail(email);
+    if (name) {
+      const token = users.createPasswordResetToken(name);
+      const link = `${publicBaseUrl()}/?reset=${token}`;
+      mailer
+        .sendPasswordResetEmail(users.normalizeEmail(email), name, link)
+        .catch((err) => console.error('Neizdevās nosūtīt paroles atiestatīšanas e-pastu:', err));
+    }
+    socket.emit('forgotPasswordSent');
+  });
+
+  socket.on('forgotUsername', ({ email } = {}) => {
+    const rl = forgotLimiter.check(socket.handshake.address || socket.id);
+    if (!rl.allowed) return sendError(socket, 'Pārāk daudz mēģinājumu. Pamēģini vēlreiz pēc brīža.');
+    const name = users.findUsernameByEmail(email);
+    if (name) {
+      mailer
+        .sendUsernameReminderEmail(users.normalizeEmail(email), name)
+        .catch((err) => console.error('Neizdevās nosūtīt lietotājvārda atgādinājuma e-pastu:', err));
+    }
+    socket.emit('forgotUsernameSent');
+  });
+
+  // Lets the reset-password screen confirm a token is still valid before
+  // showing the "choose a new password" form (e.g. a stale/already-used
+  // link should say so immediately, not after the person fills it in).
+  socket.on('checkResetToken', ({ token } = {}) => {
+    const name = users.findUsernameByResetToken(token);
+    socket.emit('resetTokenStatus', { valid: !!name });
+  });
+
+  socket.on('resetPassword', ({ token, newPassword } = {}) => {
+    if (!newPassword || newPassword.length < users.MIN_PASSWORD_LEN) {
+      return sendError(socket, `Parolei jābūt vismaz ${users.MIN_PASSWORD_LEN} rakstzīmes garai`);
+    }
+    const ok = users.resetPasswordWithToken(token, newPassword);
+    if (!ok) return sendError(socket, 'Šī saite ir nederīga vai vairs nav spēkā. Pieprasi jaunu.');
+    socket.emit('passwordResetDone');
+  });
+
+  // Lets an already-logged-in account add or change its email — the only
+  // way an account created before email was required ever gets one on
+  // file, and needed for the recovery flow above to work for them.
+  socket.on('updateEmail', ({ email } = {}) => {
+    if (!username) return sendError(socket, 'Vispirms ielogojies');
+    const result = users.updateEmail(username, email);
+    if (!result.ok) return sendError(socket, result.error);
+    socket.emit('emailUpdated', { email: result.email });
+  });
+
+  // Final step of a brand-new Google/Facebook signup: the person has just
+  // picked a username for the account we're about to create from their
+  // verified OAuth identity (see the /auth/:provider/callback route above,
+  // which is what put this pendingToken in oauthPending in the first
+  // place).
+  socket.on('completeOAuthSignup', ({ pendingToken, username: name } = {}) => {
+    const pending = pendingToken && oauthPending.get(pendingToken);
+    if (!pending || pending.expiresAt < Date.now()) {
+      return sendError(socket, 'Šī pieteikšanās sesija vairs nav derīga. Mēģini pieteikties vēlreiz.');
+    }
+    const rec = users.createAccountFromOAuth(name, pending.provider, pending.providerId, pending.email);
+    if (!rec) return sendError(socket, 'Šis lietotājvārds jau ir aizņemts (vai ir nederīgs)');
+    oauthPending.delete(pendingToken);
+    const token = users.createSessionToken(rec.username);
+    onAuthenticated(rec, token);
   });
 
   // ---------- Tournaments ----------

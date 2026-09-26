@@ -32,10 +32,21 @@
             <span>Atkārto paroli</span>
             <input id="confirmInput" type="password" placeholder="••••••" autocomplete="new-password" />
           </label>
+          <label class="field hidden" id="emailField">
+            <span>E-pasts</span>
+            <input id="emailInput" type="email" placeholder="tavs@epasts.lv" autocomplete="email" />
+          </label>
           <button id="authBtn" class="btn btn-primary"></button>
         </div>
 
         <button id="continueBtn" class="btn btn-primary">Turpināt</button>
+        <p class="playing-as" id="forgotLinkRow"><a href="#" id="forgotLink">Aizmirsi paroli vai lietotājvārdu?</a></p>
+
+        <div id="oauthButtons" class="oauth-buttons hidden">
+          <div class="divider"><span>vai</span></div>
+          <a href="/auth/google" id="googleLoginBtn" class="btn btn-secondary oauth-btn hidden">Turpināt ar Google</a>
+          <a href="/auth/facebook" id="facebookLoginBtn" class="btn btn-secondary oauth-btn hidden">Turpināt ar Facebook</a>
+        </div>
 
         <div class="divider"><span>vai</span></div>
         <button id="playGuestBtn" class="btn btn-secondary">🤖 Spēlēt pret datoru (bez reģistrācijas)</button>
@@ -51,7 +62,7 @@
       </div>
 
       <div id="playStep" class="hidden">
-        <p class="playing-as">Spēlē kā <strong id="currentUsername"></strong> · <a href="#" id="switchUserLink">mainīt</a></p>
+        <p class="playing-as">Spēlē kā <strong id="currentUsername"></strong> · <a href="#" id="switchUserLink">mainīt</a> · <a href="#" id="emailSettingsLink">e-pasts</a></p>
 
         <div class="lobby-actions">
           <button id="createBtn" class="btn btn-primary">Izveidot istabu</button>
@@ -393,6 +404,72 @@
         <button id="multiJoinPasswordSubmitBtn" class="btn btn-primary">Pievienoties</button>
         <button id="multiJoinPasswordCancelBtn" class="btn btn-secondary">Atcelt</button>
       </div>
+    </div>
+  </div>
+
+  <div id="recoveryModal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Aizmirsi piekļuvi?</h2>
+      <p class="playing-as">Ievadi kontam piesaistīto e-pasta adresi.</p>
+      <label class="field">
+        <span>E-pasts</span>
+        <input id="recoveryEmailInput" type="email" placeholder="tavs@epasts.lv" autocomplete="email" />
+      </label>
+      <p id="recoveryStatus" class="muted small hidden"></p>
+      <div class="rematch-choice-row">
+        <button id="recoverPasswordBtn" class="btn btn-primary">Atsūtīt paroles atiestatīšanas saiti</button>
+        <button id="recoverUsernameBtn" class="btn btn-secondary">Atgādināt lietotājvārdu</button>
+      </div>
+      <button id="recoveryCloseBtn" class="btn btn-secondary">Aizvērt</button>
+    </div>
+  </div>
+
+  <div id="resetPasswordModal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Jauna parole</h2>
+      <p id="resetPasswordIntro" class="playing-as">Izvēlies jaunu paroli savam kontam.</p>
+      <div id="resetPasswordFormFields">
+        <label class="field">
+          <span>Jaunā parole</span>
+          <input id="resetNewPasswordInput" type="password" placeholder="••••••" autocomplete="new-password" />
+        </label>
+        <label class="field">
+          <span>Atkārto jauno paroli</span>
+          <input id="resetConfirmPasswordInput" type="password" placeholder="••••••" autocomplete="new-password" />
+        </label>
+        <button id="resetPasswordSubmitBtn" class="btn btn-primary">Saglabāt jauno paroli</button>
+      </div>
+      <p id="resetPasswordInvalid" class="error hidden">Šī saite ir nederīga vai vairs nav spēkā. Pieprasi jaunu, izmantojot "Aizmirsi paroli vai lietotājvārdu?".</p>
+      <button id="resetPasswordCloseBtn" class="btn btn-secondary">Aizvērt</button>
+    </div>
+  </div>
+
+  <div id="emailSettingsModal" class="modal hidden">
+    <div class="modal-card">
+      <h2>E-pasts</h2>
+      <p class="playing-as">Vajadzīgs, lai atgūtu paroli vai lietotājvārdu, ja to kādreiz aizmirsīsi.</p>
+      <label class="field">
+        <span>E-pasta adrese</span>
+        <input id="emailSettingsInput" type="email" placeholder="tavs@epasts.lv" autocomplete="email" />
+      </label>
+      <p id="emailSettingsLinked" class="muted small hidden"></p>
+      <p id="emailSettingsStatus" class="muted small hidden"></p>
+      <div class="rematch-choice-row">
+        <button id="emailSettingsSaveBtn" class="btn btn-primary">Saglabāt</button>
+        <button id="emailSettingsCloseBtn" class="btn btn-secondary">Aizvērt</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="oauthChooseUsernameModal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Vēl viens solis</h2>
+      <p class="playing-as">Izvēlies lietotājvārdu savam jaunajam kontam.</p>
+      <label class="field">
+        <span>Lietotājvārds</span>
+        <input id="oauthUsernameInput" type="text" maxlength="20" autocomplete="username" />
+      </label>
+      <button id="oauthUsernameSubmitBtn" class="btn btn-primary">Izveidot kontu</button>
     </div>
   </div>
 

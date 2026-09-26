@@ -284,6 +284,19 @@ html, body {
 }
 .divider span { padding: 0 10px; }
 
+/* Google/Facebook login buttons are plain <a> tags (they navigate to the
+   server's /auth/... OAuth-start route, not a JS click handler), so .btn's
+   button-only styling (width, centering, no underline) needs restating
+   here — an <a> is inline by default and ignores width. */
+.oauth-btn {
+  display: block;
+  box-sizing: border-box;
+  text-align: center;
+  text-decoration: none;
+  margin-bottom: 10px;
+}
+.oauth-btn:last-child { margin-bottom: 0; }
+
 .waiting { margin-top: 20px; }
 .room-code {
   font-family: var(--font-display);
