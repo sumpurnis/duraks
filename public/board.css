@@ -1,0 +1,326 @@
+.board-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 16px 80px;
+}
+
+.board-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.board-back {
+  display: inline-block;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-decoration: none;
+  margin-bottom: 12px;
+}
+.board-back:hover { color: var(--gold-bright); }
+.board-title { margin-bottom: 6px; }
+
+.board-card {
+  background: rgba(0,0,0,0.18);
+  border: 1px solid rgba(201, 162, 75, 0.25);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 28px;
+}
+
+.board-section-title {
+  font-family: var(--font-display);
+  color: var(--gold-bright);
+  font-size: 1.1rem;
+  margin: 0 0 14px;
+}
+
+.board-type-group {
+  display: flex;
+  gap: 8px;
+}
+.board-type-group .btn-option {
+  flex: 1;
+  padding: 8px 6px;
+  font-size: 0.82rem;
+}
+
+.board-card textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  border-radius: 8px;
+  color: var(--cream);
+  font-size: 0.95rem;
+  font-family: var(--font-ui);
+  resize: vertical;
+}
+.board-card textarea:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+/* Honeypot field — invisible and unreachable to a real user (off-canvas,
+   not display:none, since some bots skip display:none fields but still
+   fill in ones merely positioned off-screen; either way a sighted human
+   using a mouse/keyboard never encounters it, and it's also marked
+   aria-hidden and tabindex="-1" so it doesn't trip up screen readers or
+   keyboard tabbing either). */
+.board-honeypot {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.board-status {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  color: var(--danger-bright);
+}
+
+.board-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.board-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 24px;
+  font-size: 0.9rem;
+}
+
+.board-post {
+  background: rgba(0,0,0,0.18);
+  border: 1px solid rgba(201, 162, 75, 0.2);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.board-post-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.board-type-badge {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(201, 162, 75, 0.15);
+  color: var(--gold-bright);
+  white-space: nowrap;
+}
+.board-type-badge.type-kluda { background: rgba(178, 58, 58, 0.2); color: var(--danger-bright); }
+.board-type-badge.type-ieteikums { background: rgba(90, 200, 224, 0.18); color: var(--elo-multi); }
+
+.board-status-badge {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(201, 162, 75, 0.35);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.board-status-badge.status-labosana { border-color: var(--elo-onevone); color: var(--elo-onevone); }
+.board-status-badge.status-izlabots { border-color: #5cb85c; color: #7fd17f; }
+
+.board-post-author {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.board-post-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.95rem;
+  margin: 0 0 10px;
+}
+
+.board-post-edited {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.board-mod-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(201, 162, 75, 0.2);
+}
+.board-mod-controls .btn {
+  width: auto;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+}
+
+.board-comments {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(201, 162, 75, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.board-comment {
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.board-comment-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.board-comment-author {
+  font-size: 0.78rem;
+  color: var(--gold-bright);
+  font-weight: 600;
+}
+.board-comment-time {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.board-comment-text {
+  font-size: 0.88rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+.board-comment-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.board-comment-form input[type="text"] {
+  flex: 1;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  border-radius: 8px;
+  color: var(--cream);
+  font-size: 0.85rem;
+  font-family: var(--font-ui);
+}
+.board-comment-form button {
+  width: auto;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+}
+
+.board-comment-toggle {
+  background: none;
+  border: none;
+  color: var(--gold-bright);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 8px;
+}
+.board-comment-toggle:hover { text-decoration: underline; }
+
+@media (max-width: 480px) {
+  .board-type-group { flex-direction: column; }
+  .board-post-author { margin-left: 0; }
+}
+
+/* ---------- Board preview panel (third lobby column, index.html) ---------- */
+
+.board-preview-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.board-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* Fixed height + scroll, so however many posts exist (and however long
+     any single one is), the panel itself never grows taller than its two
+     siblings and never pushes content outside its own frame. */
+  max-height: 420px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+}
+
+.board-preview-item {
+  display: block;
+  background: rgba(0,0,0,0.15);
+  border: 1px solid rgba(201, 162, 75, 0.18);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  /* Belt-and-suspenders against overflow: wrap long unbroken strings
+     (a URL, a run of repeated characters) instead of letting them stretch
+     the box past its column width. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.board-preview-item:hover {
+  border-color: rgba(201, 162, 75, 0.4);
+  background: rgba(0,0,0,0.25);
+}
+
+.board-preview-item-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.board-preview-item .board-type-badge,
+.board-preview-item .board-status-badge {
+  font-size: 0.66rem;
+  padding: 1px 7px;
+}
+
+.board-preview-item-author {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.board-preview-item-text {
+  font-size: 0.82rem;
+  margin: 0;
+  /* Clamp to 3 lines regardless of how long the post is — the full text
+     is always one click away on the board page itself. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.board-preview-link {
+  display: block;
+  text-align: center;
+  margin-top: 14px;
+  font-size: 0.82rem;
+  color: var(--gold-bright);
+  text-decoration: none;
+}
+.board-preview-link:hover { text-decoration: underline; }
+
+.board-preview-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 12px 0;
+}

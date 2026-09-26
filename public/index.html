@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="style.css" />
 <link rel="stylesheet" href="tournament.css" />
 <link rel="stylesheet" href="multi.css" />
+<link rel="stylesheet" href="board.css" />
 </head>
 <body>
 
@@ -16,6 +17,7 @@
     <div class="lobby-card">
       <h1 class="wordmark">Durak<span class="accent">s</span></h1>
       <p class="tagline">2-4 spēlētāju kāršu spēle</p>
+      <p class="playing-as"><a href="/board.html">💬 Atsauksmes un ieteikumi</a></p>
 
       <div id="authStep">
         <label class="field">
@@ -177,6 +179,14 @@
           <span class="stats-highlight">Visu laiku: <strong id="mostPlayedAllTime" class="stat-holder">—</strong></span>
         </p>
       </div>
+    </div>
+
+    <div id="boardPreviewPanel" class="stats-panel board-preview-panel">
+      <h2 class="stats-title">Atsauksmes</h2>
+      <div id="boardPreviewList" class="board-preview-list">
+        <p class="muted small">Ielādē…</p>
+      </div>
+      <a href="/board.html" class="board-preview-link">Skatīt visus / pievienot ierakstu →</a>
     </div>
     </div>
   </div>
@@ -571,5 +581,6 @@
   <script src="client.js"></script>
   <script src="tournament-client.js"></script>
   <script src="multi-client.js"></script>
+  <script src="board-preview-client.js"></script>
 </body>
 </html>

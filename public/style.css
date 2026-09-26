@@ -80,7 +80,10 @@ html, body {
   gap: 24px;
   flex-wrap: wrap;
   width: 100%;
-  max-width: 820px;
+  /* Three equal-width columns (.lobby-card, #statsPanel, #boardPreviewPanel
+     all share the same max-width via .stats-panel below) plus two gaps:
+     3*380 + 2*24 = 1188 — rounded up a bit for breathing room. */
+  max-width: 1200px;
 }
 
 .lobby-card {
