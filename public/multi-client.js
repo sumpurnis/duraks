@@ -224,13 +224,10 @@ function multiRefreshCreateModal() {
   });
   multiSetActiveButton(aiGroup, multiCreateState.aiCount);
 
-  // Padošana (transfer) is currently only offered for 2-player rooms —
-  // same "disabled, not hidden" treatment as the other constraints above,
-  // so switching player count back to 2 later doesn't lose the choice.
+  // Padošana (transfer) is available for any room size (2-4 players) —
+  // the engine chains transfers correctly (e.g. 1->2->3->1 in a 3-player
+  // room), so no player-count restriction here.
   const transferInput = el('multiCreateTransfer');
-  const isTwoPlayers = multiCreateState.totalPlayers === 2;
-  transferInput.disabled = !isTwoPlayers;
-  if (!isTwoPlayers) transferInput.checked = false;
   multiCreateState.allowTransfer = transferInput.checked;
 }
 

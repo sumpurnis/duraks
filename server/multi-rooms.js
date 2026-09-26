@@ -426,9 +426,9 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     const deck = parseInt(deckSize, 10) === 36 ? 36 : 52;
     const isRanked = !!ranked;
     // "Padošana" (perevodnoy transfer rule) — supported by the engine for
-    // any player count, but only offered here for 2-player rooms for now;
-    // see the note in games/duraks-multi.js about the 3-4 player cascade
-    // needing more testing before it's exposed there too.
+    // any player count (2-4). The 3-4 player cascade (chained transfers,
+    // e.g. 1->2->3->1 in a 3-player room) has been verified against the
+    // engine directly, so it's offered here for any room size.
     const isTransferable = !!allowTransfer;
     if (!Number.isInteger(n) || n < 2 || n > 4) {
       return sendMultiError('Spēlētāju skaitam jābūt no 2 līdz 4');
@@ -444,9 +444,6 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     }
     if (isRanked && !getUsername()) {
       return sendMultiError('Ranked istabas var izveidot tikai reģistrēti lietotāji');
-    }
-    if (isTransferable && n !== 2) {
-      return sendMultiError('Padošana pagaidām ir pieejama tikai 2 spēlētāju istabās');
     }
 
     // Remember these choices for next time, but only for registered users
