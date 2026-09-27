@@ -49,6 +49,7 @@ function multiReturnToLobby() {
 let multiMyUsername = null; // learned via multiGameStarted/multiRoomWaiting — works for guests too, unlike the login-only global myUsername
 
 socket.on('multiGameStarted', (data) => {
+  startTitleFlash('Spēle sākusies!');
   if (data && data.you) multiMyUsername = data.you;
   multiWasMyTurn = false;
   multiWasActive = true;

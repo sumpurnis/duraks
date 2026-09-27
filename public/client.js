@@ -32,6 +32,47 @@ function updateAppViewportHeight() {
   document.documentElement.style.setProperty('--app-vh', h * 0.01 + 'px');
 }
 updateAppViewportHeight();
+
+// ================= Browser tab title flash (match start notification) =================
+// Called from gameStarted (1v1/AI) and multiGameStarted (3-4 player rooms) —
+// covers tournament matches too, since those just join a normal room under
+// the hood. Alternates the tab title with `message` so a player who has
+// tabbed away notices their match began. Stops the moment the tab regains
+// focus (that's when they've actually seen it), with a hard cap so a missed
+// focus event (some mobile browsers, background tabs that never fire it)
+// can't leave it flashing forever.
+const ORIGINAL_DOCUMENT_TITLE = document.title;
+let titleFlashTimer = null;
+let titleFlashCount = 0;
+const TITLE_FLASH_MAX_CYCLES = 20; // ~20s at the 1000ms interval below
+
+function stopTitleFlash() {
+  if (titleFlashTimer) {
+    clearInterval(titleFlashTimer);
+    titleFlashTimer = null;
+  }
+  document.title = ORIGINAL_DOCUMENT_TITLE;
+}
+
+function startTitleFlash(message) {
+  stopTitleFlash();
+  if (document.hasFocus()) return; // already looking at it — nothing to flash for
+  titleFlashCount = 0;
+  let showingMessage = false;
+  titleFlashTimer = setInterval(() => {
+    if (titleFlashCount++ >= TITLE_FLASH_MAX_CYCLES) {
+      stopTitleFlash();
+      return;
+    }
+    showingMessage = !showingMessage;
+    document.title = showingMessage ? message : ORIGINAL_DOCUMENT_TITLE;
+  }, 1000);
+}
+
+window.addEventListener('focus', stopTitleFlash);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) stopTitleFlash();
+});
 window.addEventListener('resize', updateAppViewportHeight);
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', updateAppViewportHeight);
@@ -498,6 +539,7 @@ socket.on('errorMsg', (msg) => {
 });
 
 socket.on('gameStarted', ({ names }) => {
+  startTitleFlash('Spēle sākusies!');
   myId = myUsername || guestUsername;
   lobbyScreen.classList.add('hidden');
   gameScreen.classList.remove('hidden');
