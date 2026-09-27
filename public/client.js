@@ -110,7 +110,10 @@ socket.on('usernameStatus', ({ exists }) => {
     authMode = 'register';
     el('passwordLabel').textContent = 'Izvēlies paroli';
     el('confirmField').classList.remove('hidden');
-    el('emailField').classList.remove('hidden');
+    // Email is temporarily hidden from registration (not required yet) —
+    // see submitAuth() below. Re-enable this once the email flow is fully
+    // ready (real domain verified with Resend, etc.).
+    el('emailField').classList.add('hidden');
     el('authBtn').textContent = 'Reģistrēties';
   }
   el('passwordInput').value = '';
@@ -128,10 +131,11 @@ function submitAuth() {
   const password = el('passwordInput').value;
   if (authMode === 'register') {
     const confirm = el('confirmInput').value;
+    // Email field is hidden for now (see usernameStatus handler above), so
+    // this will normally be empty — that's fine, it's optional server-side.
     const email = el('emailInput').value.trim();
     if (password.length < 8) return showLobbyError('Parolei jābūt vismaz 8 rakstzīmes garai');
     if (password !== confirm) return showLobbyError('Paroles nesakrīt');
-    if (!email) return showLobbyError('Ievadi e-pasta adresi — tā noder, ja kādreiz aizmirsīsi paroli vai lietotājvārdu');
     socket.emit('register', { username: name, password, email });
   } else {
     socket.emit('login', { username: name, password });
@@ -167,12 +171,6 @@ el('recoverPasswordBtn').addEventListener('click', () => {
   socket.emit('forgotPassword', { email });
 });
 
-el('recoverUsernameBtn').addEventListener('click', () => {
-  const email = recoveryEmailOrWarn();
-  if (!email) return;
-  socket.emit('forgotUsername', { email });
-});
-
 function showRecoveryStatus(msg) {
   const p = el('recoveryStatus');
   p.textContent = msg;
@@ -181,10 +179,6 @@ function showRecoveryStatus(msg) {
 
 socket.on('forgotPasswordSent', () => {
   showRecoveryStatus('Ja šis e-pasts pieder kādam kontam, uz to nosūtījām paroles atiestatīšanas saiti (derīga 1 stundu).');
-});
-
-socket.on('forgotUsernameSent', () => {
-  showRecoveryStatus('Ja šis e-pasts pieder kādam kontam, uz to nosūtījām atgādinājumu ar lietotājvārdu.');
 });
 
 // ================= Reset-password screen (?reset=TOKEN in the URL) =================

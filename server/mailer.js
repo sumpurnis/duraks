@@ -68,17 +68,7 @@ function sendPasswordResetEmail(to, username, link) {
   return send(to, subject, text, html);
 }
 
-function sendUsernameReminderEmail(to, username) {
-  const subject = 'Tavs lietotājvārds — Duraks';
-  const text = `Sveiks!\n\nTavs lietotājvārds ir: ${username}\n\nJa tu to nepieprasīji, vari šo e-pastu ignorēt.`;
-  const html =
-    `<p>Sveiks!</p><p>Tavs lietotājvārds ir: <strong>${username}</strong></p>` +
-    `<p>Ja tu to nepieprasīji, vari šo e-pastu ignorēt.</p>`;
-  return send(to, subject, text, html);
-}
-
 module.exports = {
   sendPasswordResetEmail,
-  sendUsernameReminderEmail,
   isConfigured: () => configured,
 };
