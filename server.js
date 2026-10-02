@@ -36,10 +36,9 @@ const AI_MOVE_DELAY_MS = [500, 1100]; // randomized range, feels less instant/ro
 const loginLimiter = createRateLimiter({ max: 8, windowMs: 60 * 1000, blockMs: 2 * 60 * 1000 });
 const registerLimiter = createRateLimiter({ max: 5, windowMs: 10 * 60 * 1000, blockMs: 10 * 60 * 1000 });
 const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs: 60 * 1000 });
-// Covers forgotPassword + forgotUsername together (both just email an
-// existing account, same abuse shape) — generous enough for a genuine
-// "tried the wrong email twice" case, tight enough to blunt using this as
-// a free way to spam someone's inbox.
+// Covers forgotPassword — generous enough for a genuine "tried the wrong
+// email twice" case, tight enough to blunt using this as a free way to
+// spam someone's inbox.
 const forgotLimiter = createRateLimiter({ max: 5, windowMs: 15 * 60 * 1000, blockMs: 15 * 60 * 1000 });
 
 app.get('/', (req, res) => {
@@ -878,19 +877,7 @@ io.on('connection', (socket) => {
     socket.emit('forgotPasswordSent');
   });
 
-  socket.on('forgotUsername', ({ email } = {}) => {
-    const rl = forgotLimiter.check(socket.handshake.address || socket.id);
-    if (!rl.allowed) return sendError(socket, 'Pārāk daudz mēģinājumu. Pamēģini vēlreiz pēc brīža.');
-    const name = users.findUsernameByEmail(email);
-    if (name) {
-      mailer
-        .sendUsernameReminderEmail(users.normalizeEmail(email), name)
-        .catch((err) => console.error('Neizdevās nosūtīt lietotājvārda atgādinājuma e-pastu:', err));
-    }
-    socket.emit('forgotUsernameSent');
-  });
-
-  // Lets the reset-password screen confirm a token is still valid before
+// Lets the reset-password screen confirm a token is still valid before
   // showing the "choose a new password" form (e.g. a stale/already-used
   // link should say so immediately, not after the person fills it in).
   socket.on('checkResetToken', ({ token } = {}) => {

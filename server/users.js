@@ -175,9 +175,12 @@ function createAccount(username, password, email) {
   if (!name) return null;
   if (!password || password.length < MIN_PASSWORD_LEN) return null;
   if (store.users[name]) return null;
+  // Email is optional for now (the registration form has it hidden while
+  // the email-sending flow is still being finished) — normalizeEmail
+  // returns null for an empty string, which is fine; it just means no
+  // email on file yet, addable later via updateEmail.
   const normalizedEmail = normalizeEmail(email);
-  if (!normalizedEmail) return null;
-  if (findUsernameByEmail(normalizedEmail)) return null;
+  if (normalizedEmail && findUsernameByEmail(normalizedEmail)) return null;
 
   const record = { createdAt: Date.now(), email: normalizedEmail, stats: blankStats() };
   setPassword(record, password);
