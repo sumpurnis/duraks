@@ -314,6 +314,21 @@ socket.on('emailUpdated', ({ email }) => {
 // configured, and (b) pick up the result once the server redirects back
 // to us with one of three query-param shapes.
 
+// When this page is shown inside the Uzspēlēsim.lv landing page (an iframe):
+//  - Google/Facebook refuse to run inside a frame, so those links must navigate the WHOLE window
+//    (target=_top). They come back to the landing page (return=/), which reopens this game (next=/duraks).
+//  - the "← Visas spēles" link would load the landing page inside the frame; the game picker above
+//    the frame does that job, so it is hidden.
+if (window.self !== window.top) {
+  ['googleLoginBtn', 'facebookLoginBtn'].forEach((id) => {
+    const a = el(id);
+    a.setAttribute('href', a.getAttribute('href') + '?return=/&next=/duraks');
+    a.setAttribute('target', '_top');
+  });
+  const back = el('allGamesLink');
+  if (back) back.classList.add('hidden');
+}
+
 fetch('/auth/providers')
   .then((r) => r.json())
   .then(({ google, facebook }) => {
@@ -409,7 +424,9 @@ socket.on('registered', (rec) => {
 // there's no UI here to render it into anymore, and no UI path left that
 // creates a room this system would ever list.
 
-tryAutoLogin();
+// The landing page embeds this page as a view-only preview (?preview=1); it must never log in
+// as the visitor, or its socket would take over their real session in another tab.
+if (!new URLSearchParams(window.location.search).has("preview")) tryAutoLogin();
 
 
 function escapeHtml(s) {
@@ -506,7 +523,7 @@ function showLobbyError(msg) {
 socket.on('roomCreated', ({ code }) => {
   el('waiting').classList.remove('hidden');
   el('roomCode').textContent = code;
-  const link = `${window.location.origin}/?room=${code}`;
+  const link = `${window.location.origin}/duraks?room=${code}`;
   el('shareLinkInput').value = link;
   history.replaceState(null, '', `?room=${code}`);
 });

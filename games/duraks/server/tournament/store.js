@@ -3,7 +3,7 @@
 /**
  * store.js
  * Persistence + registry for tournaments, kept deliberately separate from
- * the core game files (server/game.js, server/ai.js, server/users.js are
+ * the core game files (server/game.js, server/ai.js, platform/users.js are
  * untouched by this module — the only thing it reads from users.js-land is
  * a plain stats object passed in from server.js).
  *
@@ -28,7 +28,7 @@ const { Tournament, ABSOLUTE_MIN_PARTICIPANTS } = require('./tournament');
 // Same DURAKS_DATA_DIR override as users.js — kept in sync so both files
 // land in the same place, whether that's the default in-repo folder or an
 // external persistent volume.
-const DATA_DIR = process.env.DURAKS_DATA_DIR || path.join(__dirname, '..', 'data');
+const { DATA_DIR } = require('../../../../platform/config');
 const TOURNAMENTS_FILE = path.join(DATA_DIR, 'tournaments.json');
 const RESULTS_FILE = path.join(DATA_DIR, 'tournament-results.json');
 

@@ -1,6 +1,6 @@
 'use strict';
 
-// server/feedback.js
+// platform/feedback.js
 //
 // A very simple public feedback board: anyone (logged in or guest) can
 // post feedback, a suggestion, or a bug report, and comment on existing
@@ -8,7 +8,7 @@
 // change a post's status (new / in progress / fixed), and edit or delete
 // any post or comment that shouldn't stay public (spam, abuse, etc.).
 //
-// Persisted the same way as server/users.js — a JSON file under DATA_DIR,
+// Persisted the same way as platform/users.js — a JSON file under DATA_DIR,
 // so it survives redeploys as long as DURAKS_DATA_DIR points at a mounted
 // volume (see the comment in users.js for why that matters on Railway).
 //
@@ -34,7 +34,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { createRateLimiter } = require('./rate-limit');
 
-const DATA_DIR = process.env.DURAKS_DATA_DIR || path.join(__dirname, 'data');
+const { DATA_DIR } = require('./config');
 const FILE = path.join(DATA_DIR, 'feedback.json');
 
 const MODERATOR_USERNAME = 'zivs'; // normalized (lowercase) — see isModerator()

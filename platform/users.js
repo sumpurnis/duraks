@@ -10,7 +10,7 @@ const crypto = require('crypto');
 // replaces the code on disk with a fresh copy) doesn't also wipe out
 // player accounts, stats and ELO history stored here. See the deploy
 // notes in README / the message this was introduced in for setup steps.
-const DATA_DIR = process.env.DURAKS_DATA_DIR || path.join(__dirname, 'data');
+const { DATA_DIR } = require('./config');
 const FILE = path.join(DATA_DIR, 'users.json');
 const MIN_PASSWORD_LEN = 8;
 const LEADERBOARD_SIZE = 10;
@@ -466,7 +466,7 @@ function getGameHistory(username, limit) {
 
 // Tracks which IP addresses a registered account has connected from — one
 // signal (among several) for the anomaly-detection tool
-// (server/tools/anomaly-report.js), which flags different accounts that
+// (platform/tools/anomaly-report.js), which flags different accounts that
 // always share an IP. Capped list, most-recently-seen first; each entry
 // also keeps a running count and first/last-seen timestamps so the report
 // can tell "logged in once from a friend's house" apart from "every single

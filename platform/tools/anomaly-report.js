@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * server/tools/anomaly-report.js
+ * platform/tools/anomaly-report.js
  *
  * A read-only diagnostic tool for spotting patterns consistent with
  * deliberate ELO manipulation between colluding accounts — repeatedly
@@ -9,7 +9,7 @@
  * network origins. Run it any time (even while the server is running,
  * since it only reads users.json) with:
  *
- *   node server/tools/anomaly-report.js
+ *   node platform/tools/anomaly-report.js
  *
  * IMPORTANT — read this before treating any flag as proof:
  * every signal here is circumstantial. Real friends who happen to be
@@ -45,7 +45,7 @@ const path = require('path');
 
 // Same DURAKS_DATA_DIR override as users.js, so this admin tool reads
 // whichever location the running server is actually writing to.
-const FILE = path.join(process.env.DURAKS_DATA_DIR || path.join(__dirname, '..', 'data'), 'users.json');
+const FILE = path.join(require('../config').DATA_DIR, 'users.json');
 
 // ---------- Tunables ----------
 const MIN_GAMES_FOR_PAIR_FLAG = 4; // don't flag pairs with too few games to say anything meaningful

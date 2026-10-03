@@ -1,0 +1,260 @@
+/* Meļi in-game screens (waiting room, table, pop-ups). Scoped to .meli so they cannot clash with the shared Duraks lobby styles. */
+.meli {
+  
+  --felt: #1b3a2f;
+  --felt-2: #0f2b22;
+  --felt-light: #234a3c;
+  --paper: #faf6ec;
+  --ink: #1a1a1a;
+  --muted: #9db3a8;
+  --gold: #e2c374;
+  --gold-2: #c9a24b;
+  --font-display: Georgia, 'Times New Roman', serif;
+  --wood-1: #4a2f1b;
+  --wood-2: #2b1a0f;
+  --good: #3fa66b;
+  --bad: #d9534f;
+  --back-1: #3b3f8f;
+  --back-2: #272a63;
+  --spade: #23272b;
+  --heart: #d6342c;
+  --diamond: #d9780f;
+  --club: #1f6fd0;
+  --card-w: 58px;
+  --card-h: 82px;
+}
+.meli, .meli * { box-sizing: border-box; margin: 0; }
+.meli .hidden { display: none !important; }
+.meli button { font: inherit; cursor: pointer; }
+.meli button:disabled { cursor: not-allowed; opacity: .45; }
+.meli :focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.meli .m-screen { min-height: 100%; display: flex; flex-direction: column; max-width: 920px; margin: 0 auto; padding: 12px 16px 16px; }
+.meli .panel {
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(201, 162, 75, 0.35);
+  border-radius: 14px;
+  padding: 24px 22px;
+}
+.meli #lobby { gap: 14px; }
+.meli .brand { text-align: center; padding-top: 6px; }
+.meli .brand h1 { font-family: var(--font-display); font-weight: 400; font-size: 2.6rem; letter-spacing: .02em; color: var(--paper); }
+.meli .brand h1 .m-accent { color: var(--gold); }
+.meli .brand .tag { color: var(--muted); font-size: .85rem; margin-top: 2px; }
+.meli .lobby-grid { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 14px; align-items: start; }
+.meli .panel h2 { font-family: var(--font-display); font-weight: 400; color: var(--gold); font-size: 1.15rem; letter-spacing: .02em; margin-bottom: 4px; }
+.meli .setup { display: grid; gap: 8px; }
+.meli .m-field { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.meli .m-hint { color: var(--muted); font-size: .88rem; }
+.meli .m-hint.center { text-align: center; }
+.meli input#nameInput, .meli #pwInput {
+  width: 100%; padding: 10px 12px; font: inherit; border-radius: 8px;
+  border: 1px solid rgba(201, 162, 75, .3); background: rgba(255, 255, 255, .06); color: inherit;
+}
+.meli input#nameInput:focus, .meli #pwInput:focus { outline: none; border-color: var(--gold-2); }
+.meli input#nameInput[readonly] { opacity: .85; border-style: dashed; }
+.meli #pwInput { text-align: center; letter-spacing: .25em; text-transform: uppercase; font-weight: 700; }
+.meli .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; border-radius: 8px; padding: 3px; background: rgba(255, 255, 255, .05); }
+.meli .seg button {
+  border: 0; background: transparent; color: var(--muted); padding: 9px 8px; border-radius: 6px; font-weight: 600; font-size: .9rem;
+  transition: background .15s, color .15s; white-space: nowrap;
+}
+.meli .seg button:hover { color: var(--paper); }
+.meli .seg button[aria-checked='true'] { background: var(--gold-2); color: #2a2005; }
+.meli .open-games { min-height: 220px; }
+.meli .panel-head { display: flex; justify-content: space-between; align-items: center; }
+.meli .room-list { list-style: none; padding: 0; display: grid; gap: 8px; margin-top: 8px; }
+.meli .room-list li {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px;
+  background: rgba(0, 0, 0, .22); border: 1px solid rgba(201, 162, 75, .3);
+}
+.meli .room-list .m-who { flex: 1; min-width: 0; }
+.meli .room-list .m-who b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meli .room-list .m-who small { color: var(--muted); }
+.meli #roomEmpty { margin-top: 18px; }
+.meli .howto { font-size: .92rem; color: var(--muted); }
+.meli .howto summary { cursor: pointer; color: #eef5f0; }
+.meli .howto ol { padding-left: 1.2rem; margin-top: 8px; display: grid; gap: 6px; }
+.meli .howto b { color: var(--gold); }
+.meli .invite-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;
+  padding: 10px 14px; border-radius: 12px; background: rgba(201, 162, 75, .15); border: 1px solid var(--gold-2);
+}
+.meli #waiting { justify-content: center; }
+.meli .m-waiting { max-width: 420px; width: 100%; margin: 0 auto; display: grid; gap: 12px; text-align: center; }
+.meli .code-box { font-size: 2.6rem; font-weight: 800; letter-spacing: .3em; color: var(--gold); background: rgba(0, 0, 0, .4); border: 2px dashed var(--gold-2); border-radius: 12px; padding: 10px 0 10px .3em; }
+.meli .code-box.m-small { font-size: 1.6rem; }
+.meli .row-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.meli .dots { display: flex; gap: 6px; justify-content: center; }
+.meli .dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); animation: blink 1.2s infinite; }
+.meli .dots i:nth-child(2) { animation-delay: .2s; }
+.meli .dots i:nth-child(3) { animation-delay: .4s; }
+@keyframes blink { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+.meli button.primary, .meli button.danger, .meli button.gold, .meli button.ghost {
+  border: 0; border-radius: 8px; padding: 12px 16px; font-weight: 600; font-size: .95rem; color: var(--paper);
+  transition: transform .08s ease, filter .15s ease;
+}
+.meli button.primary:not(:disabled):active, .meli button.gold:not(:disabled):active, .meli button.ghost:not(:disabled):active, .meli button.danger:not(:disabled):active { transform: scale(.98); }
+.meli button.m-small { padding: 5px 12px; font-size: .85rem; }
+.meli button.primary, .meli button.gold { background: linear-gradient(180deg, var(--gold), var(--gold-2)); color: #2a2005; }
+.meli button.danger { background: linear-gradient(180deg, #b23a3a, #8f2d2d); color: var(--paper); }
+.meli button.ghost { background: transparent; border: 1px solid var(--gold-2); color: var(--gold); }
+.meli button:not(:disabled):hover { filter: brightness(1.08); }
+.meli .m-toast {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 200; max-width: min(92vw, 420px);
+  background: #0c1d16; color: #fff; border: 1px solid var(--gold-2); border-radius: 999px; padding: 8px 16px; text-align: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .6);
+}
+.meli .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 2px 10px; }
+.meli .opp { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.meli .avatar { font-size: 1.5rem; }
+.meli .count { font-weight: 400; color: var(--muted); }
+.meli .count b { color: #fff; }
+.meli .roundinfo { color: var(--muted); text-align: right; }
+.meli .roundinfo b { color: #fff; }
+.meli .lock {
+  display: inline-block; margin-left: 8px; padding: 2px 10px; border-radius: 999px;
+  background: rgba(0, 0, 0, .35); border: 1px solid rgba(255, 255, 255, .2); color: #fff; font-weight: 700;
+}
+.meli .lock.on { border-color: var(--gold-2); }
+.meli .table {
+  position: relative; flex: 1; min-height: 210px; display: grid; place-items: center; align-content: center; gap: 10px;
+  border-radius: 18px; border: 3px solid var(--gold-2); padding: 12px;
+  background: radial-gradient(ellipse at 50% 40%, var(--felt-light) 0%, var(--felt-2) 100%);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, .5), 0 4px 12px rgba(0, 0, 0, .4);
+}
+.meli .pile { position: relative; width: calc(var(--card-w) * 1.5); height: calc(var(--card-h) * 1.5); }
+.meli .pile .empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--muted); font-size: .9rem; padding: 8px; }
+.meli .back {
+  position: absolute; width: calc(var(--card-w) * 1.5); height: calc(var(--card-h) * 1.5); border-radius: 9px;
+  background: repeating-linear-gradient(45deg, var(--back-1) 0 6px, var(--back-2) 6px 12px);
+  border: 3px solid var(--paper); box-shadow: 0 3px 8px rgba(0, 0, 0, .45);
+}
+.meli .badge {
+  position: absolute; left: 50%; bottom: -14px; transform: translateX(-50%); white-space: nowrap;
+  background: var(--paper); color: var(--ink); border: 2px solid var(--gold); border-radius: 999px;
+  padding: 3px 10px; font-weight: 800; font-size: .95rem; z-index: 5; box-shadow: 0 2px 6px rgba(0, 0, 0, .4);
+}
+.meli .badge small { font-weight: 600; color: #666; margin-right: 4px; }
+.meli .pile-count {
+  position: absolute; top: -10px; right: -10px; z-index: 5; min-width: 28px; height: 28px; padding: 0 6px;
+  display: grid; place-items: center; border-radius: 999px; background: var(--gold); color: #222; font-weight: 800;
+}
+.meli .claims { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 12px; min-height: 26px; }
+.meli .chip { background: rgba(0, 0, 0, .35); border: 1px solid rgba(255, 255, 255, .15); border-radius: 999px; padding: 2px 10px; font-size: .85rem; }
+.meli .chip.you { border-color: #7fd1a3; }
+.meli .chip.opp { border-color: #e9a0a0; }
+.meli .reveal {
+  position: absolute; inset: 8px; display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center;
+  background: rgba(10, 30, 24, .95); border-radius: 14px; z-index: 10; padding: 12px; animation: pop .25s ease-out;
+}
+.meli .reveal .pair { display: flex; gap: 18px; align-items: end; }
+.meli .reveal .lab { font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+.meli .reveal .verdict { font-weight: 800; font-size: 1.15rem; }
+.meli .reveal .verdict.good { color: #7fe0a8; }
+.meli .reveal .verdict.bad { color: #ff9a96; }
+.meli .reveal .sub { color: var(--muted); font-size: .95rem; }
+.meli .reveal button { background: none; border: 1px solid rgba(255, 255, 255, .3); color: #eee; border-radius: 8px; padding: 4px 12px; font-size: .85rem; }
+@keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes flip { from { transform: rotateY(90deg); } to { transform: none; } }
+.meli .reveal .actual { animation: flip .5s .15s backwards; }
+.meli .status { min-height: 2.6em; padding: 10px 4px 6px; text-align: center; color: #dfeee5; }
+.meli .m-card {
+  position: relative; flex: none; width: var(--card-w); height: var(--card-h); border-radius: 8px; background: var(--paper); color: var(--ink);
+  border: 2px solid #cfc8b4; display: grid; place-items: center; font-weight: 800; font-size: 1.15rem; user-select: none;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, .4); padding: 0; line-height: 1.1;
+}
+.meli .m-card.big { --card-w: 78px; --card-h: 110px; font-size: 1.5rem; }
+.meli .m-card[data-suit='♠'] { color: var(--spade); }
+.meli .m-card[data-suit='♥'] { color: var(--heart); }
+.meli .m-card[data-suit='♦'] { color: var(--diamond); }
+.meli .m-card[data-suit='♣'] { color: var(--club); }
+.meli .m-card .suit { display: block; font-size: 1.3em; text-align: center; }
+.meli .m-card .any { font-size: .55em; font-weight: 700; color: #777; letter-spacing: .04em; text-transform: uppercase; }
+.meli .me { display: grid; gap: 8px; }
+.meli .me-label { text-align: center; color: var(--muted); font-size: .9rem; }
+.meli .me-label b { color: #fff; }
+.meli .fan { min-height: calc(var(--card-h) + 26px); display: flex; justify-content: center; align-items: flex-end; padding-top: 18px; }
+.meli .fan .m-hint { align-self: center; color: var(--muted); }
+.meli .fan-row { display: flex; justify-content: center; max-width: 100%; padding: 0 8px; }
+.meli .fan-row .m-card { margin-left: -22px; transition: transform .12s; cursor: default; }
+.meli .fan-row .m-card:first-child { margin-left: 0; }
+.meli .fan-row .m-card.m-playable { cursor: pointer; }
+.meli .fan-row .m-card.m-playable:hover, .meli .fan-row .m-card.m-playable:focus-visible { transform: translateY(-14px); z-index: 20; }
+.meli .fan-row .m-card.m-selected { transform: translateY(-24px); z-index: 30; border-color: #fff; box-shadow: 0 0 0 3px var(--gold-2), 0 6px 14px rgba(0, 0, 0, .6); }
+.meli .fan-row .m-card .tick { position: absolute; top: 2px; right: 4px; font-size: .7rem; color: var(--good); }
+.meli .suits { display: flex; justify-content: center; gap: 10px; }
+.meli .suit-btn {
+  position: relative; width: 64px; height: 56px; border-radius: 12px; border: 2px solid rgba(255, 255, 255, .25);
+  background: var(--paper); font-size: 2rem; line-height: 1; display: grid; place-items: center;
+}
+.meli .suit-btn[data-suit='♠'] { color: var(--spade); }
+.meli .suit-btn[data-suit='♥'] { color: var(--heart); }
+.meli .suit-btn[data-suit='♦'] { color: var(--diamond); }
+.meli .suit-btn[data-suit='♣'] { color: var(--club); }
+.meli .suit-btn.m-active { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201, 162, 75, .5); transform: translateY(-3px); }
+.meli .suit-btn.locked::after { content: '🔒'; position: absolute; top: -9px; left: -7px; font-size: .8rem; }
+.meli .suit-btn .n {
+  position: absolute; bottom: -7px; right: -7px; min-width: 22px; height: 22px; padding: 0 5px; display: grid; place-items: center;
+  border-radius: 999px; background: #1d2a25; color: #fff; font-size: .75rem; font-weight: 700; border: 1px solid rgba(255, 255, 255, .3);
+}
+.meli .actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.meli .actions button { min-width: 150px; }
+.meli .claim-panel { display: grid; gap: 8px; padding: 12px; }
+.meli .claim-panel .line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.meli .claim-panel .row { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+.meli .opt {
+  min-width: 38px; padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .25);
+  background: rgba(255, 255, 255, .08); color: #fff; font-weight: 700;
+}
+.meli .opt.on { background: var(--gold); color: #222; border-color: var(--gold); }
+.meli .opt.used { text-decoration: line-through; opacity: .55; }
+.meli .opt.s-red { color: #ff9a96; }
+.meli .opt.on.s-red { color: #7a1511; }
+.meli .verdict-pill { padding: 2px 10px; border-radius: 999px; font-weight: 800; font-size: .85rem; }
+.meli .verdict-pill.truth { background: rgba(63, 166, 107, .25); color: #86e3ae; border: 1px solid var(--good); }
+.meli .verdict-pill.bluff { background: rgba(217, 83, 79, .25); color: #ffaaa6; border: 1px solid var(--bad); }
+.meli .m-modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, .65); z-index: 100; padding: 16px; }
+.meli .m-modal .panel { text-align: center; display: grid; gap: 12px; max-width: 380px; width: 100%; }
+.meli .m-modal h2 { font-size: 1.8rem; }
+.meli .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--good); box-shadow: 0 0 6px var(--good); }
+.meli .dot.off { background: var(--bad); box-shadow: 0 0 6px var(--bad); animation: blink 1s infinite; }
+.meli .timer { display: inline-block; min-width: 3.2em; padding: 2px 8px; margin-right: 8px; border-radius: 999px; background: rgba(0, 0, 0, .4); border: 1px solid var(--gold-2); color: #fff; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
+.meli .timer.mine { border-color: var(--gold); color: var(--gold); }
+.meli .timer.low { background: var(--bad); border-color: var(--bad); color: #fff; }
+.meli .roundinfo { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.meli .roundinfo .ghost { margin-left: 8px; }
+.meli .m-modal .panel > * + * { margin-top: 0; }
+@media (max-width: 760px) {
+.meli .lobby-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+.meli { --card-w: 50px; --card-h: 72px; }
+.meli .fan-row .m-card { margin-left: -26px; }
+.meli .suit-btn { width: 56px; height: 50px; font-size: 1.7rem; }
+.meli .actions button { flex: 1; min-width: 0; }
+.meli .lobby h1 { font-size: 2.2rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+.meli, .meli * { animation: none !important; transition: none !important; }
+}
+.meli { color: var(--paper); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+/* waiting room + table fill the page; the lobby (Duraks styles) lives outside .meli */
+.meli-stage { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+.meli-stage .m-screen { flex: 1; width: 100%; }
+
+/* Meļi-only bits of the (otherwise Duraks-styled) lobby */
+.invite-bar {
+  display: flex; flex-direction: column; gap: 8px; margin: 14px 0;
+  padding: 12px 14px; border-radius: 12px; background: rgba(201, 162, 75, .15); border: 1px solid #c9a24b;
+}
+.invite-bar .btn { margin: 0; }
+.lobby-howto {
+  width: 100%; max-width: 1180px; margin: 24px auto 0; padding: 14px 20px; border-radius: 14px;
+  background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(201, 162, 75, 0.35); color: #9db3a8; font-size: .92rem; text-align: left;
+}
+.lobby-howto summary { cursor: pointer; color: #eef5f0; }
+.lobby-howto ol { padding-left: 1.2rem; margin: 10px 0 0; display: grid; gap: 6px; }
+.lobby-howto b { color: #e2c374; }
+#lobby.screen { flex-direction: column; align-items: center; }
+.meli .m-modal .panel { background: linear-gradient(180deg, #234a3c, #0f2b22); border-color: rgba(201, 162, 75, 0.6); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6); }

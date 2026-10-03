@@ -1,0 +1,22 @@
+/* "Back to the Uzspēlēsim.lv front page" pill, shown on every game's lobby. */
+.back-home {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(201, 162, 75, 0.6);
+  background: rgba(0, 0, 0, 0.3);
+  color: #e2c374;
+  font: 600 0.9rem -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  text-decoration: none;
+}
+.back-home:hover { background: rgba(201, 162, 75, 0.18); }
+#lobby { position: relative; }
+@media (max-width: 640px) {
+  .back-home { position: static; margin: 10px auto 0; align-self: flex-start; }
+}

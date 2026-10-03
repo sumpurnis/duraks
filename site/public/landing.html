@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light" />
+<title>Uzspēlēsim.lv — kāršu spēles internetā</title>
+<meta name="description" content="Duraks, Meļi un citas kāršu spēles internetā. Viens konts visām spēlēm." />
+<link rel="stylesheet" href="landing.css" />
+</head>
+<body>
+
+<header class="site-header" id="siteHeader">
+  <div class="site-header-inner">
+    <a class="wordmark" href="/" aria-label="Uzspēlēsim.lv — sākumlapa">Uzspēlēsim<span class="accent">.lv</span></a>
+    <nav class="site-nav" aria-label="Galvenā izvēlne">
+      <a href="#games">Spēles</a>
+      <a href="#how">Kā tas darbojas</a>
+    </nav>
+    <div class="site-auth">
+      <div id="guestArea" class="site-auth-row">
+        <button type="button" id="loginOpen" class="btn btn-secondary btn-sm">Pieslēgties</button>
+        <button type="button" id="signupOpen" class="btn btn-primary btn-sm">Reģistrēties</button>
+      </div>
+      <div id="userArea" class="site-auth-row hidden">
+        <span class="hello">Sveiki, <strong id="userName"></strong></span>
+        <button type="button" id="logoutBtn" class="btn btn-secondary btn-sm">Iziet</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section id="games" class="games">
+    <div class="wrap">
+      <h1 class="games-title">Izvēlies spēli</h1>
+      <p class="games-sub">Viens konts visām spēlēm. Nospied uz spēles — tā atvērsies savā lapā.</p>
+
+      <div class="picker" id="picker" role="group" aria-label="Spēles">
+        <div class="picker-item">
+          <a class="picker-btn" href="/duraks" data-game="duraks">
+            <span class="mini-cards" aria-hidden="true"><i></i><i></i></span>
+            <span class="picker-name">Duraks</span>
+            <span class="picker-note">2–4 spēlētāju kāršu spēle</span>
+          </a>
+        </div>
+        <div class="picker-item">
+          <a class="picker-btn" href="/meli/" data-game="meli">
+            <span class="mini-cards" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="picker-name">Meļi</span>
+            <span class="picker-note">Blefa kāršu spēle</span>
+          </a>
+        </div>
+        <div class="picker-item">
+          <div class="picker-btn picker-soon" aria-disabled="true">
+            <span class="soon-plus" aria-hidden="true">+</span>
+            <span class="picker-note">Drīzumā vairāk spēļu</span>
+          </div>
+        </div>
+      </div>
+      <p class="games-foot">Spēlēt var arī kā viesis. Konts vajadzīgs statistikai, turnīriem un atsauksmēm — un derēs visās spēlēs.</p>
+    </div>
+  </section>
+
+  <section id="how" class="how">
+    <div class="wrap">
+      <h2>Kā tas darbojas</h2>
+      <div class="steps">
+        <div class="step">
+          <span class="step-n">1</span>
+          <h3>Izveido vienu kontu</h3>
+          <p>Ar lietotājvārdu vai Google. Aizņem minūti.</p>
+        </div>
+        <div class="step">
+          <span class="step-n">2</span>
+          <h3>Izvēlies spēli</h3>
+          <p>Duraks jau tagad, Meļi blakus, vēlāk — vairāk.</p>
+        </div>
+        <div class="step">
+          <span class="step-n">3</span>
+          <h3>Spēlē un saglabā progresu</h3>
+          <p>Statistika un turnīru dalība seko tavam kontam.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <span class="wordmark small">Uzspēlēsim<span class="accent">.lv</span></span>
+    <nav aria-label="Kājene">
+      <a href="#games">Spēles</a>
+      <a href="/board.html">Atsauksmes</a>
+      <a href="/privacy.html">Privātums</a>
+      <a href="/data-deletion.html">Datu dzēšana</a>
+    </nav>
+  </div>
+</footer>
+
+<!-- Sign up / log in pop-up -->
+<div id="authOverlay" class="overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="amTitle">
+    <button type="button" class="modal-close" id="amClose" aria-label="Aizvērt">×</button>
+    <h2 id="amTitle"></h2>
+
+    <div id="amOAuth" class="oauth-buttons hidden">
+      <a href="/auth/google" id="googleLoginBtn" class="btn btn-secondary oauth-btn hidden">Turpināt ar Google</a>
+      <a href="/auth/facebook" id="facebookLoginBtn" class="btn btn-secondary oauth-btn hidden">Turpināt ar Facebook</a>
+      <div class="divider"><span>vai ar lietotājvārdu</span></div>
+    </div>
+
+    <form id="amForm" novalidate>
+      <label class="field" id="fUserRow">
+        <span id="fUserLabel">Lietotājvārds</span>
+        <input id="fUser" type="text" maxlength="20" autocomplete="username" placeholder="Spēlētājs" />
+      </label>
+      <label class="field" id="fPassRow">
+        <span id="fPassLabel">Parole</span>
+        <input id="fPass" type="password" autocomplete="current-password" placeholder="••••••••" />
+      </label>
+      <label class="field" id="fConfirmRow">
+        <span>Atkārto paroli</span>
+        <input id="fConfirm" type="password" autocomplete="new-password" placeholder="••••••••" />
+      </label>
+      <label class="field" id="fEmailRow">
+        <span>E-pasts</span>
+        <input id="fEmail" type="email" autocomplete="email" placeholder="tavs@epasts.lv" />
+      </label>
+      <button type="submit" id="amSubmit" class="btn btn-primary"></button>
+    </form>
+
+    <p id="amStatus" class="am-status hidden" role="status"></p>
+    <p id="amError" class="error hidden" role="alert"></p>
+
+    <div class="am-links">
+      <button type="button" class="link-btn" id="amForgot">Aizmirsi paroli?</button>
+      <button type="button" class="link-btn" id="amSwitch"></button>
+    </div>
+    <button type="button" class="link-btn am-guest" id="amGuest">Tikai skatos? Spēlēt kā viesim →</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden" role="status"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="landing.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * server/multi-rooms.js
+ * games/duraks/server/multi-rooms.js
  *
  * Room/socket handling for the 2-4 player Duraks mode (games/duraks-multi.js
  * + ai-multi.js). Deliberately isolated from the 2-player game's room
