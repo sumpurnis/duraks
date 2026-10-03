@@ -419,3 +419,44 @@ test('names are sanitised and the room limit is enforced', async () => {
     assert.match(await once(c, 'notice'), /full/);
   });
 });
+
+test('surrender ends the game for the opponent, keeps the room, and rematch still works', async () => {
+  await withApp({}, async ({ client }) => {
+    const a = client();
+    const b = client();
+    a.emit('room:create', { name: 'A' });
+    const { code } = await once(a, 'room:joined');
+    b.emit('room:join', { code, name: 'B' });
+    await until(a, (v) => v.phase === 'play');
+    await until(b, (v) => v.phase === 'play');
+
+    a.emit('surrender');
+    await until(b, (v) => v.phase === 'over');
+    await until(a, (v) => v.phase === 'over');
+    assert.equal(b.last.winner, b.last.you);
+    assert.equal(a.last.room.endDetail, 'surrender');
+    assert.equal(a.last.room.opp.left, false, 'surrendering does not leave the room');
+
+    a.emit('rematch');
+    b.emit('rematch');
+    await until(a, (v) => v.phase === 'play');
+    a.emit('surrender');
+    a.emit('surrender');
+    await until(a, (v) => v.phase === 'over');
+    await sleep(30);
+    assert.match(a.log.notices.join(' '), /No game in progress/, 'a second surrender is rejected');
+  });
+});
+
+test('surrender against the computer counts as a loss and Play again restarts', async () => {
+  await withApp({}, async ({ client }) => {
+    const s = client();
+    s.emit('room:create', { name: 'S', vsAI: true });
+    await until(s, (v) => v.phase === 'play');
+    s.emit('surrender');
+    await until(s, (v) => v.phase === 'over');
+    assert.equal(s.last.winner, 1 - s.last.you);
+    s.emit('rematch');
+    await until(s, (v) => v.phase === 'play');
+  });
+});

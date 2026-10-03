@@ -16,12 +16,12 @@
   --bad: #d9534f;
   --back-1: #3b3f8f;
   --back-2: #272a63;
-  --spade: #23272b;
+  --spade: #14171a;
   --heart: #d6342c;
-  --diamond: #d9780f;
-  --club: #1f6fd0;
-  --card-w: 58px;
-  --card-h: 82px;
+  --diamond: #d6342c;
+  --club: #14171a;
+  --card-w: 72.5px;
+  --card-h: 102.5px;
 }
 .meli, .meli * { box-sizing: border-box; margin: 0; }
 .meli .hidden { display: none !important; }
@@ -89,7 +89,7 @@
 .meli .dots i:nth-child(2) { animation-delay: .2s; }
 .meli .dots i:nth-child(3) { animation-delay: .4s; }
 @keyframes blink { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
-.meli button.primary, .meli button.danger, .meli button.gold, .meli button.ghost {
+.meli button.primary, .meli button.danger, .meli button.gold, .meli button.ghost, .meli button.ghost-danger {
   border: 0; border-radius: 8px; padding: 12px 16px; font-weight: 600; font-size: .95rem; color: var(--paper);
   transition: transform .08s ease, filter .15s ease;
 }
@@ -97,6 +97,8 @@
 .meli button.m-small { padding: 5px 12px; font-size: .85rem; }
 .meli button.primary, .meli button.gold { background: linear-gradient(180deg, var(--gold), var(--gold-2)); color: #2a2005; }
 .meli button.danger { background: linear-gradient(180deg, #b23a3a, #8f2d2d); color: var(--paper); }
+.meli button.ghost-danger { background: transparent; border: 1px solid rgba(217, 83, 79, .6); color: #ff9a96; }
+.meli button.ghost-danger:not(:disabled):hover { background: rgba(178, 58, 58, .15); }
 .meli button.ghost { background: transparent; border: 1px solid var(--gold-2); color: var(--gold); }
 .meli button:not(:disabled):hover { filter: brightness(1.08); }
 .meli .m-toast {
@@ -125,9 +127,9 @@
 .meli .pile { position: relative; width: calc(var(--card-w) * 1.5); height: calc(var(--card-h) * 1.5); }
 .meli .pile .empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--muted); font-size: .9rem; padding: 8px; }
 .meli .back {
-  position: absolute; width: calc(var(--card-w) * 1.5); height: calc(var(--card-h) * 1.5); border-radius: 9px;
-  background: repeating-linear-gradient(45deg, var(--back-1) 0 6px, var(--back-2) 6px 12px);
-  border: 3px solid var(--paper); box-shadow: 0 3px 8px rgba(0, 0, 0, .45);
+  position: absolute; width: calc(var(--card-w) * 1.5); height: calc(var(--card-h) * 1.5);
+  background: url('/images/trump-stack.png') center / 100% 100% no-repeat;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .55));
 }
 .meli .badge {
   position: absolute; left: 50%; bottom: -14px; transform: translateX(-50%); white-space: nowrap;
@@ -159,11 +161,11 @@
 .meli .reveal .actual { animation: flip .5s .15s backwards; }
 .meli .status { min-height: 2.6em; padding: 10px 4px 6px; text-align: center; color: #dfeee5; }
 .meli .m-card {
-  position: relative; flex: none; width: var(--card-w); height: var(--card-h); border-radius: 8px; background: var(--paper); color: var(--ink);
-  border: 2px solid #cfc8b4; display: grid; place-items: center; font-weight: 800; font-size: 1.15rem; user-select: none;
+  position: relative; flex: none; width: var(--card-w); height: var(--card-h); border-radius: 7px; background-color: var(--paper); color: var(--ink);
+  border: 1px solid rgba(0, 0, 0, .3); display: grid; place-items: center; font-weight: 800; font-size: 1.15rem; user-select: none;
   box-shadow: 0 2px 5px rgba(0, 0, 0, .4); padding: 0; line-height: 1.1;
 }
-.meli .m-card.big { --card-w: 78px; --card-h: 110px; font-size: 1.5rem; }
+.meli .m-card.big { --card-w: 97.5px; --card-h: 137.5px; font-size: 1.5rem; }
 .meli .m-card[data-suit='♠'] { color: var(--spade); }
 .meli .m-card[data-suit='♥'] { color: var(--heart); }
 .meli .m-card[data-suit='♦'] { color: var(--diamond); }
@@ -185,7 +187,7 @@
 .meli .suits { display: flex; justify-content: center; gap: 10px; }
 .meli .suit-btn {
   position: relative; width: 64px; height: 56px; border-radius: 12px; border: 2px solid rgba(255, 255, 255, .25);
-  background: var(--paper); font-size: 2rem; line-height: 1; display: grid; place-items: center;
+  background: var(--paper); font-size: 3rem; line-height: 1; padding-bottom: 4px; display: grid; place-items: center;
 }
 .meli .suit-btn[data-suit='♠'] { color: var(--spade); }
 .meli .suit-btn[data-suit='♥'] { color: var(--heart); }
@@ -228,9 +230,9 @@
 .meli .lobby-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
-.meli { --card-w: 50px; --card-h: 72px; }
+.meli { --card-w: 62.5px; --card-h: 90px; }
 .meli .fan-row .m-card { margin-left: -26px; }
-.meli .suit-btn { width: 56px; height: 50px; font-size: 1.7rem; }
+.meli .suit-btn { width: 56px; height: 50px; font-size: 2.55rem; }
 .meli .actions button { flex: 1; min-width: 0; }
 .meli .lobby h1 { font-size: 2.2rem; }
 }

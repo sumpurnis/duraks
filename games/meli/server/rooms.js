@@ -360,6 +360,13 @@ class RoomManager {
     this.io.to('lobby').emit('stats', stats.snapshot());
   }
 
+  /** "Padoties": give up this game. The room stays open, so a rematch is possible. */
+  surrender(socket) {
+    const { room, idx } = this.lookup(socket);
+    if (room.status !== 'playing') throw new RoomError('No game in progress.', 'none');
+    this.forfeit(room, idx, 'surrender');
+  }
+
   armTurn(room) {
     clearTimeout(room.turnTimer);
     room.turnDeadline = null;

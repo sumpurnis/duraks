@@ -101,6 +101,7 @@ function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null } = {}) {
       socket.emit('stats', stats.snapshot());
     });
     socket.on('play', guard((m) => manager.play(socket, m)));
+    socket.on('surrender', guard(() => manager.surrender(socket)));
     socket.on('challenge', guard(() => manager.challenge(socket)));
     socket.on('disconnect', () => manager.disconnect(socket));
   });

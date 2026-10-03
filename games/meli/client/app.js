@@ -1,9 +1,10 @@
 (() => {
   'use strict';
 
-  const SUITS = ['♠', '♥', '♦', '♣'];
+  const SUITS = ['♠', '♥', '♣', '♦']; // black, red, black, red
   const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
   const SUIT_NAME = { '♠': 'pīķi', '♥': 'sirdis', '♦': 'kāro', '♣': 'kreiči' };
+  const SUIT_CLASS = { '♠': 'spades', '♥': 'hearts', '♦': 'diamonds', '♣': 'clubs' };
   const MODE_NAME = { suit: 'Masts', 'suit-rank': 'Masts + vērtība' };
   const kartis = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'kārti' : 'kārtis');
 
@@ -108,7 +109,13 @@
     const d = el(tag, 'm-card' + (big ? ' big' : ''));
     if (tag === 'button') d.type = 'button';
     d.dataset.suit = c.suit;
-    d.append(c.rank === null ? el('span', 'any', 'jebkura') : el('span', null, c.rank), el('span', 'suit', c.suit));
+    if (c.rank === null) {
+      // suit-only announcement: no particular card, so no Duraks face to show
+      d.append(el('span', 'any', 'jebkura'), el('span', 'suit', c.suit));
+    } else {
+      // Duraks card art (sprite classes come from the shared /style.css)
+      d.classList.add('card-face', `card-face-${c.rank}-${SUIT_CLASS[c.suit]}`);
+    }
     d.setAttribute('aria-label', c.rank === null ? `kārts: ${SUIT_NAME[c.suit]}` : `${c.rank}, ${SUIT_NAME[c.suit]}`);
     return d;
   }
@@ -622,6 +629,8 @@
     $('placeBtn').disabled = !(view && view.canPlay && !busy && card);
     $('placeBtn').textContent = card && claim ? `Likt kā ${suitOnly() ? claim.suit : claim.rank + claim.suit}` : 'Likt kārti';
     $('bluffBtn').disabled = !(view && view.canChallenge && !busy);
+    $('surrenderBtn').classList.toggle('hidden', !(view && view.phase === 'play'));
+    $('surrenderBtn').disabled = busy;
   }
 
   // ---- reveal ------------------------------------------------------------
@@ -708,10 +717,11 @@
         d === 'left' ? `${opp} izgāja no spēles.`
         : d === 'disconnect' ? `${opp} atslēdzās.`
         : d === 'timeout' ? `${opp} pietrūka laika.`
+        : d === 'surrender' ? `${opp} padevās.`
         : 'Tu pirmais atbrīvojies no kārtīm.';
     } else {
       title = `${opp} uzvar`;
-      text = d === 'timeout' ? 'Tev pietrūka laika.' : `${opp} pirmais atbrīvojās no kārtīm.`;
+      text = d === 'timeout' ? 'Tev pietrūka laika.' : d === 'surrender' ? 'Tu padevies.' : `${opp} pirmais atbrīvojās no kārtīm.`;
     }
     $('overTitle').textContent = title;
     $('overText').textContent = text;
@@ -824,6 +834,10 @@
     if (!view || view.phase === 'over') return socket.emit('room:leave');
     $('leaveText').textContent = vsAI() ? 'Spēle tiks zaudēta.' : `Iziešana ir padošanās. ${oppName()} uzvar.`;
     openModal('leaveModal');
+  });
+  $('surrenderBtn').addEventListener('click', () => {
+    if (!view || view.phase !== 'play' || busy) return;
+    if (window.confirm('Vai tiešām vēlies padoties? Pretinieks tiks pasludināts par uzvarētāju.')) socket.emit('surrender');
   });
   $('leaveNo').addEventListener('click', () => closeModal('leaveModal'));
   $('leaveYes').addEventListener('click', () => {
