@@ -9,12 +9,14 @@
  *  - Rematch needs both players to agree (computer games restart at once).
  */
 const crypto = require('node:crypto');
-const { MeliGame, RuleError, ANNOUNCE_MODES } = require('./engine');
+const { MeliGame, RuleError } = require('./engine');
 const ai = require('./ai');
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 const randomString = (n) => Array.from(crypto.randomBytes(n), (b) => ALPHABET[b % ALPHABET.length]).join('');
-const HAND_SIZES = new Set([10, 26]);
+// Announcement versions players may pick. 'suit-rank' is implemented but switched off for now.
+const ANNOUNCE_ENABLED = ['suit'];
+const HAND_SIZES = new Set([12, 26]); // cards each: 24-card game (9 to Ace) or 52-card game (whole deck);
 const AI_SEAT = 1;
 
 class RoomError extends RuleError {
@@ -170,8 +172,8 @@ class RoomManager {
     const room = {
       code,
       vsAI,
-      announce: ANNOUNCE_MODES.includes(msg.announce) ? msg.announce : 'suit',
-      handSize: HAND_SIZES.has(Number(msg.handSize)) ? Number(msg.handSize) : 10,
+      announce: ANNOUNCE_ENABLED.includes(msg.announce) ? msg.announce : 'suit',
+      handSize: HAND_SIZES.has(Number(msg.handSize)) ? Number(msg.handSize) : 12,
       password: !vsAI && msg.private ? randomString(6) : null,
       seats: [this.makeSeat(socket, msg.name, msg.account), null],
       game: null,
@@ -304,6 +306,7 @@ class RoomManager {
     room.game = new MeliGame({
       announce: room.announce,
       handSize: room.handSize,
+      deck: room.handSize === 12 ? 'half' : 'full', // 24-card game = the 24 strongest cards (9 to Ace)
       starter: this.cfg.rng() < 0.5 ? 0 : 1,
     });
     room.status = 'playing';

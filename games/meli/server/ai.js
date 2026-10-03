@@ -46,8 +46,8 @@ function bluffClaim(game, me, card, rng) {
 
   // Otherwise any unannounced card of the locked suit that isn't the one I'm placing.
   const suit = game.lockedSuit || pick(SUITS, rng);
-  const free = RANKS.filter((r) => !claimed.has(r + suit) && !(r === card.rank && suit === card.suit));
-  return { rank: pick(free.length ? free : RANKS, rng), suit };
+  const free = game.ranks.filter((r) => !claimed.has(r + suit) && !(r === card.rank && suit === card.suit));
+  return { rank: pick(free.length ? free : game.ranks, rng), suit };
 }
 
 function choosePlayRank(game, me, rng) {

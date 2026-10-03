@@ -26,16 +26,23 @@
 const SUITS = ['♠', '♥', '♦', '♣'];
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 const ANNOUNCE_MODES = ['suit-rank', 'suit'];
-const DEFAULTS = Object.freeze({ handSize: 26, announce: 'suit-rank' });
+const DECKS = ['full', 'half'];
+const DEFAULTS = Object.freeze({ handSize: 26, announce: 'suit-rank', deck: 'full' });
+// 'half' = the 24 strongest cards: 9 to Ace in every suit.
 
 class RuleError extends Error {}
 
 const pub = (c) => ({ id: c.id, rank: c.rank, suit: c.suit });
 const sameFace = (a, b) => a.rank === b.rank && a.suit === b.suit;
 
-function makeDeck() {
+function makeDeck(kind = 'full') {
   const deck = [];
-  for (const suit of SUITS) for (const rank of RANKS) deck.push({ id: rank + suit, rank, suit });
+  for (const suit of SUITS) {
+    for (const rank of RANKS) {
+      if (kind === 'half' && RANKS.indexOf(rank) < RANKS.indexOf('9')) continue;
+      deck.push({ id: rank + suit, rank, suit });
+    }
+  }
   return deck;
 }
 
@@ -65,9 +72,13 @@ class MeliGame {
     this.rng = opts.rng || Math.random;
     const h = this.opts.handSize;
     if (!Number.isInteger(h) || h < 1 || h * 2 > 52) throw new RangeError('handSize must be an integer between 1 and 26');
+    if (!DECKS.includes(this.opts.deck)) throw new RangeError('deck must be "full" or "half"');
     if (!ANNOUNCE_MODES.includes(this.opts.announce)) throw new RangeError('announce must be "suit" or "suit-rank"');
 
-    const deck = shuffle(makeDeck(), this.rng);
+    const deck = shuffle(makeDeck(this.opts.deck), this.rng);
+    if (h * 2 > deck.length) throw new RangeError(`handSize too large for the ${this.opts.deck} deck`);
+    /** Ranks that exist in this deck (a rank outside it can never be a true announcement). */
+    this.ranks = RANKS.filter((r) => deck.some((c) => c.rank === r));
     this.hands = [deck.slice(0, h), deck.slice(h, 2 * h)];
     this.hands.forEach(sortHand);
 
@@ -134,7 +145,7 @@ class MeliGame {
       if (this.lockedSuit && suit !== this.lockedSuit) throw new RuleError(`The suit is locked to ${this.lockedSuit} for this round.`);
       return { rank: null, suit };
     }
-    if (!claim || !SUITS.includes(claim.suit) || !RANKS.includes(claim.rank)) {
+    if (!claim || !SUITS.includes(claim.suit) || !this.ranks.includes(claim.rank)) {
       throw new RuleError('Announce a valid suit and rank.');
     }
     if (this.lockedSuit && claim.suit !== this.lockedSuit) {
@@ -199,6 +210,7 @@ class MeliGame {
       winner: this.winner,
       endReason: this.endReason,
       announce: this.opts.announce,
+      ranks: this.ranks,
       round: this.round,
       turn: this.turn,
       lockedSuit: this.lockedSuit,
@@ -214,4 +226,4 @@ class MeliGame {
   }
 }
 
-module.exports = { MeliGame, RuleError, SUITS, RANKS, DEFAULTS, ANNOUNCE_MODES };
+module.exports = { MeliGame, RuleError, SUITS, RANKS, DEFAULTS, ANNOUNCE_MODES, DECKS };

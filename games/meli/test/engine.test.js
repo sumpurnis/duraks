@@ -170,3 +170,33 @@ test('forfeit: the other player wins and the game is over', () => {
   assert.equal(g.view(1).canPlay, false);
   assert.throws(() => g.play(1, g.hands[1][0].id, { rank: g.hands[1][0].rank, suit: g.hands[1][0].suit }), RuleError);
 });
+
+test('half deck: the 24 strongest cards (9 to Ace in every suit), 12 each', () => {
+  const g = new MeliGame({ rng: mulberry32(21), handSize: 12, deck: 'half' });
+  const all = [...g.hands[0], ...g.hands[1]];
+  assert.equal(all.length, 24);
+  assert.equal(new Set(all.map((c) => c.id)).size, 24);
+  assert.ok(all.every((c) => ['9', '10', 'J', 'Q', 'K', 'A'].includes(c.rank)));
+  assert.deepEqual(g.ranks, ['9', '10', 'J', 'Q', 'K', 'A']);
+  assert.deepEqual(g.view(0).ranks, g.ranks);
+  assert.throws(() => new MeliGame({ handSize: 13, deck: 'half' }), RangeError);
+  assert.throws(() => new MeliGame({ deck: 'nope' }), RangeError);
+  // announcing a rank that does not exist in this deck is rejected
+  g.turn = 0;
+  assert.throws(() => g.play(0, g.hands[0][0].id, { rank: '2', suit: g.hands[0][0].suit }), RuleError);
+});
+
+test('half deck AI-vs-AI games finish in both modes', () => {
+  for (const announce of ['suit', 'suit-rank']) {
+    for (let seed = 1; seed <= 40; seed++) {
+      const rng = mulberry32(seed);
+      const g = new MeliGame({ rng, handSize: 12, deck: 'half', announce });
+      let steps = 0;
+      while (g.phase === 'play') {
+        const m = ai.decide(g, g.turn, rng);
+        if (m.action === 'challenge') g.challenge(g.turn); else g.play(g.turn, m.cardId, m.claim);
+        if (++steps > 20000) assert.fail(`did not finish (${announce}, seed ${seed})`);
+      }
+    }
+  }
+});

@@ -86,12 +86,12 @@ const noLeak = (v) => assert.ok(!('hands' in v) && !('opponentHand' in v) && !('
 
 // ----------------------------------------------------------------------------- vs computer
 
-for (const announce of ['suit', 'suit-rank']) {
+for (const announce of ['suit']) {
   test(`vs computer (announce=${announce}): quick games run to completion`, async () => {
     await withApp({}, async ({ client }) => {
       for (let i = 0; i < 3; i++) {
         const s = client();
-        s.emit('room:create', { name: 'Tester', vsAI: true, announce, handSize: 10 });
+        s.emit('room:create', { name: 'Tester', vsAI: true, announce, handSize: 12 });
         const joined = await once(s, 'room:joined');
         assert.equal(joined.vsAI, true);
         assert.equal(joined.password, null);
@@ -141,7 +141,7 @@ test('player vs player: create, list, join, separate views', async () => {
     watcher.on('rooms', (l) => feed.push(l));
     await sleep(100);
 
-    host.emit('room:create', { name: 'Anna', announce: 'suit-rank', handSize: 10 });
+    host.emit('room:create', { name: 'Anna', announce: 'suit-rank', handSize: 12 }); // switched off: must come back as 'suit'
     const hj = await once(host, 'room:joined');
     assert.equal(hj.status, 'waiting');
     assert.equal(hj.seat, 0);
@@ -149,7 +149,7 @@ test('player vs player: create, list, join, separate views', async () => {
 
     await sleep(100);
     const list = feed[feed.length - 1];
-    assert.deepEqual(list, [{ code: hj.code, host: 'Anna', announce: 'suit-rank', handSize: 10, private: false }]);
+    assert.deepEqual(list, [{ code: hj.code, host: 'Anna', announce: 'suit', handSize: 12, private: false }]);
 
     guest.emit('room:join', { code: hj.code.toLowerCase(), name: 'Bruno' });
     const gj = await once(guest, 'room:joined');
@@ -162,10 +162,10 @@ test('player vs player: create, list, join, separate views', async () => {
     assert.equal(guest.last.room.opp.name, 'Anna');
     assert.equal(host.last.you, 0);
     assert.equal(guest.last.you, 1);
-    assert.equal(host.last.hand.length, 10);
-    assert.equal(guest.last.hand.length, 10);
+    assert.equal(host.last.hand.length, 12);
+    assert.equal(guest.last.hand.length, 12);
     const ids = new Set([...host.last.hand, ...guest.last.hand].map((c) => c.id));
-    assert.equal(ids.size, 20, 'hands are disjoint');
+    assert.equal(ids.size, 24, 'hands are disjoint');
     assert.notEqual(host.last.canPlay, guest.last.canPlay, 'exactly one player may move');
     noLeak(host.last);
     noLeak(guest.last);
@@ -178,7 +178,7 @@ test('player vs player: full scripted game, then rematch needs both players', as
   await withApp({}, async ({ client }) => {
     const a = client();
     const b = client();
-    a.emit('room:create', { name: 'A', announce: 'suit', handSize: 10 });
+    a.emit('room:create', { name: 'A', announce: 'suit', handSize: 12 });
     const { code } = await once(a, 'room:joined');
     b.emit('room:join', { code, name: 'B' });
     await playOut(a, b);
@@ -197,7 +197,7 @@ test('player vs player: full scripted game, then rematch needs both players', as
     b.emit('rematch');
     await until(a, (v) => v.phase === 'play');
     await until(b, (v) => v.phase === 'play');
-    assert.equal(a.last.hand.length, 10);
+    assert.equal(a.last.hand.length, 12);
     await playOut(a, b);
   });
 });
@@ -206,7 +206,7 @@ test('private rooms: listed with a lock, need the generated password', async () 
   await withApp({}, async ({ client }) => {
     const host = client();
     const guest = client();
-    host.emit('room:create', { name: 'H', private: true, handSize: 10 });
+    host.emit('room:create', { name: 'H', private: true, handSize: 12 });
     const hj = await once(host, 'room:joined');
     assert.match(hj.password, /^[A-Z2-9]{6}$/);
 
@@ -407,7 +407,7 @@ test('names are sanitised and the room limit is enforced', async () => {
     const b = client();
     a.emit('room:create', { name: '  <b>Eve</b>\n  ', handSize: 99, announce: 'bogus' });
     const j = await once(a, 'room:joined');
-    assert.equal(j.handSize, 10, 'unknown sizes fall back to the quick game');
+    assert.equal(j.handSize, 12, 'unknown sizes fall back to the 24-card game');
     assert.equal(j.announce, 'suit');
     b.emit('room:join', { code: j.code, name: 'x'.repeat(100) });
     await until(a, (v) => v.phase === 'play');

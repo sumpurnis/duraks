@@ -21,7 +21,7 @@
   <div class="lobby-layout">
     <div class="lobby-card">
       <h1 class="wordmark">Meļ<span class="accent">i</span></h1>
-      <p class="tagline">Blefa kāršu spēle</p>
+      <p class="tagline">2 spēlētāju kāršu spēle</p>
       <p class="playing-as"><a href="/board.html">💬 Atsauksmes un ieteikumi</a></p>
 
       <div id="inviteBar" class="invite-bar hidden">
@@ -64,8 +64,8 @@
         <div class="quick-presets">
           <p class="quick-presets-title">Ātrā istabas izveide</p>
           <div class="quick-presets-row">
-            <button class="btn btn-quick" type="button" data-preset="10">⚡ Ātrā · 10 kārtis katram</button>
-            <button class="btn btn-quick" type="button" data-preset="26">⚡ Pilnā · 26 kārtis katram</button>
+            <button class="btn btn-quick" type="button" data-preset="12">⚡ 24 kārtis</button>
+            <button class="btn btn-quick" type="button" data-preset="26">⚡ 52 kārtis</button>
           </div>
         </div>
       </div>
@@ -81,8 +81,8 @@
         <div class="quick-presets">
           <p class="quick-presets-title">Ātrā istabas izveide</p>
           <div class="quick-presets-row">
-            <button class="btn btn-quick" type="button" data-preset="10">⚡ Ātrā · 10 kārtis katram</button>
-            <button class="btn btn-quick" type="button" data-preset="26">⚡ Pilnā · 26 kārtis katram</button>
+            <button class="btn btn-quick" type="button" data-preset="12">⚡ 24 kārtis</button>
+            <button class="btn btn-quick" type="button" data-preset="26">⚡ 52 kārtis</button>
           </div>
         </div>
       </div>
@@ -155,16 +155,6 @@
     </div>
   </div>
 
-  <details class="lobby-howto">
-    <summary>Kā spēlēt Meļus</summary>
-    <ol>
-      <li>Noliec kārti ar seju uz leju un <b>paziņo</b> to. Raunda pirmā kārts nofiksē mastu; katra nākamā jāpaziņo šajā mastī. <i>Masta</i> režīmā mastu nosauc vienreiz, un katra nākamā kārts to apgalvo; režīmā <i>masts + vērtība</i> katru reizi paziņo precīzu kārti.</li>
-      <li>Drīkst likt jebkuru kārti no rokas. Ja nav nofiksētā masta, jāblefo.</li>
-      <li>Nākamās kārts nolikšana ir tava “pase”. Vai arī spied <b>Meli!</b> uz tikko nolikto kārti.</li>
-      <li>Tiek atklāta tikai šī kārts. Ja tā nebija tā, kas paziņota, melotājs paņem kaudzi. Pretējā gadījumā to paņem tas, kas apsūdzēja.</li>
-      <li>Uzvar tas, kurš pirmais atbrīvojas no kārtīm. Pēdējā kārts tiek pārbaudīta automātiski.</li>
-    </ol>
-  </details>
 </div>
 
 <!-- Forgot password / choose a username after Google sign-up: same pop-ups as Duraks -->
@@ -226,7 +216,6 @@
     </div>
     <div class="roundinfo">
       <span id="timer" class="timer hidden" title="Atlikušais laiks gājienam"></span>
-      Raunds <b id="round">1</b>
       <span id="lock" class="lock"></span>
       <button type="button" id="leaveBtn" class="ghost m-small">Iziet</button>
     </div>
@@ -262,17 +251,10 @@
   <form id="setupForm" class="panel setup">
     <h2 id="setupTitle">Jauna istaba</h2>
 
-    <div class="m-field">Paziņo</div>
-    <div class="seg" data-key="announce" role="radiogroup" aria-label="Ko paziņo">
-      <button type="button" role="radio" data-value="suit" aria-checked="true">Masts</button>
-      <button type="button" role="radio" data-value="suit-rank" aria-checked="false">Masts + vērtība</button>
-    </div>
-    <p class="m-hint" id="announceHint"></p>
-
-    <div class="m-field">Kārtis katram</div>
-    <div class="seg" data-key="size" role="radiogroup" aria-label="Kārtis katram">
-      <button type="button" role="radio" data-value="10" aria-checked="true">10 · ātrā</button>
-      <button type="button" role="radio" data-value="26" aria-checked="false">26 · pilnā</button>
+    <div class="m-field">Kāršu skaits</div>
+    <div class="seg" data-key="size" role="radiogroup" aria-label="Kāršu skaits">
+      <button type="button" role="radio" data-value="12" aria-checked="true">24 kārtis</button>
+      <button type="button" role="radio" data-value="26" aria-checked="false">52 kārtis</button>
     </div>
 
     <div class="m-field">Privāta spēle</div>

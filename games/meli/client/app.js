@@ -83,11 +83,13 @@
   let deadline = null; // Date.now() value at which our/their turn timer runs out
   let pendingJoin = null; // { code } while the password popup is open
   let invite = null; // { code, pw } from ?room=
-  let settings = { announce: 'suit', size: '10', private: 'off' };
+  // Only the suit-only version is switched on for now. The suit + rank version still exists in the engine
+  // (server/engine.js) and is re-enabled by listing 'suit-rank' in ANNOUNCE_ENABLED (server/rooms.js) and
+  // adding the switch back to the setup pop-up.
+  let settings = { announce: 'suit', size: '12', private: 'off' };
   try {
     const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
-    if (saved && (saved.announce === 'suit' || saved.announce === 'suit-rank')) settings.announce = saved.announce;
-    if (saved && (saved.size === '10' || saved.size === '26')) settings.size = saved.size;
+    if (saved && (saved.size === '12' || saved.size === '26')) settings.size = saved.size;
   } catch { /* ignore */ }
 
   // ---- storage (can throw in private windows) -------------------------------
@@ -195,10 +197,6 @@
       seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === settings[key])));
     });
     $('createSubmit').textContent = settings.private === 'on' ? '🔒 Izveidot privātu istabu' : 'Izveidot istabu';
-    $('announceHint').textContent =
-      settings.announce === 'suit'
-        ? 'Sācējs nosauc mastu; katra nākamā kārts to klusi apgalvo.'
-        : 'Katra kārts tiek paziņota kā precīza kārts, piem., K♠.';
   }
 
   document.querySelectorAll('.seg').forEach((seg) => {
@@ -257,7 +255,7 @@
       const info = el('div', 'open-room-info');
       info.append(
         el('span', 'host-name', (r.private ? '🔒 ' : '') + r.host),
-        el('p', 'muted small', `${MODE_NAME[r.announce]} · ${r.handSize} ${kartis(r.handSize)} katram`)
+        el('p', 'muted small', `${MODE_NAME[r.announce]} · ${r.handSize * 2} kārtis`)
       );
       const btn = el('button', 'btn btn-secondary', 'Pievienoties');
       btn.type = 'button';
@@ -361,7 +359,7 @@
   // ---- waiting room ----------------------------------------------------------
   function showWaiting(s) {
     $('waitCode').textContent = s.code;
-    $('waitInfo').textContent = `${MODE_NAME[s.announce]} · ${s.handSize} ${kartis(s.handSize)} katram. Nosūti kodu vai uzaicinājuma saiti.`;
+    $('waitInfo').textContent = `${MODE_NAME[s.announce]} · ${s.handSize * 2} kārtis. Nosūti kodu vai uzaicinājuma saiti.`;
     $('waitPassRow').classList.toggle('hidden', !s.password);
     $('waitPass').textContent = s.password || '';
     show('waiting');
@@ -393,7 +391,6 @@
     $('oppCount').textContent = view.oppCount;
     $('myCount').textContent = view.hand.length;
     $('meName').textContent = view.room.myName;
-    $('round').textContent = view.round;
 
     const lock = $('lock');
     lock.textContent = view.lockedSuit ? `Masts: ${view.lockedSuit}` : 'Masts brīvs';
@@ -426,6 +423,7 @@
     const pile = $('pile');
     const claims = $('claims');
     pile.replaceChildren();
+    pile.classList.remove('has-claim');
     claims.replaceChildren();
     const n = view.pile.count;
 
@@ -443,7 +441,10 @@
     }
     const last = view.pile.claims[n - 1];
     const badge = el('div', 'badge');
-    badge.append(el('small', null, last.by === 'you' ? 'tu apgalvo' : `${oppName()} apgalvo`), document.createTextNode(face(last)));
+    const sym = el('span', 'sym', face(last));
+    sym.dataset.suit = last.suit;
+    badge.append(el('small', null, last.by === 'you' ? 'Tu apgalvo' : `${oppName()} apgalvo`), sym);
+    pile.classList.add('has-claim');
     pile.append(badge, el('div', 'pile-count', String(n)));
 
     if (suitOnly()) return;
@@ -610,7 +611,7 @@
 
     const used = new Set(view.pile.claims.map((c) => c.rank + c.suit));
     const rankRow = el('div', 'row');
-    for (const r of RANKS) {
+    for (const r of view.ranks || RANKS) {
       const o = el('button', 'opt' + (claim.rank === r ? ' on' : '') + (used.has(r + claim.suit) ? ' used' : ''), r);
       o.type = 'button';
       o.title = used.has(r + claim.suit) ? 'Šajā raundā jau paziņota' : '';
