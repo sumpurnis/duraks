@@ -221,6 +221,7 @@
       <button type="button" id="menuBtn" class="multi-menu-btn hidden" aria-label="Izvēlne" aria-expanded="false">⋯</button>
     </div>
   </header>
+  <div id="tbar" class="m-tbar hidden" aria-hidden="true"><i></i></div>
   <div id="menuSheet" class="multi-sheet hidden">
     <strong>Padoties?</strong>
     <span class="muted">Pretinieks tiks pasludināts par uzvarētāju. Turi nospiestu 1,5 sekundes.</span>
@@ -237,15 +238,9 @@
   <p id="status" class="status" role="status" aria-live="polite"></p>
 
   <section class="me" aria-label="Tava roka">
-    <div id="claimPanel" class="panel claim-panel hidden"></div>
-
+    <div id="actBar" class="m-actbar"></div>
     <div id="fan" class="fan"></div>
-    <div id="suits" class="suits"></div>
-
-    <div class="actions">
-      <button id="placeBtn" class="primary" disabled>Likt kārti</button>
-      <button id="bluffBtn" class="danger" disabled>Meli!</button>
-    </div>
+    <p id="handHint" class="m-handhint" aria-live="polite"></p>
     <div class="me-label"><span id="meName">Tu</span> · kārtis: <b id="myCount">0</b></div>
     <label class="deck-pick">Kārtis
       <select id="cardDeckSelect" class="card-deck-select" aria-label="Kāršu dizains">

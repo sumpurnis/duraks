@@ -280,3 +280,64 @@
 .meli .multi-hold span:last-child { position: relative; }
 /* Card design picker under my hand */
 .meli .deck-pick { display: flex; justify-content: center; align-items: center; gap: 8px; font-size: .8rem; color: var(--muted); margin-top: 4px; }
+
+/* ---------- two-tap hand (Nov 2026) ---------- */
+.meli .m-tbar { height: 4px; border-radius: 99px; background: rgba(0, 0, 0, .35); overflow: hidden; margin: -4px 2px 8px; }
+.meli .m-tbar i { display: block; height: 100%; border-radius: 99px; }
+.meli .m-tbar.low { animation: m-pulse-bar .6s ease-in-out infinite; }
+@keyframes m-pulse-bar { 50% { box-shadow: 0 0 0 3px rgba(230, 70, 50, .45); } }
+.meli .m-actbar { min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+.meli .m-meli {
+  font: inherit; font-weight: 800; font-size: 1.15rem; letter-spacing: .05em; color: #fff; background: #c0392b; border: 0; border-radius: 12px;
+  padding: 10px 42px; cursor: pointer; box-shadow: 0 4px 12px rgba(0, 0, 0, .35); animation: m-pulse 1.4s ease-in-out infinite;
+}
+@keyframes m-pulse { 50% { box-shadow: 0 0 0 7px rgba(192, 57, 43, .35), 0 4px 12px rgba(0, 0, 0, .35); } }
+.meli .m-announce { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.meli .m-ann {
+  font: inherit; font-size: 1.5rem; line-height: 1; width: 54px; height: 46px; border-radius: 10px; border: 2px solid var(--gold-2);
+  background: var(--paper); color: var(--ink); cursor: pointer; display: grid; place-items: center; padding: 0;
+}
+.meli .m-ann[data-suit='♥'], .meli .m-ann[data-suit='♦'] { color: var(--heart); }
+.meli .m-ann.real { box-shadow: 0 0 0 3px var(--good); }
+.meli .m-ann.on { border-color: var(--gold); background: #fff3cf; }
+.meli .m-announce.ranks .m-ann { width: 38px; height: 38px; font-size: 1rem; font-weight: 800; }
+.meli .m-ann.used { opacity: .45; }
+.meli .m-ann:focus-visible, .meli .m-meli:focus-visible, .meli .m-stack:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.meli .fan { padding-top: 46px; }
+.meli .fan-row { align-items: flex-end; }
+.meli .fan-row .m-card.m-off { filter: brightness(.62); }
+.meli .fan-row .m-card .m-mark {
+  position: absolute; left: 5px; bottom: -8px; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid #fff;
+  display: grid; place-items: center; font-size: 11px; font-weight: 900; color: #fff; z-index: 2;
+}
+.meli .fan-row .m-card .m-mark.t { background: #2e8b57; }
+.meli .fan-row .m-card .m-mark.f { background: #c0392b; }
+.meli .fan-row .m-card .m-bubble {
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: var(--paper); color: var(--ink);
+  border: 2px solid var(--gold-2); border-radius: 9px; padding: 3px 9px; font-size: .78rem; font-weight: 800; white-space: nowrap;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, .35); z-index: 40; pointer-events: none;
+}
+.meli .fan-row .m-card .m-bubble::after { content: ''; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--gold-2); }
+.meli .m-stack { position: relative; flex: none; width: calc(var(--card-w) * .55); height: calc(var(--card-h) * .55); margin-left: 10px; align-self: center; border: 0; padding: 0; background: none; cursor: pointer; }
+.meli .m-stack .m-card { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; }
+.meli .m-stack .m-card + .m-card { transform: translate(3px, -3px); }
+.meli .m-stack b { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); background: #0b2230; color: #fff; border-radius: 99px; padding: 0 6px; font-size: .72rem; white-space: nowrap; z-index: 2; }
+.meli .m-handhint { min-height: 1.3em; text-align: center; font-size: .82rem; color: var(--muted); margin: 0; }
+.meli .reveal { cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .meli .m-meli, .meli .m-tbar.low { animation: none; } }
+/* the hand row measures its own width: keep grid/flex parents from growing to fit it */
+.meli .me { grid-template-columns: minmax(0, 1fr); }
+.meli .fan { min-width: 0; }
+.meli .roundinfo { flex-wrap: nowrap; }
+@media (max-width: 560px) {
+  .meli .topbar { gap: 6px; }
+  .meli .topbar .opp { min-width: 0; flex-wrap: wrap; row-gap: 0; }
+  .meli .roundinfo .ghost { margin-left: 2px; }
+  .meli .roundinfo .timer { display: none; } /* the bar under the top row shows the time */
+}
+.meli .lock { white-space: nowrap; }
+/* keep the bubble on screen for the outermost cards */
+.meli .fan-row > .m-card:first-child .m-bubble { left: 0; transform: none; }
+.meli .fan-row > .m-card:first-child .m-bubble::after { left: 24px; }
+.meli .fan-row > .m-card:last-child .m-bubble { left: auto; right: 0; transform: none; }
+.meli .fan-row > .m-card:last-child .m-bubble::after { left: auto; right: 18px; transform: none; }

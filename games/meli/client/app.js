@@ -80,6 +80,7 @@
   let noticeTimer = null;
   let toastTimer = null;
   let lastRound = null;
+  let turnTotal = 60000; // length of a full move, for the timer bar
   let deadline = null; // Date.now() value at which our/their turn timer runs out
   let pendingJoin = null; // { code } while the password popup is open
   let invite = null; // { code, pw } from ?room=
@@ -398,9 +399,9 @@
 
     renderPile();
     renderStatus();
-    renderSuits();
-    renderFan();
-    renderClaim();
+    renderHand();
+    renderAct();
+    renderHint();
     renderButtons();
     renderTimer();
   }
@@ -409,6 +410,7 @@
     const t = $('timer');
     if (!view || view.phase !== 'play' || deadline === null) {
       t.classList.add('hidden');
+      $('tbar').classList.add('hidden');
       return;
     }
     const s = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
@@ -416,6 +418,12 @@
     t.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
     t.classList.toggle('mine', view.canPlay);
     t.classList.toggle('low', s <= 10);
+    const bar = $('tbar');
+    const frac = Math.max(0, Math.min(1, (deadline - Date.now()) / turnTotal));
+    bar.classList.remove('hidden');
+    bar.firstElementChild.style.width = (frac * 100) + '%';
+    bar.firstElementChild.style.backgroundColor = 'hsl(' + (120 * Math.min(1, frac / 0.7)).toFixed(0) + ', 72%, 46%)';
+    bar.classList.toggle('low', frac <= 0.15);
   }
   setInterval(renderTimer, 250);
 
@@ -475,15 +483,15 @@
     if (n === 0) {
       return setStatusText(
         suitOnly()
-          ? 'Tavs gājiens. Izvēlies jebkuru kārti un nosauc mastu. Masts nofiksējas šim raundam, un drīksti melot.'
-          : 'Tavs gājiens. Izvēlies jebkuru kārti un paziņo to. Paziņotais masts nofiksējas šim raundam.'
+          ? 'Tavs gājiens: noliec jebkuru kārti un paziņo mastu. Drīksti melot.'
+          : 'Tavs gājiens: noliec jebkuru kārti un paziņo to. Drīksti melot.'
       );
     }
     const last = view.pile.claims[n - 1];
     const hasLegit = view.hand.some((c) => c.suit === view.lockedSuit);
     let t = suitOnly()
-      ? `${oppName()} nolika kārti kā ${last.suit}. Noliec savu kā ${last.suit}, lai nodotu gājienu, vai spied “Meli!”.`
-      : `${oppName()} paziņoja ${face(last)}. Noliec kārti, paziņotu mastā ${view.lockedSuit}, vai spied “Meli!”.`;
+      ? `${oppName()} apgalvo ${last.suit}. Liec savu kārti vai spied «Meli!».`
+      : `${oppName()} paziņoja ${face(last)}. Liec savu kārti vai spied «Meli!».`;
     if (!hasLegit) t += ` Tev nav mastas ${view.lockedSuit}, tāpēc būs jāmelo.`;
     setStatusText(t);
   }
@@ -494,142 +502,198 @@
     activeSuit = (view.lockedSuit && has(view.lockedSuit) && view.lockedSuit) || SUITS.find(has) || null;
   }
 
-  function renderSuits() {
+  // ---- my hand: two-tap play ---------------------------------------------
+  // The whole hand is one row, grouped by suit (the locked suit first). With a
+  // big hand only one suit is spread out and the others sit in small stacks
+  // with a count; tapping a stack spreads that suit. Tap a card to lift it
+  // (a bubble says what it will announce and whether that's true), tap it
+  // again to place it. At the start of a round the bar above the hand also
+  // offers the four suits to announce something else.
+  // How many cards fit in one row with at least ~24 px of each card showing.
+  function fitCount() {
+    const fan = $('fan');
+    const cardW = parseFloat(getComputedStyle(fan).getPropertyValue('--card-w')) || 72.5;
+    return Math.max(6, Math.floor((fan.clientWidth - 16 - cardW) / 24) + 1);
+  }
+  const byRank = (a, b) => (view.ranks || RANKS).indexOf(a.rank) - (view.ranks || RANKS).indexOf(b.rank);
+
+  function handGroups() {
     ensureActiveSuit();
-    const box = $('suits');
-    box.replaceChildren();
-    for (const s of SUITS) {
-      const cards = view.hand.filter((c) => c.suit === s);
-      const b = el('button', 'suit-btn' + (s === activeSuit ? ' m-active' : '') + (s === view.lockedSuit ? ' locked' : ''), s);
-      b.type = 'button';
-      b.dataset.suit = s;
-      b.disabled = cards.length === 0;
-      b.setAttribute('aria-label', `${SUIT_NAME[s]}: ${cards.length} ${kartis(cards.length)}`);
-      b.append(el('span', 'n', String(cards.length)));
-      b.addEventListener('click', () => openSuit(s));
-      b.addEventListener('pointerenter', (e) => {
-        if (e.pointerType === 'mouse') openSuit(s);
-      });
-      box.append(b);
-    }
+    const lock = view.lockedSuit;
+    const order = SUITS.slice().sort((x, y) => (y === lock) - (x === lock));
+    const compact = view.hand.length > fitCount();
+    return order
+      .map((s) => ({ suit: s, cards: view.hand.filter((c) => c.suit === s).sort(byRank) }))
+      .filter((g) => g.cards.length)
+      .map((g) => ({ ...g, open: !compact || g.suit === activeSuit }));
   }
 
-  function openSuit(s) {
-    if (activeSuit === s || !view.hand.some((c) => c.suit === s)) return;
-    activeSuit = s;
-    renderSuits();
-    renderFan();
+  function claimText(c) {
+    return suitOnly() ? c.suit : (c.rank || '?') + c.suit;
+  }
+  function isTruth(card, c) {
+    return suitOnly() ? c.suit === card.suit : c.rank === card.rank && c.suit === card.suit;
   }
 
-  function renderFan() {
+  function renderHand() {
     const fan = $('fan');
     fan.replaceChildren();
-    const cards = view.hand.filter((c) => c.suit === activeSuit);
-    if (!cards.length) {
-      fan.append(el('div', 'm-hint', view.hand.length ? 'Izvēlies mastu zemāk' : 'Tava roka ir tukša'));
+    if (!view.hand.length) {
+      fan.append(el('div', 'm-hint', 'Tava roka ir tukša'));
       return;
     }
+    const ok = selectable();
+    const lock = view.lockedSuit;
     const row = el('div', 'fan-row');
-    for (const c of cards) {
-      const ok = selectable();
-      const d = cardEl(c, { tag: 'button' });
-      if (ok) d.classList.add('m-playable');
-      if (c.id === selectedId) d.classList.add('m-selected');
-      if (ok && view.lockedSuit && c.suit === view.lockedSuit) d.append(el('span', 'tick', '✓'));
-      d.addEventListener('click', () => pickCard(c));
-      row.append(d);
+    for (const g of handGroups()) {
+      if (!g.open) {
+        const st = el('button', 'm-stack');
+        st.type = 'button';
+        st.dataset.suit = g.suit;
+        st.setAttribute('aria-label', `${SUIT_NAME[g.suit]}: ${g.cards.length} ${kartis(g.cards.length)}. Izvērst`);
+        const top = g.cards[g.cards.length - 1];
+        st.append(cardEl(top), cardEl(top), el('b', null, `${g.suit} ${g.cards.length}`));
+        st.addEventListener('click', () => {
+          activeSuit = g.suit;
+          renderHand();
+        });
+        row.append(st);
+        continue;
+      }
+      g.cards.forEach((c, i) => {
+        const d = cardEl(c, { tag: 'button' });
+        if (i === 0) d.classList.add('m-group');
+        if (ok) d.classList.add('m-playable');
+        const selected = c.id === selectedId;
+        if (selected) d.classList.add('m-selected');
+        if (ok && lock) {
+          const honest = c.suit === lock;
+          d.append(el('span', 'm-mark ' + (honest ? 't' : 'f'), honest ? '✓' : '✕'));
+          d.title = honest ? 'Ar šo kārti saki taisnību' : 'Ar šo kārti melo';
+          if (!honest && !selected) d.classList.add('m-off');
+        }
+        if (selected && claim) {
+          const truth = isTruth(c, claim);
+          d.append(el('span', 'm-bubble', `Liec kā ${claimText(claim)} · ${truth ? 'taisnība' : 'meli'}`));
+        }
+        d.addEventListener('click', () => tapCard(c));
+        row.append(d);
+      });
     }
     fan.append(row);
-
-    const n = cards.length;
-    if (n > 1) {
-      const cardW = row.firstChild.getBoundingClientRect().width;
-      const avail = fan.clientWidth - 24;
-      const step = Math.max(26, Math.min(cardW * 0.78, (avail - cardW) / (n - 1)));
-      row.querySelectorAll('.m-card:not(:first-child)').forEach((d) => {
-        d.style.marginLeft = `${step - cardW}px`;
-      });
-    }
+    fitHand(row);
   }
 
-  function pickCard(c) {
+  // squeeze the overlap so the row fits the screen
+  function fitHand(row) {
+    const cards = [...row.querySelectorAll('.m-card.m-playable, .fan-row > .m-card')];
+    if (cards.length < 2) return;
+    const cardW = cards[0].getBoundingClientRect().width;
+    const stacks = [...row.querySelectorAll('.m-stack')].reduce((w, x) => w + x.getBoundingClientRect().width + 10, 0);
+    const groups = row.querySelectorAll('.m-card.m-group').length;
+    const avail = $('fan').clientWidth - 16 - stacks - (groups - 1) * 10;
+    const step = Math.max(18, Math.min(cardW * 0.62, (avail - cardW) / (cards.length - 1)));
+    cards.forEach((d, i) => {
+      if (i === 0) return;
+      d.style.marginLeft = (d.classList.contains('m-group') ? step - cardW + 10 : step - cardW) + 'px';
+    });
+  }
+
+  function tapCard(c) {
     if (!selectable()) return;
-    selectedId = selectedId === c.id ? null : c.id;
-    claim = selectedId ? defaultClaim(c) : null;
-    renderFan();
-    renderClaim();
-    renderButtons();
+    if (selectedId === c.id && claim) return playSelected();
+    selectedId = c.id;
+    claim = defaultClaim(c);
+    if (c.suit !== activeSuit && view.hand.length > fitCount()) activeSuit = c.suit;
+    renderHand();
+    renderAct();
+    renderHint();
   }
 
-  function renderClaim() {
-    const panel = $('claimPanel');
+  function playSelected() {
     const card = selectedCard();
-    if (!card || !view.canPlay) {
-      panel.classList.add('hidden');
-      return;
-    }
-    if (!claim || claim.forId !== card.id) claim = defaultClaim(card);
-    panel.classList.remove('hidden');
-    panel.replaceChildren();
+    if (!card || !claim || busy || !view.canPlay) return;
+    busy = true;
+    socket.emit('play', { cardId: card.id, claim: suitOnly() ? { suit: claim.suit } : { rank: claim.rank, suit: claim.suit } });
+    renderAct();
+    renderHint();
+  }
 
-    const truth = suitOnly() ? claim.suit === card.suit : claim.rank === card.rank && claim.suit === card.suit;
-    const head = el('div', 'line');
-    const asText = suitOnly()
-      ? view.lockedSuit
-        ? `ar seju uz leju, apgalvo ${view.lockedSuit}`
-        : 'ar seju uz leju. Kādu mastu paziņo?'
-      : 'ar seju uz leju. Paziņo kā:';
-    head.append(
-      document.createTextNode('Liec'),
-      cardEl(card),
-      document.createTextNode(asText),
-      el('span', `verdict-pill ${truth ? 'truth' : 'bluff'}`, truth ? 'TAISNĪBA' : 'MELI')
-    );
-
-    if (suitOnly() && view.lockedSuit) {
-      panel.append(head);
-      return;
-    }
-
-    const suitRow = el('div', 'row');
-    for (const s of SUITS) {
-      const o = el('button', 'opt' + (claim.suit === s ? ' on' : '') + (s === '♥' || s === '♦' ? ' s-red' : ''), s);
-      o.type = 'button';
-      o.disabled = !!view.lockedSuit && s !== view.lockedSuit;
-      o.addEventListener('click', () => {
-        claim.suit = s;
-        renderClaim();
-        renderButtons();
+  // The one bar between the table and the hand: "Meli!" when it can be
+  // pressed, and/or what to announce for the lifted card.
+  function renderAct() {
+    const bar = $('actBar');
+    bar.replaceChildren();
+    if (!view) return;
+    if (view.canChallenge && !busy) {
+      const m = el('button', 'm-meli', 'Meli!');
+      m.type = 'button';
+      m.addEventListener('click', () => {
+        if (busy || !view || !view.canChallenge) return;
+        busy = true;
+        socket.emit('challenge');
+        renderAct();
       });
-      suitRow.append(o);
+      bar.append(m);
     }
+    const card = selectedCard();
+    if (!card || !claim || !view.canPlay || busy) return;
+    const lock = view.lockedSuit;
+    if (!lock) {
+      const row = el('div', 'm-announce');
+      for (const s of SUITS) {
+        const o = el('button', 'm-ann' + (s === card.suit ? ' real' : '') + (claim.suit === s ? ' on' : ''), s);
+        o.type = 'button';
+        o.dataset.suit = s;
+        o.setAttribute('aria-label', `Paziņot ${SUIT_NAME[s]}` + (s === card.suit ? ' (taisnība)' : ''));
+        o.addEventListener('click', () => {
+          claim.suit = s;
+          if (suitOnly()) return playSelected();
+          renderHand();
+          renderAct();
+        });
+        row.append(o);
+      }
+      bar.append(row);
+    }
+    if (!suitOnly()) {
+      const used = new Set(view.pile.claims.map((c) => c.rank + c.suit));
+      const row = el('div', 'm-announce ranks');
+      for (const r of view.ranks || RANKS) {
+        const o = el('button', 'm-ann m-rank' + (claim.rank === r ? ' on' : '') + (used.has(r + claim.suit) ? ' used' : '') + (r === card.rank ? ' real' : ''), r);
+        o.type = 'button';
+        o.title = used.has(r + claim.suit) ? 'Šajā raundā jau paziņota' : '';
+        o.addEventListener('click', () => {
+          claim.rank = r;
+          renderHand();
+          renderAct();
+        });
+        row.append(o);
+      }
+      bar.append(row);
+    }
+  }
 
-    if (suitOnly()) {
-      panel.append(head, suitRow);
+  function renderHint() {
+    const h = $('handHint');
+    if (!view || !view.canPlay || busy || view.phase !== 'play') { h.textContent = ''; return; }
+    const card = selectedCard();
+    if (!card) {
+      h.textContent = 'Pieskaries kārtij.' + (view.canChallenge ? ' Netici? Spied «Meli!».' : '');
       return;
     }
-
-    const used = new Set(view.pile.claims.map((c) => c.rank + c.suit));
-    const rankRow = el('div', 'row');
-    for (const r of view.ranks || RANKS) {
-      const o = el('button', 'opt' + (claim.rank === r ? ' on' : '') + (used.has(r + claim.suit) ? ' used' : ''), r);
-      o.type = 'button';
-      o.title = used.has(r + claim.suit) ? 'Šajā raundā jau paziņota' : '';
-      o.addEventListener('click', () => {
-        claim.rank = r;
-        renderClaim();
-        renderButtons();
-      });
-      rankRow.append(o);
+    if (!suitOnly()) {
+      h.textContent = view.lockedSuit
+        ? 'Izvēlies vērtību, ko paziņot, un pieskaries kārtij vēlreiz.'
+        : 'Izvēlies mastu un vērtību, ko paziņot, un pieskaries kārtij vēlreiz.';
+      return;
     }
-    panel.append(head, suitRow, rankRow);
+    h.textContent = view.lockedSuit
+      ? 'Pieskaries tai pašai kārtij vēlreiz, lai noliktu.'
+      : 'Izvēlies mastu, ko paziņot (zaļais ir patiesais), vai pieskaries kārtij vēlreiz.';
   }
 
   function renderButtons() {
-    const card = selectedCard();
-    $('placeBtn').disabled = !(view && view.canPlay && !busy && card);
-    $('placeBtn').textContent = card && claim ? `Likt kā ${suitOnly() ? claim.suit : claim.rank + claim.suit}` : 'Likt kārti';
-    $('bluffBtn').disabled = !(view && view.canChallenge && !busy);
     const canSurrender = !!(view && view.phase === 'play');
     $('menuBtn').classList.toggle('hidden', !canSurrender);
     if (!canSurrender) closeMenu();
@@ -684,13 +748,10 @@
       const nextYou = (r.lie ? r.challenger : r.accused) === me;
       box.append(el('div', 'sub', nextYou ? 'Nākamo raundu sāc tu.' : `${opp} sāk nākamo raundu.`));
     }
-    const ok = el('button', null, 'Labi');
-    ok.type = 'button';
-    ok.addEventListener('click', hideReveal);
-    box.append(ok);
+    box.onclick = hideReveal; // a tap closes it early; otherwise it goes away by itself
     box.classList.remove('hidden');
     clearTimeout(revealTimer);
-    revealTimer = setTimeout(hideReveal, 8000);
+    revealTimer = setTimeout(hideReveal, 3200);
   }
 
   // ---- notices ---------------------------------------------------------
@@ -790,6 +851,7 @@
     busy = false;
     view = v;
     deadline = v.room.turnMs !== null && v.room.turnMs !== undefined ? Date.now() + v.room.turnMs : null;
+    if (deadline !== null) turnTotal = Math.max(60000, v.room.turnMs);
 
     if (v.pile.count > 0) hideReveal();
     if (!v.canPlay || v.round !== lastRound || !v.hand.some((c) => c.id === selectedId)) {
@@ -820,7 +882,9 @@
     busy = false;
     if (view && screen === 'game') {
       renderButtons();
-      renderFan();
+      renderHand();
+      renderAct();
+      renderHint();
     }
     flash(lv(String(msg)));
   });
@@ -885,21 +949,6 @@
   $('leaveYes').addEventListener('click', () => {
     closeModal('leaveModal');
     socket.emit('room:leave');
-  });
-
-  $('placeBtn').addEventListener('click', () => {
-    const card = selectedCard();
-    if (!card || !claim || busy || !view.canPlay) return;
-    busy = true;
-    socket.emit('play', { cardId: card.id, claim: suitOnly() ? { suit: claim.suit } : { rank: claim.rank, suit: claim.suit } });
-    renderButtons();
-  });
-
-  $('bluffBtn').addEventListener('click', () => {
-    if (busy || !view || !view.canChallenge) return;
-    busy = true;
-    socket.emit('challenge');
-    renderButtons();
   });
 
   // ---- card design (shared with Duraks: same browser setting) ------------
