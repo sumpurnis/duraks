@@ -677,10 +677,83 @@ socket.on('roomCreated', () => {
 
 // ================= Game state rendering =================
 
+// Turn timer. On my own move: a vertical bar at the right of the table
+// (root). On someone else's move: a short horizontal bar under that
+// player's name (any .turn-timer-h inside scope, drawn by the renderers).
+// Starts green, turns gradually red as time runs out, pulses near the end.
+// The deadline comes from the server, corrected for this device's clock.
+function createTurnTimer(root, scope) {
+  // If the page is an older copy without the timer markup, do nothing
+  // instead of breaking the rest of the game script.
+  if (!root) return { update: function () {} };
+  scope = scope || document;
+  const fill = root.querySelector('.turn-timer-fill');
+  const secs = root.querySelector('.turn-timer-secs');
+  let deadline = 0;
+  let total = 1;
+  let offset = 0;
+  let raf = null;
+  let mine = false;
+
+  function paint(bar, frac, vertical) {
+    const f = bar.querySelector('.turn-timer-fill');
+    if (!f) return;
+    if (vertical) f.style.height = (frac * 100) + '%';
+    else f.style.width = (frac * 100) + '%';
+    // green (120) for the first ~30 %, then sliding to red (0)
+    const hue = 120 * Math.min(1, frac / 0.7);
+    f.style.backgroundColor = 'hsl(' + hue.toFixed(0) + ', 72%, 46%)';
+    bar.classList.toggle('tt-warn', frac <= 0.3 && frac > 0.12);
+    bar.classList.toggle('tt-crit', frac <= 0.12);
+  }
+
+  function frame() {
+    const left = deadline - (Date.now() + offset);
+    const frac = Math.max(0, Math.min(1, left / total));
+    if (mine) {
+      paint(root, frac, true);
+      secs.textContent = String(Math.max(0, Math.ceil(left / 1000)));
+    }
+    scope.querySelectorAll('.turn-timer-h').forEach(function (bar) { paint(bar, frac, false); });
+    raf = left > 0 ? requestAnimationFrame(frame) : null;
+  }
+
+  return {
+    update: function (timer, myIdNow) {
+      if (raf) cancelAnimationFrame(raf);
+      raf = null;
+      mine = !!(timer && timer.playerId === myIdNow);
+      root.classList.toggle('hidden-timer', !mine);
+      if (!timer) return;
+      offset = timer.serverNow - Date.now();
+      deadline = timer.deadline;
+      total = timer.totalMs || 60000;
+      frame();
+    }
+  };
+}
+
+// Small horizontal bar placed right under a player's name while it's their move.
+function makeTurnTimerH() {
+  const bar = document.createElement('div');
+  bar.className = 'turn-timer-h';
+  const fill = document.createElement('div');
+  fill.className = 'turn-timer-fill';
+  bar.appendChild(fill);
+  return bar;
+}
+const turnTimer2p = createTurnTimer(el('turnTimer'), el('game'));
+
 socket.on('state', (state) => {
   lastState = state;
   myId = state.you;
   render(state);
+  // opponent's clock: a horizontal bar under their name (top pill)
+  const oldBar = document.querySelector('#game .name-pill-row-top .turn-timer-h');
+  if (oldBar) oldBar.remove();
+  const t = state.status === 'active' ? state.turnTimer : null;
+  if (t && t.playerId !== state.you) el('opponentName').insertAdjacentElement('afterend', makeTurnTimerH());
+  turnTimer2p.update(t, state.you);
 });
 
 let activeDragCancel = null; // set while a card drag/tap gesture is in progress

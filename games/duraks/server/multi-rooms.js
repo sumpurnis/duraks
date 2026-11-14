@@ -282,24 +282,48 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   }
 
   function broadcastMultiState(room) {
+    // Arm first, so every client gets the same deadline the server enforces.
+    armMultiMoveTimer(room);
+    const turnTimer = room.moveDeadline
+      ? { playerId: room.moveTimedPlayer, deadline: room.moveDeadline, totalMs: MULTI_MOVE_TIMEOUT_MS, serverNow: Date.now() }
+      : null;
     for (const h of room.humans) {
       const sock = io.sockets.sockets.get(h.socketId);
       if (!sock) continue;
       const view = room.game.viewFor(h.username);
-      sock.emit('multiState', { ...view, names: namesFor(room) });
+      sock.emit('multiState', { ...view, names: namesFor(room), turnTimer });
     }
-    armMultiMoveTimer(room);
   }
 
   function armMultiMoveTimer(room) {
     clearMultiMoveTimer(room);
+    const prevDeadline = room.moveDeadline;
+    const prevKey = room.moveTimerKey;
+    room.moveDeadline = null;
+    room.moveTimedPlayer = null;
+    room.moveTimerKey = null;
     if (room.game.status !== 'active') return;
     const actors = room.game.pendingActors();
     const pendingHumans = room.humans.filter((h) => actors.some((a) => a.playerId === h.username));
     if (pendingHumans.length === 0) return;
+    // The clock belongs to the one player shown as "Tagad" when that is a
+    // human; otherwise to the first human the game is waiting on.
+    const now = room.game.turnInfo().now;
+    const stalledId = now && pendingHumans.some((h) => h.username === now.playerId)
+      ? now.playerId
+      : pendingHumans[0].username;
+    // Keep the running clock while the same player still faces the same
+    // decision (e.g. a bot throws in while I'm still defending); restart it
+    // once the timed player has acted (hand size changes) or someone else is up.
+    const kind = (room.game.pendingActors().find((a) => a.playerId === stalledId) || {}).kind;
+    const key = stalledId + '|' + kind + '|' + room.game.hands[stalledId].length;
+    const keep = prevKey === key && prevDeadline && prevDeadline - Date.now() > 1000;
+    room.moveDeadline = keep ? prevDeadline : Date.now() + MULTI_MOVE_TIMEOUT_MS;
+    room.moveTimedPlayer = stalledId;
+    room.moveTimerKey = key;
     room.moveTimer = setTimeout(() => {
       if (room.game.status !== 'active') return;
-      const stalled = pendingHumans[0];
+      const stalled = { username: stalledId };
       room.game.status = 'finished';
       room.game.durakId = stalled.username;
       room.game.log.push(`${stalled.username} nereaģēja laikā — spēle beigusies`);
@@ -307,7 +331,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
       broadcastMultiState(room);
       recordMultiGameHistory(room);
       scheduleMultiCleanup(room);
-    }, MULTI_MOVE_TIMEOUT_MS);
+    }, room.moveDeadline - Date.now());
   }
 
   function driveBots(room) {

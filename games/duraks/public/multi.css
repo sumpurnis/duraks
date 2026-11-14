@@ -76,9 +76,9 @@
 }
 .multi-seat.seat-top   { left: 50%; top: 12%; }
 .multi-seat.seat-left  { left: 9%;  top: 46%; }
-.multi-seat.seat-right { left: 91%; top: 46%; }
+.multi-seat.seat-right { left: 89%; top: 46%; }
 .multi-seat.seat-tl    { left: 12%; top: 30%; }
-.multi-seat.seat-tr    { left: 88%; top: 30%; }
+.multi-seat.seat-tr    { left: 86%; top: 30%; }
 
 .multi-seat-name {
   background: rgba(0, 0, 0, 0.45);
@@ -168,9 +168,9 @@
   #multiGame .slot { width: 14cqw; }
   .multi-seat.seat-top   { top: 11%; }
   .multi-seat.seat-left  { left: 13%; top: 43%; }
-  .multi-seat.seat-right { left: 87%; top: 43%; }
+  .multi-seat.seat-right { left: 85%; top: 43%; }
   .multi-seat.seat-tl    { left: 17%; top: 28%; }
-  .multi-seat.seat-tr    { left: 83%; top: 28%; }
+  .multi-seat.seat-tr    { left: 81%; top: 28%; }
   .multi-seat-name { font-size: clamp(11px, 3.1cqw, 15px); padding: 0.3cqw 2cqw; }
   .multi-seat-role { font-size: clamp(8px, 2.3cqw, 11px); padding: 0.2cqw 1.6cqw; }
   .multi-seat-count { font-size: clamp(9px, 2.6cqw, 12px); }

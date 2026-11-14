@@ -1150,3 +1150,87 @@ html, body {
   user-select: none;
 }
 .sort-hand-row input { width: 18px; height: 18px; accent-color: var(--gold-bright); cursor: pointer; }
+
+/* ---------- turn timer: vertical draining bar at the right of the table ---------- */
+.turn-timer {
+  position: absolute;
+  right: 0.8%;
+  top: 18%;
+  height: 54%;
+  width: clamp(8px, 1.1cqw, 14px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 5;
+  pointer-events: none;
+}
+.turn-timer.hidden-timer { display: none; }
+.turn-timer-track {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+.turn-timer-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 100%;
+  border-radius: 99px;
+  background-color: hsl(120, 72%, 46%);
+}
+.turn-timer-secs {
+  font-size: clamp(10px, 1.2cqw, 13px);
+  font-weight: 700;
+  color: var(--cream);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.turn-timer.tt-warn .turn-timer-track { animation: turn-timer-pulse 1s ease-in-out infinite; }
+.turn-timer.tt-crit .turn-timer-track { animation: turn-timer-pulse 0.5s ease-in-out infinite; }
+.turn-timer.tt-crit .turn-timer-secs { color: #ff8a7a; }
+@keyframes turn-timer-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(230, 70, 50, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(230, 70, 50, 0.45); }
+}
+/* opponents: short horizontal bar under the name of the player whose move it is */
+.turn-timer-h {
+  position: relative;
+  width: clamp(48px, 9cqw, 110px);
+  height: clamp(5px, 0.7cqw, 8px);
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+.turn-timer-h .turn-timer-fill { top: 0; right: auto; height: 100%; width: 100%; }
+.turn-timer-h.tt-warn { animation: turn-timer-pulse 1s ease-in-out infinite; }
+.turn-timer-h.tt-crit { animation: turn-timer-pulse 0.5s ease-in-out infinite; }
+.turn-timer-h.idle { visibility: hidden; }
+/* 2-player screen: under the opponent's name pill, without moving the table */
+.name-pill-row-top { position: relative; }
+.name-pill-row-top .turn-timer-h {
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  transform: translateX(-50%);
+  width: clamp(60px, 12vw, 140px);
+  height: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-timer.tt-warn .turn-timer-track,
+  .turn-timer.tt-crit .turn-timer-track,
+  .turn-timer-h.tt-warn,
+  .turn-timer-h.tt-crit { animation: none; box-shadow: 0 0 0 3px rgba(230, 70, 50, 0.45); }
+}
+@media (max-width: 700px), (max-aspect-ratio: 1/1) {
+  .turn-timer { width: clamp(8px, 2cqw, 14px); right: 1%; }
+  .turn-timer-secs { font-size: clamp(10px, 2.6cqw, 13px); }
+}

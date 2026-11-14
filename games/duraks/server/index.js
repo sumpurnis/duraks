@@ -93,6 +93,8 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
   function clearMoveTimer(room) {
     if (room.timer) clearTimeout(room.timer);
     room.timer = null;
+    room.moveDeadline = null;
+    room.moveTimedPlayer = null;
   }
 
   function armMoveTimer(code) {
@@ -100,14 +102,18 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
     if (!room || !room.game) return;
     clearMoveTimer(room);
     if (room.game.status !== 'active') return;
-    if (room.vsAI) return;
-    if (room.players.some((p) => !p.connected)) return;
+    // The computer opponent has no socket (connected: false) — only humans count here.
+    if (room.players.some((p) => p.username !== AI_ID && !p.connected)) return;
 
     const pending = room.game.pendingActor();
     if (!pending) return;
+    // vs the computer the clock runs only on the human's moves
+    if (pending.playerId === AI_ID) return;
 
     room.turnToken = (room.turnToken || 0) + 1;
     const myToken = room.turnToken;
+    room.moveDeadline = Date.now() + MOVE_TIMEOUT_MS;
+    room.moveTimedPlayer = pending.playerId;
 
     room.timer = setTimeout(() => {
       const current = rooms.get(code);
@@ -317,6 +323,11 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
     if (!room || !room.game) return;
     const names = namesFor(room);
     const tournamentInfo = getTournamentInfoForRoom(room);
+    // Arm first, so every client gets the same deadline the server enforces.
+    armMoveTimer(code);
+    const turnTimer = room.moveDeadline
+      ? { playerId: room.moveTimedPlayer, deadline: room.moveDeadline, totalMs: MOVE_TIMEOUT_MS, serverNow: Date.now() }
+      : null;
     for (const p of room.players) {
       if (!p.connected) continue;
       const view = room.game.viewFor(p.username);
@@ -325,9 +336,9 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
         names,
         endReason: room.endReason || null,
         tournamentInfo,
+        turnTimer,
       });
     }
-    armMoveTimer(code);
   }
 
   // ---------- Tournament match <-> real game wiring ----------

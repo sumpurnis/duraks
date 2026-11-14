@@ -342,10 +342,13 @@ el('multiRoomLeaveWaitingBtn').addEventListener('click', function () {
 });
 
 
+const multiTurnTimer = createTurnTimer(el('multiTurnTimer'), el('multiOpponentsRow'));
+
 socket.on('multiState', (state) => {
   multiLastState = state;
   multiMyId = state.you;
   multiRender(state);
+  multiTurnTimer.update(state.status === 'active' ? state.turnTimer : null, state.you);
   if (state.status === 'finished') {
     setTimeout(() => multiShowGameOver(state), 400);
   }
@@ -403,6 +406,11 @@ function multiRenderOpponents(state) {
     name.className = 'multi-seat-name';
     name.textContent = p;
     seat.appendChild(name);
+    // every seat keeps a slot for the clock so nothing shifts; only the
+    // player whose move it is shows it
+    const clock = makeTurnTimerH();
+    if (!(state.status === 'active' && state.turnTimer && state.turnTimer.playerId === p)) clock.classList.add('idle');
+    seat.appendChild(clock);
 
     const role = multiRoleLabel(state, p);
     const roleEl = document.createElement('span');
