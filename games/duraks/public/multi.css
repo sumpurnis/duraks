@@ -39,17 +39,17 @@
 }
 
 #multiGame .table-safezone {
-  top: 25%;
-  bottom: 34%;
+  top: 23%;
+  bottom: 32%;
   left: 24%;
   right: 24%;
 }
 #multiGame .table-slots {
   flex-wrap: wrap;
-  width: 31cqw;
+  width: 33.5cqw;
   gap: 1.2cqw 1.3cqw;
 }
-#multiGame .slot { width: 8.2cqw; }
+#multiGame .slot { width: 9.84cqw; } /* 20% larger than 8.2cqw */
 #multiGame .deck-pile {
   top: 72%;
   left: 2%;
@@ -163,9 +163,9 @@
     width: min(100%, calc((var(--app-vh, 1vh) * 100 - 230px) / 1.35));
   }
   .multi-round-table { left: 6%; top: 20%; width: 88%; height: 46%; }
-  #multiGame .table-safezone { top: 27%; bottom: 40%; left: 14%; right: 14%; }
+  #multiGame .table-safezone { top: 24%; bottom: 36%; left: 14%; right: 14%; }
   #multiGame .table-slots { width: 56cqw; gap: 1.5cqw 2cqw; }
-  #multiGame .slot { width: 14cqw; }
+  #multiGame .slot { width: 16.8cqw; }
   .multi-seat.seat-top   { top: 11%; }
   .multi-seat.seat-left  { left: 13%; top: 43%; }
   .multi-seat.seat-right { left: 85%; top: 43%; }

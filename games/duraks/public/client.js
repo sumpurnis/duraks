@@ -11,15 +11,33 @@
 // pattern users.js already uses for lastRoomSettings) so it follows the
 // account across devices instead of just this browser.
 const CARD_DECK_KEY = 'duraks_card_deck';
+// 'svg' = the new drawn cards (default), 'png' = the picture deck
+// (cards-sprite-hq.png), 'classic' = the original picture deck (no UI).
+function getCardDeck() {
+  let v = null;
+  try { v = localStorage.getItem(CARD_DECK_KEY); } catch (e) { /* storage blocked */ }
+  return (v === 'png' || v === 'classic') ? v : 'svg';
+}
 function applyCardDeckPreference() {
-  const deck = localStorage.getItem(CARD_DECK_KEY);
-  if (deck === 'classic') {
-    document.documentElement.dataset.cardDeck = 'classic';
-  } else {
-    delete document.documentElement.dataset.cardDeck;
+  let deck = getCardDeck();
+  if (deck === 'svg') {
+    if (window.DuraksSvgCards) window.DuraksSvgCards.install();
+    else deck = 'png'; // generator script missing: fall back to the pictures
   }
+  if (deck === 'png') delete document.documentElement.dataset.cardDeck;
+  else document.documentElement.dataset.cardDeck = deck;
+  if (window.DuraksSvgCards) window.DuraksSvgCards.setStackImages(deck === 'svg');
+  document.querySelectorAll('.card-deck-select').forEach(function (sel) {
+    sel.value = deck === 'svg' ? 'svg' : 'png';
+  });
 }
 applyCardDeckPreference();
+document.querySelectorAll('.card-deck-select').forEach(function (sel) {
+  sel.addEventListener('change', function () {
+    try { localStorage.setItem(CARD_DECK_KEY, sel.value); } catch (e) { /* applies for this visit only */ }
+    applyCardDeckPreference();
+  });
+});
 
 // "Kārtot kārtis augošā secībā": display-only hand sorting (suits grouped,
 // ascending rank, trump suit last = rightmost). Saved in this browser like

@@ -231,7 +231,15 @@
       <button id="surrenderBtn" class="btn btn-ghost-danger">Padoties</button>
       <button id="chatToggleBtn" class="btn btn-secondary">💬 Čats</button>
     </div>
-    <label class="sort-hand-row"><input type="checkbox" class="sort-hand-toggle" /> Kārtot kārtis augošā secībā</label>
+    <div class="game-prefs-row">
+      <label class="sort-hand-row"><input type="checkbox" class="sort-hand-toggle" /> Kārtot kārtis augošā secībā</label>
+      <label class="sort-hand-row">Kārtis
+        <select class="card-deck-select" aria-label="Kāršu dizains">
+          <option value="svg">Jaunās</option>
+          <option value="png">Klasiskās</option>
+        </select>
+      </label>
+    </div>
 
     <div id="chatPanel" class="chat-panel hidden">
       <div class="chat-header">
@@ -568,7 +576,15 @@
       <button id="multiTransferBtn" class="btn btn-secondary slot-off">🔄 Padot</button>
       <button id="multiTakeBtn" class="btn btn-danger slot-off">Ņemt kārtis</button>
     </div>
-    <label class="sort-hand-row"><input type="checkbox" class="sort-hand-toggle" /> Kārtot kārtis augošā secībā</label>
+    <div class="game-prefs-row">
+      <label class="sort-hand-row"><input type="checkbox" class="sort-hand-toggle" /> Kārtot kārtis augošā secībā</label>
+      <label class="sort-hand-row">Kārtis
+        <select class="card-deck-select" aria-label="Kāršu dizains">
+          <option value="svg">Jaunās</option>
+          <option value="png">Klasiskās</option>
+        </select>
+      </label>
+    </div>
   </div>
 
   <div id="multiGameOverModal" class="modal hidden">
@@ -593,6 +609,7 @@
   <div id="toast" class="toast hidden"></div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="svg-cards.js"></script>
   <script src="client.js"></script>
   <script src="tournament-client.js"></script>
   <script src="multi-client.js"></script>
