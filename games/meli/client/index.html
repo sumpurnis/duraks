@@ -218,8 +218,15 @@
       <span id="timer" class="timer hidden" title="Atlikušais laiks gājienam"></span>
       <span id="lock" class="lock"></span>
       <button type="button" id="leaveBtn" class="ghost m-small">Iziet</button>
+      <button type="button" id="menuBtn" class="multi-menu-btn hidden" aria-label="Izvēlne" aria-expanded="false">⋯</button>
     </div>
   </header>
+  <div id="menuSheet" class="multi-sheet hidden">
+    <strong>Padoties?</strong>
+    <span class="muted">Pretinieks tiks pasludināts par uzvarētāju. Turi nospiestu 1,5 sekundes.</span>
+    <button type="button" id="surrenderHold" class="ghost-danger multi-hold"><span class="multi-hold-fill"></span><span>Turi, lai padotos</span></button>
+    <button type="button" id="menuCancel" class="ghost">Atcelt</button>
+  </div>
 
   <section class="table" aria-label="Galds">
     <div id="pile" class="pile"></div>
@@ -238,9 +245,14 @@
     <div class="actions">
       <button id="placeBtn" class="primary" disabled>Likt kārti</button>
       <button id="bluffBtn" class="danger" disabled>Meli!</button>
-      <button id="surrenderBtn" class="ghost-danger hidden">Padoties</button>
     </div>
     <div class="me-label"><span id="meName">Tu</span> · kārtis: <b id="myCount">0</b></div>
+    <label class="deck-pick">Kārtis
+      <select id="cardDeckSelect" class="card-deck-select" aria-label="Kāršu dizains">
+        <option value="svg">Jaunās</option>
+        <option value="png">Klasiskās</option>
+      </select>
+    </label>
   </section>
 </main>
 </div>
@@ -303,6 +315,7 @@
 <script src="/socket.io/socket.io.js"></script>
 <script src="/lobby-auth.js"></script>
 <script src="/board-preview-client.js"></script>
+<script src="/svg-cards.js"></script>
 <script src="app.js"></script>
 <script src="/guest-nudge.js" defer></script>
 </body>

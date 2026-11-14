@@ -272,3 +272,11 @@
 .lobby-howto b { color: #e2c374; }
 #lobby.screen { flex-direction: column; align-items: center; }
 .meli .m-modal .panel { background: linear-gradient(180deg, #2a6a88, #143a4d); border-color: rgba(201, 162, 75, 0.6); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6); }
+
+/* Corner menu with the hold-to-surrender button (styles shared from /multi.css) */
+.meli #game { position: relative; }
+.meli #game .multi-sheet { top: 48px; }
+.meli .roundinfo .multi-menu-btn { padding: 2px 12px; }
+.meli .multi-hold span:last-child { position: relative; }
+/* Card design picker under my hand */
+.meli .deck-pick { display: flex; justify-content: center; align-items: center; gap: 8px; font-size: .8rem; color: var(--muted); margin-top: 4px; }

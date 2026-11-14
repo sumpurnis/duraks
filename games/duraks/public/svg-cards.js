@@ -96,7 +96,7 @@ window.DuraksSvgCards = (function () {
     if (installed) return;
     installed = true;
     let css = '[data-card-deck="svg"] .card-face{background-size:100% 100%;background-position:0 0;background-color:transparent;}' +
-      '[data-card-deck="svg"] .card-back-mini{background-image:url("' + backUrl + '");background-size:100% 100%;}';
+      '[data-card-deck="svg"] .card-back-mini,[data-card-deck="svg"] .meli .back{background-image:url("' + backUrl + '");background-size:100% 100%;}';
     SUITS.forEach(function (s) {
       RANKS.forEach(function (r) {
         css += '[data-card-deck="svg"] .card-face-' + r + '-' + s + '{background-image:url("' + dataUrl(face(r, s)) + '");}';

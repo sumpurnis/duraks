@@ -630,8 +630,9 @@
     $('placeBtn').disabled = !(view && view.canPlay && !busy && card);
     $('placeBtn').textContent = card && claim ? `Likt kā ${suitOnly() ? claim.suit : claim.rank + claim.suit}` : 'Likt kārti';
     $('bluffBtn').disabled = !(view && view.canChallenge && !busy);
-    $('surrenderBtn').classList.toggle('hidden', !(view && view.phase === 'play'));
-    $('surrenderBtn').disabled = busy;
+    const canSurrender = !!(view && view.phase === 'play');
+    $('menuBtn').classList.toggle('hidden', !canSurrender);
+    if (!canSurrender) closeMenu();
   }
 
   // ---- reveal ------------------------------------------------------------
@@ -836,10 +837,50 @@
     $('leaveText').textContent = vsAI() ? 'Spēle tiks zaudēta.' : `Iziešana ir padošanās. ${oppName()} uzvar.`;
     openModal('leaveModal');
   });
-  $('surrenderBtn').addEventListener('click', () => {
-    if (!view || view.phase !== 'play' || busy) return;
-    if (window.confirm('Vai tiešām vēlies padoties? Pretinieks tiks pasludināts par uzvarētāju.')) socket.emit('surrender');
+  // "Padoties" lives in the corner menu and needs a 1.5 s press-and-hold,
+  // the same as in Duraks, so it can't be hit by accident.
+  let holdRaf = null;
+  function stopHold() {
+    if (holdRaf) { cancelAnimationFrame(holdRaf); holdRaf = null; }
+    const fill = $('surrenderHold').querySelector('.multi-hold-fill');
+    fill.style.transition = 'width 0.2s';
+    fill.style.width = '0';
+  }
+  function closeMenu() {
+    $('menuSheet').classList.add('hidden');
+    $('menuBtn').setAttribute('aria-expanded', 'false');
+    stopHold();
+  }
+  function startHold() {
+    if (holdRaf || !view || view.phase !== 'play') return;
+    const fill = $('surrenderHold').querySelector('.multi-hold-fill');
+    const t0 = performance.now();
+    fill.style.transition = 'none';
+    holdRaf = requestAnimationFrame(function tick(t) {
+      const p = Math.min((t - t0) / 1500, 1);
+      fill.style.width = (p * 100) + '%';
+      if (p >= 1) {
+        holdRaf = null;
+        closeMenu();
+        socket.emit('surrender');
+      } else {
+        holdRaf = requestAnimationFrame(tick);
+      }
+    });
+  }
+  $('menuBtn').addEventListener('click', () => {
+    const open = $('menuSheet').classList.contains('hidden');
+    $('menuSheet').classList.toggle('hidden', !open);
+    $('menuBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!open) stopHold();
   });
+  $('menuCancel').addEventListener('click', closeMenu);
+  $('surrenderHold').addEventListener('pointerdown', (e) => { e.preventDefault(); startHold(); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => $('surrenderHold').addEventListener(ev, stopHold));
+  $('surrenderHold').addEventListener('keydown', (e) => {
+    if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); startHold(); }
+  });
+  $('surrenderHold').addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') stopHold(); });
   $('leaveNo').addEventListener('click', () => closeModal('leaveModal'));
   $('leaveYes').addEventListener('click', () => {
     closeModal('leaveModal');
@@ -861,7 +902,27 @@
     renderButtons();
   });
 
+  // ---- card design (shared with Duraks: same browser setting) ------------
+  const CARD_DECK_KEY = 'duraks_card_deck';
+  function applyCardDeck() {
+    let v = null;
+    try { v = localStorage.getItem(CARD_DECK_KEY); } catch (e) { /* storage blocked */ }
+    let deck = (v === 'png' || v === 'classic') ? v : 'svg';
+    if (deck === 'svg') {
+      if (window.DuraksSvgCards) window.DuraksSvgCards.install();
+      else deck = 'png';
+    }
+    if (deck === 'png') delete document.documentElement.dataset.cardDeck;
+    else document.documentElement.dataset.cardDeck = deck;
+    $('cardDeckSelect').value = deck === 'svg' ? 'svg' : 'png';
+  }
+  $('cardDeckSelect').addEventListener('change', () => {
+    try { localStorage.setItem(CARD_DECK_KEY, $('cardDeckSelect').value); } catch (e) { /* this visit only */ }
+    applyCardDeck();
+  });
+
   // ---- init ---------------------------------------------------------------
+  applyCardDeck();
   syncSetup();
   readInvite();
 })();
