@@ -359,63 +359,161 @@ function multiCardChip(card) {
   return span;
 }
 
-function multiRoleTag(state, playerId) {
-  if (playerId === state.attackerId) return ' (uzbrūk)';
-  if (playerId === state.defenderId) return ' (aizsargājas)';
-  return '';
+// Label shown under a player's name. Roles belong to seats: attack/defence
+// badges hop from seat to seat, and throw-in order is numbered clockwise.
+function multiRoleLabel(state, p) {
+  if (state.activePlayers.indexOf(p) === -1) return 'Drošībā';
+  if (p === state.defenderId) return state.pendingTake ? 'Ņem kārtis' : 'Aizsargājas';
+  if (state.table.length === 0) return p === state.attackerId ? 'Uzbrūk' : '';
+  const q = (state.throwInRotation || []).indexOf(p);
+  if (q < 0) return '';
+  return q === 0 ? 'Uzbrūk' : 'Piemet ' + (q + 1) + '.';
+}
+
+// Seat positions by player count, indexed by clockwise distance from me
+// (me = 0 is always at the bottom; 1 is my left-hand neighbour, who plays
+// after me). The classes are placed in multi.css.
+const MULTI_SEAT_CLASSES = {
+  2: [null, 'seat-top'],
+  3: [null, 'seat-tl', 'seat-tr'],
+  4: [null, 'seat-left', 'seat-top', 'seat-right']
+};
+const MULTI_DIR_ANGLES = { 2: [90, 270], 3: [90, 210, 330], 4: [90, 180, 270, 360] };
+
+function multiSeatLabel(state, p) {
+  return p === multiMyId ? 'Tu' : p;
 }
 
 function multiRenderOpponents(state) {
   const container = el('multiOpponentsRow');
   container.innerHTML = '';
-  const opponents = state.players.filter(function (p) { return p !== multiMyId; });
-  opponents.forEach(function (p) {
-    const group = document.createElement('div');
-    group.className = 'multi-opponent-group';
-    if (state.activePlayers.indexOf(p) === -1) group.classList.add('multi-safe');
+  const n = state.players.length;
+  const myIdx = Math.max(0, state.players.indexOf(multiMyId));
+  const classes = MULTI_SEAT_CLASSES[n] || MULTI_SEAT_CLASSES[4];
+  const nowId = state.turnNow ? state.turnNow.playerId : null;
 
-    const name = document.createElement('div');
-    name.className = 'multi-opponent-group-name';
-    name.textContent = p + multiRoleTag(state, p);
-    group.appendChild(name);
+  for (let k = 1; k < n; k++) {
+    const p = state.players[(myIdx + k) % n];
+    const seat = document.createElement('div');
+    seat.className = 'multi-seat ' + (classes[k] || 'seat-top');
+    if (state.activePlayers.indexOf(p) === -1) seat.classList.add('multi-safe');
+    if (p === nowId) seat.classList.add('multi-now');
+
+    const name = document.createElement('span');
+    name.className = 'multi-seat-name';
+    name.textContent = p;
+    seat.appendChild(name);
+
+    const role = multiRoleLabel(state, p);
+    const roleEl = document.createElement('span');
+    roleEl.className = 'multi-seat-role' + (role ? '' : ' empty');
+    roleEl.textContent = role || '-';
+    seat.appendChild(roleEl);
 
     const cards = document.createElement('div');
-    cards.className = 'multi-opponent-group-cards';
-    if (state.pendingActorIds && state.pendingActorIds.indexOf(p) !== -1) {
-      cards.classList.add('multi-current-turn');
-    }
+    cards.className = 'multi-seat-cards';
     const count = state.opponentCounts[p] || 0;
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < Math.min(count, 8); i++) {
       const back = document.createElement('div');
       back.className = 'card-back-mini';
       cards.appendChild(back);
     }
-    group.appendChild(cards);
+    seat.appendChild(cards);
 
-    container.appendChild(group);
-  });
+    const cnt = document.createElement('span');
+    cnt.className = 'multi-seat-count';
+    cnt.textContent = count + ' kārtis';
+    seat.appendChild(cnt);
+
+    container.appendChild(seat);
+  }
+
+  // my own label sits between the table and my hand
+  const me = el('multiMePill');
+  me.className = 'multi-seat multi-seat-me' + (nowId === multiMyId ? ' multi-now' : '');
+  const myRole = multiRoleLabel(state, multiMyId);
+  me.innerHTML = '';
+  const meName = document.createElement('span');
+  meName.className = 'multi-seat-name';
+  meName.textContent = (multiMyId || 'Tu') + ' (tu)';
+  const meRole = document.createElement('span');
+  meRole.className = 'multi-seat-role' + (myRole ? '' : ' empty');
+  meRole.textContent = myRole || '-';
+  me.appendChild(meName);
+  me.appendChild(meRole);
+
+  multiRenderTurnBar(state);
+  multiPlaceDirs(n);
 }
+
+function multiRenderTurnBar(state) {
+  const bar = el('multiTurnBar');
+  bar.innerHTML = '';
+  const addChip = function (cls, small, text) {
+    const c = document.createElement('span');
+    c.className = 'multi-chip ' + cls;
+    const sm = document.createElement('small');
+    sm.textContent = small;
+    c.appendChild(sm);
+    c.appendChild(document.createTextNode(' ' + text));
+    bar.appendChild(c);
+  };
+  const verbNow = { attack: 'uzbrūk', defend: 'aizsargājas', throwIn: 'piemet' };
+  const verbNext = { attack: 'uzbrūk', defend: 'aizsargājas', throwIn: 'piemet' };
+  if (state.status !== 'active') {
+    addChip('', 'Spēle beigusies', '');
+  } else if (!state.turnNow) {
+    addChip('multi-chip-now', 'Tagad', state.pendingTake ? 'kārtis tiek paņemtas' : 'kārtis tiek noņemtas');
+  } else {
+    const t = state.turnNow;
+    const verb = (t.kind === 'defend' && state.pendingTake) ? 'ņem kārtis' : verbNow[t.kind];
+    addChip('multi-chip-now', 'Tagad', multiSeatLabel(state, t.playerId) + ' ' + verb);
+    (state.turnQueue || []).forEach(function (q) {
+      const arrow = document.createElement('span');
+      arrow.className = 'multi-chip-arrow';
+      arrow.textContent = '→';
+      bar.appendChild(arrow);
+      addChip('', 'Pēc tam', multiSeatLabel(state, q.playerId) + ' ' + verbNext[q.kind]);
+    });
+  }
+  el('multiEvent').textContent = state.note || '';
+}
+
+// Arrows around the table show the one direction everything moves in:
+// clockwise. Placed on an ellipse just outside the round table.
+function multiPlaceDirs(n) {
+  const layer = el('multiDirs');
+  const table = document.querySelector('#multiGame .multi-round-table');
+  const wood = layer.parentElement;
+  if (!table || !wood.clientWidth) return;
+  const wr = wood.getBoundingClientRect();
+  const tr = table.getBoundingClientRect();
+  const cx = tr.left - wr.left + tr.width / 2;
+  const cy = tr.top - wr.top + tr.height / 2;
+  const rx = tr.width / 2 * 1.14;
+  const ry = tr.height / 2 * 1.24;
+  const angles = MULTI_DIR_ANGLES[n] || MULTI_DIR_ANGLES[4];
+  let html = '';
+  for (let k = 0; k < angles.length; k++) {
+    const a0 = angles[k];
+    const a1 = k === angles.length - 1 ? angles[0] + 360 : angles[k + 1];
+    const th = ((a0 + a1) / 2) * Math.PI / 180;
+    const x = cx + rx * Math.cos(th);
+    const y = cy + ry * Math.sin(th);
+    const ang = Math.atan2(ry * Math.cos(th), -rx * Math.sin(th)) * 180 / Math.PI;
+    html += '<span class="multi-dir" style="left:' + x + 'px;top:' + y + 'px;transform:translate(-50%,-50%) rotate(' + ang + 'deg)"></span>';
+  }
+  layer.innerHTML = html;
+}
+window.addEventListener('resize', function () {
+  if (multiLastState) multiPlaceDirs(multiLastState.players.length);
+});
 
 function multiRenderTable(state) {
   el('multiDeckCount').textContent = state.deckCount;
   const trumpEl = el('multiTrumpCard');
   trumpEl.innerHTML = '';
   if (state.trumpCard) trumpEl.appendChild(multiCardChip(state.trumpCard));
-
-  const banner = el('multiRoleBanner');
-  if (state.pendingTake && state.yourRole === 'defender') {
-    banner.textContent = 'Gaidi pēdējo piemešanu…';
-    banner.className = 'role-banner-onboard defender';
-  } else if (state.yourRole === 'attacker') {
-    banner.textContent = 'Tu uzbrūc';
-    banner.className = 'role-banner-onboard attacker';
-  } else if (state.yourRole === 'defender') {
-    banner.textContent = 'Tu aizsargājies';
-    banner.className = 'role-banner-onboard defender';
-  } else {
-    banner.textContent = 'Gaidi savu kārtu';
-    banner.className = 'role-banner-onboard';
-  }
 
   const container = el('multiTableSlots');
   container.innerHTML = '';
@@ -484,7 +582,7 @@ function multiRenderHand(state) {
   const transferArmed = multiTransferMode && !!state.canTransfer;
   el('multiHandCards').classList.toggle('transfer-mode', transferArmed);
 
-  state.hand.forEach(function (card) {
+  sortHandForDisplay(state.hand, state.trumpSuit).forEach(function (card) {
     const div = document.createElement('div');
     div.className = 'card ' + cardFaceClass(card);
 
@@ -515,25 +613,29 @@ function multiRenderHand(state) {
 function multiRenderActions(state) {
   const takeBtn = el('multiTakeBtn');
   const declineBtn = el('multiDeclineBtn');
-  const surrenderBtn = el('multiSurrenderBtn');
+  const menuBtn = el('multiMenuBtn');
   const transferBtn = el('multiTransferBtn');
-  takeBtn.classList.add('hidden');
-  declineBtn.classList.add('hidden');
-  transferBtn.classList.add('hidden');
+  // The three game buttons keep their places: when one doesn't apply it is
+  // invisible (not removed), so nothing slides under a thumb mid-game.
+  takeBtn.classList.add('slot-off');
+  declineBtn.classList.add('slot-off');
+  transferBtn.classList.add('slot-off');
 
   if (state.status !== 'active') {
-    surrenderBtn.classList.add('hidden');
+    menuBtn.classList.add('hidden');
+    el('multiMenuSheet').classList.add('hidden');
     multiTransferMode = false;
     return;
   }
   const isActive = !!(multiMyId && state.activePlayers && state.activePlayers.indexOf(multiMyId) !== -1);
-  surrenderBtn.classList.toggle('hidden', !isActive);
+  menuBtn.classList.toggle('hidden', !isActive);
+  if (!isActive) el('multiMenuSheet').classList.add('hidden');
 
-  if (state.yourRole === 'defender' && !state.pendingTake && state.table.some(function (s) { return !s.defend; })) takeBtn.classList.remove('hidden');
-  if (state.canThrowIn) declineBtn.classList.remove('hidden');
+  if (state.yourRole === 'defender' && !state.pendingTake && state.table.some(function (s) { return !s.defend; })) takeBtn.classList.remove('slot-off');
+  if (state.canThrowIn) declineBtn.classList.remove('slot-off');
 
   if (state.canTransfer) {
-    transferBtn.classList.remove('hidden');
+    transferBtn.classList.remove('slot-off');
     transferBtn.classList.toggle('armed', multiTransferMode);
   } else {
     multiTransferMode = false;
@@ -553,7 +655,7 @@ let multiWasMyTurn = false;
 let multiWasActive = true;
 
 function multiIsMyTurnNow(state) {
-  return !!(state.pendingActorIds && multiMyId && state.pendingActorIds.indexOf(multiMyId) !== -1);
+  return !!(state.turnNow && multiMyId && state.turnNow.playerId === multiMyId);
 }
 
 function multiShowTurnNotice() {
@@ -577,7 +679,6 @@ el('multiSafeLeaveBtn').addEventListener('click', function () {
 
 function multiRender(state) {
   if (multiActiveDragCancel) multiActiveDragCancel();
-  el('multiMyName').textContent = multiMyId || 'Tu';
   multiRenderOpponents(state);
   multiRenderTable(state);
   multiRenderHand(state);
@@ -620,9 +721,57 @@ function multiShowGameOver(state) {
 
 el('multiTakeBtn').addEventListener('click', function () { socket.emit('multiTakeCards'); });
 el('multiDeclineBtn').addEventListener('click', function () { socket.emit('multiDeclineThrowIn'); });
-el('multiSurrenderBtn').addEventListener('click', function () {
-  if (confirm('Vai tiešām vēlies padoties?')) socket.emit('multiSurrender');
-});
+// Surrender lives in the corner menu and needs a 1.5 s press-and-hold, so
+// it can't be hit by accident (and there's no pop-up to dismiss by reflex).
+(function () {
+  const sheet = el('multiMenuSheet');
+  const menuBtn = el('multiMenuBtn');
+  const hold = el('multiSurrenderHold');
+  const fill = hold.querySelector('.multi-hold-fill');
+  const HOLD_MS = 1500;
+  let raf = null;
+
+  function closeSheet() {
+    sheet.classList.add('hidden');
+    menuBtn.setAttribute('aria-expanded', 'false');
+    stop();
+  }
+  function stop() {
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    fill.style.transition = 'width 0.2s';
+    fill.style.width = '0';
+  }
+  function start() {
+    if (raf) return;
+    const t0 = performance.now();
+    fill.style.transition = 'none';
+    raf = requestAnimationFrame(function tick(t) {
+      const p = Math.min((t - t0) / HOLD_MS, 1);
+      fill.style.width = (p * 100) + '%';
+      if (p >= 1) {
+        raf = null;
+        closeSheet();
+        socket.emit('multiSurrender');
+      } else {
+        raf = requestAnimationFrame(tick);
+      }
+    });
+  }
+
+  menuBtn.addEventListener('click', function () {
+    const open = sheet.classList.contains('hidden');
+    sheet.classList.toggle('hidden', !open);
+    menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!open) stop();
+  });
+  el('multiMenuCancel').addEventListener('click', closeSheet);
+  hold.addEventListener('pointerdown', function (e) { e.preventDefault(); start(); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { hold.addEventListener(ev, stop); });
+  hold.addEventListener('keydown', function (e) {
+    if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); start(); }
+  });
+  hold.addEventListener('keyup', function (e) { if (e.key === ' ' || e.key === 'Enter') stop(); });
+})();
 el('multiGameOverCloseBtn').addEventListener('click', function () {
   socket.emit('multiLeaveRoom');
   multiReturnToLobby();

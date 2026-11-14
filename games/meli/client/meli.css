@@ -1,12 +1,12 @@
 /* Meļi in-game screens (waiting room, table, pop-ups). Scoped to .meli so they cannot clash with the shared Duraks lobby styles. */
 .meli {
   
-  --felt: #1b3a2f;
-  --felt-2: #0f2b22;
-  --felt-light: #234a3c;
+  --felt: #235d7a;
+  --felt-2: #143a4d;
+  --felt-light: #2a6a88;
   --paper: #faf6ec;
   --ink: #1a1a1a;
-  --muted: #9db3a8;
+  --muted: #a9c6d4;
   --gold: #e2c374;
   --gold-2: #c9a24b;
   --font-display: Georgia, 'Times New Roman', serif;
@@ -72,7 +72,7 @@
 .meli .room-list .m-who small { color: var(--muted); }
 .meli #roomEmpty { margin-top: 18px; }
 .meli .howto { font-size: .92rem; color: var(--muted); }
-.meli .howto summary { cursor: pointer; color: #eef5f0; }
+.meli .howto summary { cursor: pointer; color: #eef4f7; }
 .meli .howto ol { padding-left: 1.2rem; margin-top: 8px; display: grid; gap: 6px; }
 .meli .howto b { color: var(--gold); }
 .meli .invite-bar {
@@ -103,7 +103,7 @@
 .meli button:not(:disabled):hover { filter: brightness(1.08); }
 .meli .m-toast {
   position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 200; max-width: min(92vw, 420px);
-  background: #0c1d16; color: #fff; border: 1px solid var(--gold-2); border-radius: 999px; padding: 8px 16px; text-align: center;
+  background: #0b2230; color: #fff; border: 1px solid var(--gold-2); border-radius: 999px; padding: 8px 16px; text-align: center;
   box-shadow: 0 4px 14px rgba(0, 0, 0, .6);
 }
 .meli .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 2px 10px; }
@@ -159,7 +159,7 @@
 .meli .chip.opp { border-color: #e9a0a0; }
 .meli .reveal {
   position: absolute; inset: 8px; display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center;
-  background: rgba(10, 30, 24, .95); border-radius: 14px; z-index: 10; padding: 12px; animation: pop .25s ease-out;
+  background: rgba(10, 33, 45, .95); border-radius: 14px; z-index: 10; padding: 12px; animation: pop .25s ease-out;
 }
 .meli .reveal .pair { display: flex; gap: 18px; align-items: end; }
 .meli .reveal .lab { font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
@@ -171,7 +171,7 @@
 @keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes flip { from { transform: rotateY(90deg); } to { transform: none; } }
 .meli .reveal .actual { animation: flip .5s .15s backwards; }
-.meli .status { min-height: 2.6em; padding: 10px 4px 6px; text-align: center; color: #dfeee5; }
+.meli .status { min-height: 2.6em; padding: 10px 4px 6px; text-align: center; color: #dfebf1; }
 .meli .m-card {
   position: relative; flex: none; width: var(--card-w); height: var(--card-h); border-radius: 7px; background-color: var(--paper); color: var(--ink);
   border: 1px solid rgba(0, 0, 0, .3); display: grid; place-items: center; font-weight: 800; font-size: 1.15rem; user-select: none;
@@ -209,7 +209,7 @@
 .meli .suit-btn.locked::after { content: '🔒'; position: absolute; top: -9px; left: -7px; font-size: .8rem; }
 .meli .suit-btn .n {
   position: absolute; bottom: -7px; right: -7px; min-width: 22px; height: 22px; padding: 0 5px; display: grid; place-items: center;
-  border-radius: 999px; background: #1d2a25; color: #fff; font-size: .75rem; font-weight: 700; border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: 999px; background: #1c2f3a; color: #fff; font-size: .75rem; font-weight: 700; border: 1px solid rgba(255, 255, 255, .3);
 }
 .meli .actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
 .meli .actions button { min-width: 150px; }
@@ -265,10 +265,10 @@
 .invite-bar .btn { margin: 0; }
 .lobby-howto {
   width: 100%; max-width: 1180px; margin: 24px auto 0; padding: 14px 20px; border-radius: 14px;
-  background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(201, 162, 75, 0.35); color: #9db3a8; font-size: .92rem; text-align: left;
+  background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(201, 162, 75, 0.35); color: #a9c6d4; font-size: .92rem; text-align: left;
 }
-.lobby-howto summary { cursor: pointer; color: #eef5f0; }
+.lobby-howto summary { cursor: pointer; color: #eef4f7; }
 .lobby-howto ol { padding-left: 1.2rem; margin: 10px 0 0; display: grid; gap: 6px; }
 .lobby-howto b { color: #e2c374; }
 #lobby.screen { flex-direction: column; align-items: center; }
-.meli .m-modal .panel { background: linear-gradient(180deg, #234a3c, #0f2b22); border-color: rgba(201, 162, 75, 0.6); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6); }
+.meli .m-modal .panel { background: linear-gradient(180deg, #2a6a88, #143a4d); border-color: rgba(201, 162, 75, 0.6); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6); }

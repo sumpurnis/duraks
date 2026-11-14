@@ -39,17 +39,17 @@
   var CSS =
     '.gn-card{position:fixed;right:16px;bottom:16px;z-index:9999;width:min(340px,calc(100vw - 32px));' +
     'box-sizing:border-box;padding:18px 18px 16px;border-radius:14px;color:#faf6ec;' +
-    'background:linear-gradient(180deg,#234a3c,#0f2b22);border:1px solid rgba(201,162,75,.6);' +
+    'background:linear-gradient(180deg,#2a6a88,#143a4d);border:1px solid rgba(201,162,75,.6);' +
     'box-shadow:0 10px 30px rgba(0,0,0,.55);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}' +
     '.gn-card h2{margin:0 0 6px;font-family:Georgia,"Times New Roman",serif;font-size:1.15rem;color:#e2c374;padding-right:28px}' +
-    '.gn-card p{margin:0 0 12px;font-size:.88rem;line-height:1.45;color:#c9d6cf}' +
+    '.gn-card p{margin:0 0 12px;font-size:.88rem;line-height:1.45;color:#cbdae3}' +
     '.gn-x{position:absolute;top:6px;right:6px;width:44px;height:44px;border:0;border-radius:50%;background:transparent;' +
     'color:#e2c374;font-size:1.5rem;line-height:1;cursor:pointer}' +
     '.gn-btn{display:block;box-sizing:border-box;width:100%;margin:0 0 8px;padding:11px 14px;border-radius:8px;text-align:center;' +
     'text-decoration:none;font:600 .92rem -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;cursor:pointer}' +
     '.gn-primary{border:0;background:linear-gradient(180deg,#e2c374,#c9a24b);color:#2a2005}' +
     '.gn-secondary{background:transparent;border:1px solid #c9a24b;color:#e2c374}' +
-    '.gn-link{display:block;width:100%;margin:2px 0 0;padding:10px;border:0;background:none;color:#9db3a8;' +
+    '.gn-link{display:block;width:100%;margin:2px 0 0;padding:10px;border:0;background:none;color:#a9c6d4;' +
     'font:.82rem -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;text-decoration:underline;cursor:pointer}' +
     '.gn-btn:focus-visible,.gn-x:focus-visible,.gn-link:focus-visible{outline:3px solid #e2c374;outline-offset:2px}';
 

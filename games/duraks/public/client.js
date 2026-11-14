@@ -21,6 +21,33 @@ function applyCardDeckPreference() {
 }
 applyCardDeckPreference();
 
+// "Kārtot kārtis augošā secībā": display-only hand sorting (suits grouped,
+// ascending rank, trump suit last = rightmost). Saved in this browser like
+// the card-deck preference above, applied automatically until unticked.
+const SORT_HAND_KEY = 'duraks_sort_hand';
+const SORT_RANK_ORDER = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+const SORT_SUIT_ORDER = ['hearts', 'diamonds', 'clubs', 'spades'];
+function sortHandEnabled() {
+  try { return localStorage.getItem(SORT_HAND_KEY) === '1'; } catch (e) { return false; }
+}
+function sortHandForDisplay(hand, trumpSuit) {
+  if (!sortHandEnabled()) return hand;
+  const suitKey = function (s) { return s === trumpSuit ? 99 : SORT_SUIT_ORDER.indexOf(s); };
+  return hand.slice().sort(function (a, b) {
+    return suitKey(a.suit) - suitKey(b.suit) || SORT_RANK_ORDER.indexOf(a.rank) - SORT_RANK_ORDER.indexOf(b.rank);
+  });
+}
+document.querySelectorAll('.sort-hand-toggle').forEach(function (box) {
+  box.checked = sortHandEnabled();
+  box.addEventListener('change', function () {
+    try { localStorage.setItem(SORT_HAND_KEY, box.checked ? '1' : '0'); } catch (e) { /* private mode: applies for this session only */ }
+    document.querySelectorAll('.sort-hand-toggle').forEach(function (other) { other.checked = box.checked; });
+    // re-draw whichever hand is on screen right now
+    if (typeof lastState !== 'undefined' && lastState && el('game') && !el('game').classList.contains('hidden')) renderHand(lastState);
+    if (typeof multiLastState !== 'undefined' && multiLastState && el('multiGame') && !el('multiGame').classList.contains('hidden')) multiRender(multiLastState);
+  });
+});
+
 // Mobile browsers (especially Chrome/Brave on Android) report `100vh` against
 // the viewport size with the address bar collapsed, not what's actually
 // visible — this pushes bottom UI (action buttons) below the visible area
@@ -768,7 +795,7 @@ function renderHand(state) {
   const canAttack = state.yourRole === 'attacker' && state.status === 'active';
   const canDefend = state.yourRole === 'defender' && state.status === 'active' && state.table.some((s) => !s.defend);
 
-  state.hand.forEach((card) => {
+  sortHandForDisplay(state.hand, state.trumpSuit).forEach((card) => {
     const div = document.createElement('div');
     div.className = `card ${cardFaceClass(card)}`;
 

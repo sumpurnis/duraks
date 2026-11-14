@@ -4,13 +4,13 @@
 
 :root {
   color-scheme: light;
-  --felt-dark: #0f2b22;
-  --felt: #1b3a2f;
-  --felt-light: #234a3c;
+  --felt-dark: #143a4d;
+  --felt: #235d7a;
+  --felt-light: #2a6a88;
   --gold: #c9a24b;
   --gold-bright: #e2c374;
   --cream: #faf6ec;
-  --muted: #9db3a8;
+  --muted: #a9c6d4;
   --danger: #8f2d2d;
   --danger-bright: #b23a3a;
   /* Meļi button palette */
@@ -67,7 +67,7 @@ a { color: var(--gold-bright); }
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgba(10, 24, 19, 0.94);
+  background: rgba(9, 27, 37, 0.94);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   border-bottom: 1px solid rgba(201, 162, 75, 0.35);
@@ -196,7 +196,7 @@ a { color: var(--gold-bright); }
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(5, 14, 11, 0.75);
+  background: rgba(4, 15, 22, 0.75);
   display: flex;
   align-items: flex-start;
   justify-content: center;

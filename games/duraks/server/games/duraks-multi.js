@@ -132,6 +132,7 @@ class Game {
     this.seenCards = new Set();
 
     // Throw-in state for the current round.
+    this.note = ''; // short Latvian sentence about what just happened, shown above the table
     this.throwInRotation = []; // active, non-defender players, seating order from the attacker
     this.throwInPointer = 0;
     this.throwInDeclined = new Set();
@@ -209,6 +210,46 @@ class Game {
     return ranks;
   }
 
+  /** True when this player could legally add a card to the table right now
+   *  (any card, trumps included, whose rank is already on the table, and
+   *  there is still room). Used to hide the throw-in button and to skip
+   *  players who have nothing to add. */
+  canThrowInNow(playerId) {
+    if (this.status !== 'active' || this.table.length === 0) return false;
+    if (playerId === this.defenderId || !this.activePlayers.includes(playerId)) return false;
+    if (this.table.length >= this._tableCap()) return false;
+    const ranks = this.ranksOnTable();
+    return this.hands[playerId].some((c) => ranks.has(c.rank));
+  }
+
+  /** Moves the throw-in pointer past everyone who has nothing to throw in,
+   *  so nobody is asked (or has to press "decline") without a real choice. */
+  _autoSkipThrowIns() {
+    if (this.status !== 'active' || this.table.length === 0) return;
+    let guard = this.throwInRotation.length;
+    while (guard-- > 0 && !this._throwInWindowClosed()) {
+      const who = this.throwInRotation[this.throwInPointer];
+      if (this.canThrowInNow(who)) break;
+      this.throwInDeclined.add(who);
+      this.throwInPointer = (this.throwInPointer + 1) % this.throwInRotation.length;
+    }
+  }
+
+  /** If the defender cannot beat any open card (and cannot transfer), the
+   *  pickup starts automatically; everyone who can still throw in gets
+   *  their normal final window first. */
+  _autoTakeIfStuck() {
+    if (this.status !== 'active' || this.pendingTake || this.table.length === 0) return false;
+    const open = this.table.filter((s) => !s.defend);
+    if (open.length === 0) return false;
+    const hand = this.hands[this.defenderId];
+    const canBeat = open.some((s) => hand.some((c) => this.beats(s.attack, c)));
+    if (canBeat || this.canTransfer(this.defenderId)) return false;
+    this.takeCards(this.defenderId);
+    this.note = `${this.defenderId} nevar nosist, tāpēc ņem kārtis. Pārējie vēl var piemest.`;
+    return true;
+  }
+
   openSlots() {
     return this.table.filter((s) => !s.defend).length;
   }
@@ -257,6 +298,7 @@ class Game {
     this.seenCards.add(card.id);
     this._noteParticipant(playerId);
     this.log.push(`${playerId} attacks with ${card.rank} of ${card.suit}`);
+    this.note = `${playerId} ${isFirstCard ? 'uzbrūk' : 'piemet'}.`;
 
     if (isFirstCard) {
       this.throwInRotation = this._buildThrowInRotation();
@@ -270,6 +312,8 @@ class Game {
       // (see declineThrowIn).
       this.throwInDeclined = new Set();
     }
+    this._autoSkipThrowIns();
+    this._autoTakeIfStuck();
     if (this.pendingTake) return this._maybeResolveTake() || { ok: true };
     return { ok: true };
   }
@@ -286,6 +330,7 @@ class Game {
     }
     this.throwInDeclined.add(playerId);
     this.throwInPointer = (this.throwInPointer + 1) % this.throwInRotation.length;
+    this._autoSkipThrowIns();
     if (this.pendingTake) return this._maybeResolveTake() || { ok: true };
     return this._maybeResolveRound() || { ok: true };
   }
@@ -304,7 +349,14 @@ class Game {
     slot.defend = card;
     this.seenCards.add(card.id);
     this.log.push(`${playerId} defends with ${card.rank} of ${card.suit}`);
+    this.note = `${playerId} sit.`;
 
+    // The defending card may add a new rank to the table: everyone who can
+    // now throw it in gets a chance again; the rest are skipped silently.
+    this.throwInDeclined = new Set();
+    this._autoSkipThrowIns();
+    this._autoTakeIfStuck();
+    if (this.pendingTake) return this._maybeResolveTake() || { ok: true };
     return this._maybeResolveRound() || { ok: true };
   }
 
@@ -378,6 +430,7 @@ class Game {
     this.seenCards.add(card.id);
     this._noteParticipant(playerId);
     this.log.push(`${playerId} padod tālāk ar ${card.rank} no ${card.suit}`);
+    this.note = `${playerId} padod tālāk. Tagad aizsargājas ${newDefenderId}.`;
 
     this.attackerId = playerId;
     this.defenderId = newDefenderId;
@@ -387,6 +440,8 @@ class Game {
     this.throwInRotation = this._buildThrowInRotation();
     this.throwInPointer = 0;
     this.throwInDeclined = new Set();
+    this._autoSkipThrowIns();
+    this._autoTakeIfStuck();
 
     return { ok: true, transferred: true, newDefenderId };
   }
@@ -442,6 +497,8 @@ class Game {
     this.throwInPointer = 0;
     this.throwInDeclined = new Set();
     this.log.push(`${playerId} takes — waiting for any final throw-ins`);
+    this.note = `${playerId} ņem kārtis. Pārējie vēl var piemest.`;
+    this._autoSkipThrowIns();
 
     return this._maybeResolveTake() || { ok: true };
   }
@@ -531,6 +588,7 @@ class Game {
     }
     this.defenderId = this._nextActiveAfter(this.attackerId);
     this.roundStartHandSize = this.hands[this.defenderId].length;
+    this.note = `${defenderId} ${defenderTook ? 'paņēma kārtis' : 'nosita visu'}. Uzbrūk ${this.attackerId}.`;
     this.roundParticipants = [];
     this.throwInRotation = [];
     this.throwInPointer = 0;
@@ -560,12 +618,42 @@ class Game {
     return actors;
   }
 
+  /** One clear answer to "whose move is it now, and who is after them":
+   *  `now` is the defender while a card is still open, otherwise whoever
+   *  must attack or throw in; `queue` lists up to three people after that. */
+  turnInfo() {
+    if (this.status !== 'active') return { now: null, queue: [] };
+    const actors = this.pendingActors();
+    if (actors.length === 0) return { now: null, queue: [] };
+    const nowActor = actors.find((a) => a.kind === 'defend') || actors[0];
+    const now = { playerId: nowActor.playerId, kind: nowActor.kind === 'defend' ? 'defend' : nowActor.kind === 'attackOpen' ? 'attack' : 'throwIn' };
+    const queue = [];
+    if (now.kind === 'attack') {
+      queue.push({ playerId: this.defenderId, kind: 'defend' });
+    } else {
+      if (now.kind !== 'defend' && !this.pendingTake && this.table.length > 0 && this.openSlots() > 0) {
+        queue.push({ playerId: this.defenderId, kind: 'defend' });
+      }
+      const len = this.throwInRotation.length;
+      for (let s = 0; s < len && this.table.length > 0; s++) {
+        const p = this.throwInRotation[(this.throwInPointer + s) % len];
+        if (now.kind === 'throwIn' && s === 0) continue;
+        if (this.throwInDeclined.has(p) && now.kind !== 'throwIn') continue;
+        if (this.hands[p].length === 0) continue;
+        queue.push({ playerId: p, kind: 'throwIn' });
+      }
+    }
+    return { now, queue: queue.slice(0, 3) };
+  }
+
   viewFor(playerId) {
+    const turn = this.turnInfo();
     const opponents = this.players.filter((p) => p !== playerId);
     const isThrowInTurn =
       this.table.length > 0 &&
       !this._throwInWindowClosed() &&
-      this.throwInRotation[this.throwInPointer] === playerId;
+      this.throwInRotation[this.throwInPointer] === playerId &&
+      this.canThrowInNow(playerId);
     return {
       you: playerId,
       players: this.players,
@@ -584,6 +672,10 @@ class Game {
       canTransfer: this.canTransfer(playerId),
       pendingTake: this.pendingTake,
       pendingActorIds: this.pendingActors().map((a) => a.playerId),
+      turnNow: turn.now,
+      turnQueue: turn.queue,
+      throwInRotation: this.table.length > 0 ? this.throwInRotation.slice() : [],
+      note: this.note,
       status: this.status,
       durakId: this.durakId,
       draw: this.status === 'finished' && !this.durakId && this.activePlayers.length === 0,

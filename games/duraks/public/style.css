@@ -1,14 +1,14 @@
 :root {
   color-scheme: light;
-  --felt-dark: #0f2b22;
-  --felt: #1b3a2f;
-  --felt-light: #234a3c;
+  --felt-dark: #143a4d;
+  --felt: #235d7a;
+  --felt-light: #2a6a88;
   --gold: #c9a24b;
   --gold-bright: #e2c374;
   --cream: #faf6ec;
   --ink: #1a1a1a;
   --red: #a8331f;
-  --muted: #9db3a8;
+  --muted: #a9c6d4;
   --danger: #8f2d2d;
   --danger-bright: #b23a3a;
   /* Fixed per-pool colors for the split ELO chart (1v1 vs 3-4 player) —
@@ -368,7 +368,7 @@ html, body {
   font-family: var(--font-display);
   font-weight: bold;
   font-size: 7cqw;
-  color: #8fbfa8;
+  color: #93c4d9;
   text-shadow: 0 1px 3px rgba(0,0,0,0.65);
   pointer-events: none;
 }
@@ -381,7 +381,7 @@ html, body {
   z-index: 2;
   padding: 0.8cqw 3.5cqw;
   border-radius: 6px;
-  background: rgba(15, 43, 34, 0.62);
+  background: rgba(14, 40, 54, 0.62);
   border: 1px solid rgba(201, 162, 75, 0.4);
   font-size: 1.9cqw;
   font-weight: 600;
@@ -390,7 +390,7 @@ html, body {
   text-align: center;
 }
 .role-banner-onboard.attacker { color: var(--gold-bright); }
-.role-banner-onboard.defender { color: #8fbfa8; }
+.role-banner-onboard.defender { color: #93c4d9; }
 
 .name-pill-row {
   display: flex;
@@ -757,7 +757,7 @@ html, body {
   width: 280px;
   max-width: calc(100vw - 24px);
   height: 340px;
-  background: rgba(10, 25, 20, 0.97);
+  background: rgba(9, 28, 38, 0.97);
   border: 1px solid rgba(201, 162, 75, 0.4);
   border-radius: 12px;
   display: flex;
@@ -799,7 +799,7 @@ html, body {
   font-weight: 700;
   color: var(--gold-bright);
 }
-.chat-msg.own .who { color: #8fbfa8; }
+.chat-msg.own .who { color: #93c4d9; }
 .chat-input-row {
   display: flex;
   gap: 6px;
@@ -1136,3 +1136,17 @@ html, body {
 [data-card-deck="classic"] .deck-trump-card {
   aspect-ratio: 84 / 122;
 }
+
+/* "Kārtot kārtis augošā secībā" tick box under the action buttons */
+.sort-hand-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.sort-hand-row input { width: 18px; height: 18px; accent-color: var(--gold-bright); cursor: pointer; }

@@ -230,6 +230,7 @@
       <button id="surrenderBtn" class="btn btn-ghost-danger">Padoties</button>
       <button id="chatToggleBtn" class="btn btn-secondary">💬 Čats</button>
     </div>
+    <label class="sort-hand-row"><input type="checkbox" class="sort-hand-toggle" /> Kārtot kārtis augošā secībā</label>
 
     <div id="chatPanel" class="chat-panel hidden">
       <div class="chat-header">
@@ -528,15 +529,30 @@
   </div>
 
   <div id="multiGame" class="screen hidden">
+    <div class="multi-topline">
+      <div class="multi-turnwrap">
+        <div id="multiTurnBar" class="multi-turnbar" aria-live="polite"></div>
+        <div id="multiEvent" class="multi-event"></div>
+      </div>
+      <button id="multiMenuBtn" class="multi-menu-btn" type="button" aria-label="Izvēlne" aria-expanded="false">⋯</button>
+    </div>
+    <div id="multiMenuSheet" class="multi-sheet hidden">
+      <strong>Padoties?</strong>
+      <span class="muted">Tu zaudēsi spēli un kļūsi par duraku. Turi nospiestu 1,5 sekundes.</span>
+      <button id="multiSurrenderHold" class="btn btn-ghost-danger multi-hold" type="button"><span class="multi-hold-fill"></span><span id="multiSurrenderHoldText">Turi, lai padotos</span></button>
+      <button id="multiMenuCancel" class="btn btn-secondary" type="button">Atcelt</button>
+    </div>
     <main id="multiTableFelt" class="table-felt">
       <div class="table-wood">
+        <div class="multi-round-table"></div>
+        <div id="multiDirs" class="multi-dirs"></div>
         <div class="deck-pile">
           <span id="multiTrumpCard" class="deck-trump-card"></span>
           <img class="deck-stack-img" src="/images/trump-stack.png" alt="" />
           <span id="multiDeckCount" class="deck-count">—</span>
         </div>
-        <div id="multiOpponentsRow" class="multi-opponents-onboard-row"></div>
-        <div id="multiRoleBanner" class="role-banner-onboard">—</div>
+        <div id="multiOpponentsRow" class="multi-seats"></div>
+        <div id="multiMePill" class="multi-seat multi-seat-me"></div>
         <div id="multiTurnNotice" class="multi-turn-notice hidden">Tavs gājiens</div>
         <div class="table-safezone">
           <div id="multiTableSlots" class="table-slots"></div>
@@ -545,16 +561,12 @@
       </div>
     </main>
 
-    <div class="name-pill-row name-pill-row-bottom">
-      <span id="multiMyName" class="name-pill">—</span>
-    </div>
-
     <div class="action-row">
-      <button id="multiDeclineBtn" class="btn btn-primary hidden">Atteikties piemest</button>
-      <button id="multiTransferBtn" class="btn btn-secondary hidden">🔄 Padot</button>
-      <button id="multiTakeBtn" class="btn btn-danger hidden">Ņemt kārtis</button>
-      <button id="multiSurrenderBtn" class="btn btn-ghost-danger">Padoties</button>
+      <button id="multiDeclineBtn" class="btn btn-primary slot-off">Atteikties piemest</button>
+      <button id="multiTransferBtn" class="btn btn-secondary slot-off">🔄 Padot</button>
+      <button id="multiTakeBtn" class="btn btn-danger slot-off">Ņemt kārtis</button>
     </div>
+    <label class="sort-hand-row"><input type="checkbox" class="sort-hand-toggle" /> Kārtot kārtis augošā secībā</label>
   </div>
 
   <div id="multiGameOverModal" class="modal hidden">

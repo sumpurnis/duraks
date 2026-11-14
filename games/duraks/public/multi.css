@@ -8,56 +8,263 @@
    opponents in a row (it was built assuming exactly one) — that's the
    only new layout piece defined here. */
 
-.multi-opponents-onboard-row {
+/* ---------- round table (3-4 player game) ----------
+   The wood is an ellipse. Seats sit on a ring around it, rotated so that I
+   am always at the bottom and the player who moves after me is on my left
+   (clockwise). All sizes are in cqw of .table-wood. */
+
+#multiGame { position: relative; }
+#multiGame .table-wood {
+  background-image: none; /* the table surface is drawn by .multi-round-table */
+}
+#multiTableFelt .table-wood {
+  width: min(100%, 1280px, calc((var(--app-vh, 1vh) * 100 - 215px) * 1.5));
+}
+
+.multi-round-table {
   position: absolute;
-  top: 2%;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 3cqw;
+  left: 14%;
+  top: 21%;
+  width: 72%;
+  height: 48%;
+  border-radius: 50%;
+  /* Texture removed for now. To bring a picture back, set e.g.
+     --multi-table-bg: #6b4a2b url('/images/table-wood.png') center / cover no-repeat; */
+  background: var(--multi-table-bg, #2f7391);
+  box-shadow:
+    inset 0 0 0 0.5cqw rgba(40, 24, 10, 0.75),
+    inset 0 0 6cqw rgba(0, 0, 0, 0.55),
+    0 1.4cqw 3cqw rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+#multiGame .table-safezone {
+  top: 25%;
+  bottom: 34%;
+  left: 24%;
+  right: 24%;
+}
+#multiGame .table-slots {
+  flex-wrap: wrap;
+  width: 31cqw;
+  gap: 1.2cqw 1.3cqw;
+}
+#multiGame .slot { width: 8.2cqw; }
+#multiGame .deck-pile {
+  top: 72%;
+  left: 2%;
+  transform: scale(0.8);
+  transform-origin: top left;
+}
+
+.multi-seats {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   z-index: 2;
 }
 
-.multi-opponent-group {
+.multi-seat {
+  position: absolute;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.3cqw;
+  gap: 0.35cqw;
+  width: max-content;
+  max-width: 28cqw;
 }
+.multi-seat.seat-top   { left: 50%; top: 12%; }
+.multi-seat.seat-left  { left: 9%;  top: 46%; }
+.multi-seat.seat-right { left: 91%; top: 46%; }
+.multi-seat.seat-tl    { left: 12%; top: 30%; }
+.multi-seat.seat-tr    { left: 88%; top: 30%; }
 
-.multi-opponent-group-name {
-  font-size: 1.05cqw;
-  color: var(--gold-bright);
+.multi-seat-name {
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 8px;
+  padding: 0.2cqw 1cqw;
   font-family: var(--font-display);
+  font-size: clamp(11px, 1.55cqw, 16px);
+  color: var(--cream);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
   text-shadow: 0 1px 2px rgba(0,0,0,0.6);
 }
-.multi-opponent-group.multi-safe .multi-opponent-group-name {
-  opacity: 0.55;
-  font-style: italic;
+.multi-seat-role {
+  font-size: clamp(8px, 1.1cqw, 11px);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.1cqw 0.8cqw;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--cream);
+  white-space: nowrap;
 }
+.multi-seat-role.empty { visibility: hidden; }
 
-.multi-opponent-group-cards {
-  display: flex;
+/* Gold marks the one player we are waiting for, and nobody else. */
+.multi-seat.multi-now .multi-seat-name,
+.multi-seat.multi-now .multi-seat-role {
+  background: var(--gold-bright);
+  color: #2a2005;
+  text-shadow: none;
 }
-.multi-opponent-group-cards .card-back-mini {
-  width: 6cqw;
+.multi-seat.multi-now .multi-seat-role { box-shadow: 0 0 0 3px rgba(226, 195, 116, 0.3); }
+.multi-seat.multi-safe { opacity: 0.5; }
+
+.multi-seat-cards {
+  display: flex;
+  height: 6.4cqw;
+}
+.multi-seat-cards .card-back-mini {
+  width: 4.4cqw;
   aspect-ratio: 84 / 122;
   border-radius: 4px;
-  margin-left: -3cqw;
+  margin-left: -2.4cqw;
   background-image: url('/images/trump-stack.png');
   background-size: cover;
   background-position: center;
-  transition: transform 0.2s ease, filter 0.2s ease;
 }
-.multi-opponent-group-cards .card-back-mini:first-child { margin-left: 0; }
+.multi-seat-cards .card-back-mini:first-child { margin-left: 0; }
+.multi-seat-count {
+  font-size: clamp(9px, 1.15cqw, 12px);
+  color: #93c4d9;
+}
 
-/* Whoever currently has a pending action gets a slightly bigger, brighter
-   card stack so it's easy to tell whose turn it is at a glance. */
-.multi-opponent-group-cards.multi-current-turn .card-back-mini {
-  transform: scale(1.1);
-  filter: brightness(1.35);
+.multi-seat-me {
+  left: 50%;
+  top: auto;
+  bottom: 24.5%;
+  transform: translateX(-50%);
+  flex-direction: column;
+  z-index: 3;
+  pointer-events: none;
 }
+
+.multi-dirs { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.multi-dir {
+  position: absolute;
+  width: 2.6cqw;
+  height: 1.4cqw;
+  min-width: 18px;
+  min-height: 10px;
+  background: rgba(234, 243, 247, 0.75);
+  clip-path: polygon(0 0, 60% 0, 100% 50%, 60% 100%, 0 100%, 40% 50%);
+}
+
+/* Portrait phones: a taller table so seats and cards have room. */
+@media (max-width: 700px), (max-aspect-ratio: 1/1) {
+  #multiTableFelt .table-wood {
+    aspect-ratio: 4 / 5.4;
+    width: min(100%, calc((var(--app-vh, 1vh) * 100 - 230px) / 1.35));
+  }
+  .multi-round-table { left: 6%; top: 20%; width: 88%; height: 46%; }
+  #multiGame .table-safezone { top: 27%; bottom: 40%; left: 14%; right: 14%; }
+  #multiGame .table-slots { width: 56cqw; gap: 1.5cqw 2cqw; }
+  #multiGame .slot { width: 14cqw; }
+  .multi-seat.seat-top   { top: 11%; }
+  .multi-seat.seat-left  { left: 13%; top: 43%; }
+  .multi-seat.seat-right { left: 87%; top: 43%; }
+  .multi-seat.seat-tl    { left: 17%; top: 28%; }
+  .multi-seat.seat-tr    { left: 83%; top: 28%; }
+  .multi-seat-name { font-size: clamp(11px, 3.1cqw, 15px); padding: 0.3cqw 2cqw; }
+  .multi-seat-role { font-size: clamp(8px, 2.3cqw, 11px); padding: 0.2cqw 1.6cqw; }
+  .multi-seat-count { font-size: clamp(9px, 2.6cqw, 12px); }
+  .multi-seat-cards { height: 9.2cqw; }
+  .multi-seat-cards .card-back-mini { width: 6.3cqw; margin-left: -3.8cqw; }
+  .multi-seat-me { bottom: 22%; }
+  .multi-dir { width: 6cqw; height: 3.2cqw; }
+  #multiGame .deck-pile { top: 1%; left: 1%; transform: scale(0.65); }
+}
+
+/* ---------- turn bar ---------- */
+
+.multi-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px 0;
+}
+.multi-turnwrap { min-width: 0; }
+.multi-turnbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-height: 32px;
+}
+.multi-chip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  background: rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  color: var(--cream);
+}
+.multi-chip small {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #93c4d9;
+}
+.multi-chip.multi-chip-now { background: var(--gold-bright); color: #2a2005; font-weight: 700; }
+.multi-chip.multi-chip-now small { color: #2a2005; }
+.multi-chip-arrow { color: #93c4d9; }
+.multi-event {
+  font-size: 0.8rem;
+  color: #93c4d9;
+  min-height: 1.2em;
+  margin-top: 2px;
+}
+.multi-menu-btn {
+  flex: none;
+  background: rgba(255, 255, 255, 0.1);
+  border: 0;
+  border-radius: 8px;
+  color: var(--cream);
+  font-size: 1.3rem;
+  line-height: 1.2;
+  padding: 2px 12px;
+  cursor: pointer;
+}
+.multi-menu-btn.hidden { display: none; }
+
+.multi-sheet {
+  position: absolute;
+  right: 12px;
+  top: 52px;
+  z-index: 30;
+  width: min(320px, calc(100% - 24px));
+  background: #123446;
+  border: 1px solid rgba(201, 162, 75, 0.4);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  color: var(--cream);
+}
+.multi-sheet.hidden { display: none; }
+.multi-hold { position: relative; overflow: hidden; touch-action: none; user-select: none; }
+.multi-hold-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: rgba(178, 58, 58, 0.35);
+}
+.multi-hold span:last-child { position: relative; }
+
+/* Game buttons keep their places; unavailable ones are just not visible. */
+#multiGame .action-row .slot-off { visibility: hidden; }
+#multiGame .action-row { min-height: 52px; }
 
 /* ---------- "your turn" notice ---------- */
 

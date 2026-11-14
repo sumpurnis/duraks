@@ -378,7 +378,7 @@ input[type="range"].slider::-moz-range-track {
   right: 4%;
   max-height: 10cqw; /* matches the opponent hand's card height (7cqw wide, 84:122 ratio) — never taller than the cards */
   overflow: hidden;
-  background: rgba(15, 43, 34, 0.7);
+  background: rgba(14, 40, 54, 0.7);
   border: 1px solid rgba(201, 162, 75, 0.4);
   border-radius: 6px;
   padding: 0.5cqw 1.4cqw;
