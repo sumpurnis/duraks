@@ -29,6 +29,7 @@ const { Tournament, ABSOLUTE_MIN_PARTICIPANTS } = require('./tournament');
 // land in the same place, whether that's the default in-repo folder or an
 // external persistent volume.
 const { DATA_DIR } = require('../../../../platform/config');
+const persist = require('../../../../platform/persist');
 const TOURNAMENTS_FILE = path.join(DATA_DIR, 'tournaments.json');
 const RESULTS_FILE = path.join(DATA_DIR, 'tournament-results.json');
 
@@ -43,21 +44,14 @@ const MIN_GAMES_TO_CREATE = 3;
 
 // --- persistence -----------------------------------------------------------
 
+// Safe files (platform/persist.js): refuse to start on a broken file, batched atomic writes.
 function loadTournaments() {
-  try {
-    const raw = JSON.parse(fs.readFileSync(TOURNAMENTS_FILE, 'utf8'));
-    return Array.isArray(raw) ? raw : [];
-  } catch {
-    return [];
-  }
+  const raw = persist.loadJson(TOURNAMENTS_FILE, () => [], 'tournaments.json');
+  return Array.isArray(raw) ? raw : [];
 }
 
 function loadResults() {
-  try {
-    return JSON.parse(fs.readFileSync(RESULTS_FILE, 'utf8'));
-  } catch {
-    return {}; // username -> { public: {...}, private: {...} }
-  }
+  return persist.loadJson(RESULTS_FILE, () => ({}), 'tournament results'); // username -> { public: {...}, private: {...} }
 }
 
 // Live registry: id -> Tournament instance. Rehydrated from disk on startup.
@@ -101,15 +95,15 @@ function rehydrate(raw) {
   }
 })();
 
+const tournamentsSaver = persist.createSaver(TOURNAMENTS_FILE, () => [...registry.values()], { label: 'tournaments.json' });
+const resultsSaver = persist.createSaver(RESULTS_FILE, () => results, { label: 'tournament results' });
+
 function persistTournaments() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const serializable = [...registry.values()];
-  fs.writeFileSync(TOURNAMENTS_FILE, JSON.stringify(serializable, null, 2));
+  tournamentsSaver.save();
 }
 
 function persistResults() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(RESULTS_FILE, JSON.stringify(results, null, 2));
+  resultsSaver.save();
 }
 
 // --- ids / invite codes ------------------------------------------------

@@ -145,7 +145,7 @@ function makeRoomPassword() {
   return Array.from({ length: 6 }, () => GUEST_CHARS[Math.floor(Math.random() * GUEST_CHARS.length)]).join('');
 }
 
-module.exports = function registerMultiHandlers(io, socket, { getUsername, users, world }) {
+module.exports = function registerMultiHandlers(io, socket, { getUsername, users, world, canCreateRoom }) {
   let multiJoinedCode = null;
   let multiGuestUsername = null;
 
@@ -158,6 +158,13 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
 
   function currentRoom() {
     return multiJoinedCode ? multiRooms.get(multiJoinedCode) : null;
+  }
+
+  // The room this player is in, only while its game is running. Moves sent to a room that is
+  // still waiting for players (room.game === null) used to crash the server.
+  function activeRoom() {
+    const room = currentRoom();
+    return room && room.game && room.game.status === 'active' ? room : null;
   }
 
   function sendMultiError(msg) {
@@ -448,6 +455,9 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     if (userHasActiveRoom(username)) {
       return sendMultiError('Tev jau ir aktīva istaba — vispirms to pamet vai atcel');
     }
+    if (canCreateRoom && !canCreateRoom()) {
+      return sendMultiError('Pārāk daudz jaunu spēļu īsā laikā — uzgaidi dažas minūtes.');
+    }
     const n = parseInt(totalPlayers, 10);
     const ai = parseInt(aiCount, 10);
     const deck = parseInt(deckSize, 10) === 36 ? 36 : 52;
@@ -572,7 +582,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   });
 
   socket.on('multiAttack', ({ cardId }) => {
-    const room = currentRoom();
+    const room = activeRoom();
     if (!room) return;
     const res = room.game.attack(effectiveUsername(), cardId);
     if (res.error) return sendMultiError(res.error);
@@ -581,7 +591,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   });
 
   socket.on('multiDefend', ({ cardId, slotIndex }) => {
-    const room = currentRoom();
+    const room = activeRoom();
     if (!room) return;
     const res = room.game.defend(effectiveUsername(), cardId, slotIndex);
     if (res.error) return sendMultiError(res.error);
@@ -590,7 +600,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   });
 
   socket.on('multiTransferCards', ({ cardId }) => {
-    const room = currentRoom();
+    const room = activeRoom();
     if (!room) return;
     const res = room.game.transferCards(effectiveUsername(), cardId);
     if (res.error) return sendMultiError(res.error);
@@ -599,7 +609,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   });
 
   socket.on('multiDeclineThrowIn', () => {
-    const room = currentRoom();
+    const room = activeRoom();
     if (!room) return;
     const res = room.game.declineThrowIn(effectiveUsername());
     if (res.error) return sendMultiError(res.error);
@@ -608,7 +618,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   });
 
   socket.on('multiTakeCards', () => {
-    const room = currentRoom();
+    const room = activeRoom();
     if (!room) return;
     const username = effectiveUsername();
     if (room.game.status === 'active' && isAvoidableTake(room.game, username)) {

@@ -53,7 +53,7 @@ function staticHandler(req, res) {
  * told via the `account` event. Without it, or without valid credentials, names stay free-text
  * guest names exactly as before.
  */
-function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null } = {}) {
+function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null, canCreate = null } = {}) {
   const stats = new MeliStats(statsFile);
   // Optional outside listener for finished games (the site's front-page map). Never breaks the game.
   if (onResult) {
@@ -100,7 +100,11 @@ function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult 
       }
     };
 
-    socket.on('room:create', guard((m) => manager.create(socket, named(m))));
+    socket.on('room:create', guard((m) => {
+      // Optional per-address limit from the host site (see server.js).
+      if (canCreate && !canCreate(socket)) throw new RoomError('Pārāk daudz jaunu galdu — uzgaidi dažas minūtes.', 'busy');
+      manager.create(socket, named(m));
+    }));
     socket.on('room:join', guard((m) => manager.join(socket, named(m))));
     socket.on('room:leave', guard(() => manager.leave(socket)));
     socket.on('room:resume', guard((m) => manager.resume(socket, m || {})));
@@ -123,9 +127,9 @@ function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult 
 }
 
 /** Mounted mode: attach Meļi to a namespace (default `/meli`) of an existing Socket.io server. */
-function attachMeli(io, { namespace = '/meli', cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null } = {}) {
+function attachMeli(io, { namespace = '/meli', cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null, canCreate = null } = {}) {
   const nsp = io.of(namespace);
-  const manager = wireMeli(nsp, { cfg, verifyAccount, statsFile, onResult, onPresence });
+  const manager = wireMeli(nsp, { cfg, verifyAccount, statsFile, onResult, onPresence, canCreate });
   return { nsp, manager, dispose: () => manager.dispose() };
 }
 

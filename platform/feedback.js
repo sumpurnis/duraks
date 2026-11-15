@@ -33,11 +33,13 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { createRateLimiter } = require('./rate-limit');
+const { socketIp } = require('./client-ip');
+const persist = require('./persist');
 
 const { DATA_DIR } = require('./config');
 const FILE = path.join(DATA_DIR, 'feedback.json');
 
-const MODERATOR_USERNAME = 'zivs'; // normalized (lowercase) — see isModerator()
+const MODERATOR_USERNAME = 'zivs'; // the exact account name — see isModerator()
 
 const MIN_FORM_AGE_MS = 2000; // reject submissions faster than this
 const MAX_FORM_AGE_MS = 6 * 60 * 60 * 1000; // reject stale/replayed timestamps
@@ -53,23 +55,21 @@ const postLimiter = createRateLimiter({ max: 5, windowMs: 10 * 60 * 1000, blockM
 const commentLimiter = createRateLimiter({ max: 10, windowMs: 10 * 60 * 1000, blockMs: 15 * 60 * 1000 });
 
 function load() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-    return { posts: Array.isArray(parsed.posts) ? parsed.posts : [] };
-  } catch {
-    return { posts: [] };
-  }
+  const parsed = persist.loadJson(FILE, () => ({ posts: [] }), 'feedback.json');
+  return { posts: Array.isArray(parsed.posts) ? parsed.posts : [] };
 }
 
 let store = load();
+const saver = persist.createSaver(FILE, () => store, { label: 'feedback.json' });
 
 function save() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(FILE, JSON.stringify(store, null, 2));
+  saver.save();
 }
 
+// Exact account name only. Account names are case-sensitive, so a case-insensitive check let anyone
+// register "ZIVS" and moderate the board.
 function isModerator(username) {
-  return !!username && username.trim().toLowerCase() === MODERATOR_USERNAME;
+  return username === MODERATOR_USERNAME;
 }
 
 function cleanText(text, maxLen) {
@@ -272,7 +272,7 @@ function registerFeedbackHandlers(io, socket, { getUsername }) {
       username,
       honeypot,
       formOpenedAt,
-      ip: socket.handshake.address || socket.id,
+      ip: socketIp(socket),
     });
     if (result.error) return socket.emit('feedbackError', result.error);
     broadcastPosts();
@@ -287,7 +287,7 @@ function registerFeedbackHandlers(io, socket, { getUsername }) {
       username,
       honeypot,
       formOpenedAt,
-      ip: socket.handshake.address || socket.id,
+      ip: socketIp(socket),
     });
     if (result.error) return socket.emit('feedbackError', result.error);
     broadcastPosts();

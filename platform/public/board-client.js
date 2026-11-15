@@ -115,9 +115,8 @@ socket.on('feedbackData', (data) => {
 });
 
 function escapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
+  // Safe between tags and inside attribute values (quotes included).
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function authorLine(post) {

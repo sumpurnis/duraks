@@ -694,7 +694,8 @@ function frame(ts) {
   // tournament bunting
   TOWNS.forEach((t) => {
     if (!t.tour) return;
-    const r = FENCE[Math.max(1, t.L) - 1] || 4;
+    // small villages have no fence yet: keep the flags around the hut, not on top of it
+    const r = Math.max(4, FENCE[Math.max(1, t.L) - 1] || 0);
     const cols = ['#c9a24b', '#b3261e', '#2f7391', '#faf6ec'];
     for (let s = 0; s < 4; s++) {
       const a0 = s * 1.57 + 0.3, pts = [];
@@ -759,7 +760,7 @@ function frame(ts) {
   }
   // my own village: a gold ring once we know who this is
   if (VIEW !== 'guest' && MINE) {
-    const t = MINE, r = fenceR(t) + 1.1;
+    const t = MINE, r = Math.max(3.2, fenceR(t)) + 1.1; // a hut has no fence: keep the label clear of it
     c.setLineDash([3, 6]); poly(c, blob(P, t.x, t.y, r, 2, 40), null, 'rgba(226,195,116,.85)', 2); c.setLineDash([]);
     const p = P(t.x, t.y - r - 0.6);
     c.font = '700 12px -apple-system,Segoe UI,sans-serif'; c.textAlign = 'center';

@@ -160,6 +160,8 @@ let guestUsername = null;
 let currentGameOverTournamentId = null; // set by showGameOver when the finished game was part of a tournament
 
 const urlParams = new URLSearchParams(window.location.search);
+// A finished Google/Facebook login puts its tokens after '#' (a fragment never reaches any server or log).
+new URLSearchParams(window.location.hash.slice(1)).forEach((v, k) => urlParams.set(k, v));
 const urlRoomCode = (urlParams.get('room') || '').toUpperCase() || null;
 
 // ================= Auth =================
@@ -385,7 +387,9 @@ fetch('/auth/providers')
 
 function clearOAuthParamsFromUrl() {
   const url = new URL(window.location.href);
-  ['oauthUser', 'oauthToken', 'oauthChoose', 'suggested', 'oauthError'].forEach((k) => url.searchParams.delete(k));
+  const hash = new URLSearchParams(url.hash.slice(1));
+  ['oauthUser', 'oauthToken', 'oauthChoose', 'suggested', 'oauthError'].forEach((k) => { url.searchParams.delete(k); hash.delete(k); });
+  url.hash = hash.toString();
   window.history.replaceState({}, '', url);
 }
 
@@ -474,10 +478,10 @@ socket.on('registered', (rec) => {
 if (!new URLSearchParams(window.location.search).has("preview")) tryAutoLogin();
 
 
+// Safe both between tags and inside attribute values (the old textContent/innerHTML trick left quotes
+// as they were, so a username with " could break out of data-username="…" and add an onclick).
 function escapeHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 // ================= Statistika / leaderboards (lobby) =================

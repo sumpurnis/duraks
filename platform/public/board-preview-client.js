@@ -11,9 +11,8 @@ const BOARD_PREVIEW_STATUS_LABELS = { jauns: 'Jauns', labosana: 'Labošanā', iz
 const BOARD_PREVIEW_LIMIT = 8; // most recent N posts — the scrollable box handles the rest
 
 function boardPreviewEscapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
+  // Safe between tags and inside attribute values (quotes included).
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function renderBoardPreview(posts) {

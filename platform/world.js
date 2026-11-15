@@ -23,6 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const { DATA_DIR } = require('./config');
 const users = require('./users');
+const persist = require('./persist');
 
 const FILE = path.join(DATA_DIR, 'world.json');
 const GAMES = { duraks: 'd', meli: 'm' };
@@ -37,30 +38,15 @@ function blank() {
   return { slots: {}, next: 0, games: {}, pairs: {}, seeded: {} };
 }
 function load() {
-  try {
-    const d = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-    return { ...blank(), ...d };
-  } catch {
-    return blank();
-  }
+  return { ...blank(), ...persist.loadJson(FILE, blank, 'world.json') };
 }
 let data = load();
-let saveTimer = null;
+const saver = persist.createSaver(FILE, () => data, { delay: 800, label: 'world.json' });
 function saveSoon() {
-  if (saveTimer) return;
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    try {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-      const tmp = FILE + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(data));
-      fs.renameSync(tmp, FILE);
-    } catch (err) {
-      console.error('world.json could not be saved:', err.message);
-    }
-  }, 800);
-  if (saveTimer.unref) saveTimer.unref();
+  saver.save();
 }
+// Own properties only (a player called "constructor" must not match the built-in).
+const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 // ------------------------------------------------------------------ hex spiral
 // Axial coordinates (q, r). Slot 0 is the centre, then ring 1 (6 slots), ring 2 (12) …
@@ -88,7 +74,7 @@ function hexDist(a, b) {
 }
 
 function slotOf(name) {
-  if (!(name in data.slots)) {
+  if (!has(data.slots, name)) {
     data.slots[name] = data.next++;
     saveSoon();
   }
@@ -102,7 +88,7 @@ function seedAccounts() {
   all.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   for (const a of all) {
     slotOf(a.username);
-    const g = data.games[a.username] || (data.games[a.username] = { d: 0, m: 0 });
+    const g = has(data.games, a.username) ? data.games[a.username] : (data.games[a.username] = { d: 0, m: 0 });
     g.d = Math.max(g.d, a.played || 0); // Duraks games played before the map existed
   }
   data.seeded.accounts = true;
@@ -116,7 +102,7 @@ function seedGames(game, counts) {
   for (const [name, n] of Object.entries(counts || {})) {
     if (!users.usernameExists(name)) continue;
     slotOf(name);
-    const g = data.games[name] || (data.games[name] = { d: 0, m: 0 });
+    const g = has(data.games, name) ? data.games[name] : (data.games[name] = { d: 0, m: 0 });
     g[k] = Math.max(g[k], n || 0);
   }
   data.seeded[game] = true;
@@ -141,7 +127,7 @@ function recordGame(game, names, { vsBot = false } = {}) {
   const real = [...new Set((names || []).filter((n) => n && users.usernameExists(n)))];
   for (const n of real) {
     slotOf(n);
-    const g = data.games[n] || (data.games[n] = { d: 0, m: 0 });
+    const g = has(data.games, n) ? data.games[n] : (data.games[n] = { d: 0, m: 0 });
     const before = levelOf(n);
     g[k] += 1;
     if (levelOf(n) > before) addEvent({ type: 'level', names: [n], level: levelOf(n) });
@@ -149,8 +135,8 @@ function recordGame(game, names, { vsBot = false } = {}) {
   for (let i = 0; i < real.length; i++) {
     for (let j = i + 1; j < real.length; j++) {
       const key = pairKey(real[i], real[j]);
-      const before = quality(data.pairs[key] || 0);
-      data.pairs[key] = (data.pairs[key] || 0) + 1;
+      const before = quality(has(data.pairs, key) ? data.pairs[key] : 0);
+      data.pairs[key] = (has(data.pairs, key) ? data.pairs[key] : 0) + 1;
       addEvent({ type: 'finish', game: k, names: [real[i], real[j]] });
       const after = quality(data.pairs[key]);
       if (after > before) addEvent({ type: 'road', names: [real[i], real[j]], quality: after });
@@ -161,7 +147,7 @@ function recordGame(game, names, { vsBot = false } = {}) {
 }
 
 function levelOf(name) {
-  const g = data.games[name];
+  const g = has(data.games, name) ? data.games[name] : null;
   const n = g ? g.d + g.m : 0;
   let L = 1;
   for (let i = 0; i < LEVELS.length; i++) if (n >= LEVELS[i]) L = i + 1;
@@ -228,9 +214,21 @@ if (pollTimer.unref) pollTimer.unref();
  * which is shown as the "free plot" — exactly where a new player's village will appear.
  * `at` ({ q, r }, optional) is where the visitor has dragged the map to; it overrides the centre.
  */
+// Answers are cached for 2 s per (player, place): every open front page polls every 10 s, and the
+// live games are refreshed by the 3 s timer above anyway.
+const snapCache = new Map();
 function snapshot(me, at) {
+  const key = (me || '') + '|' + (at ? at.q + ',' + at.r : '');
+  const hit = snapCache.get(key);
+  if (hit && Date.now() - hit.t < 2000) return hit.v;
+  const v = buildSnapshot(me, at);
+  if (snapCache.size > 500) snapCache.clear();
+  snapCache.set(key, { t: Date.now(), v });
+  return v;
+}
+
+function buildSnapshot(me, at) {
   seedAccounts();
-  pollLive();
   const online = onlineNames();
   const meName = me && users.usernameExists(me) ? me : null;
   const freeHex = slotToHex(data.next);
@@ -245,7 +243,7 @@ function snapshot(me, at) {
     const h = slotToHex(idx);
     if (hexDist(h, center) > WINDOW) continue;
     if (!users.usernameExists(name)) continue; // deleted accounts leave an empty place
-    const g = data.games[name] || { d: 0, m: 0 };
+    const g = has(data.games, name) ? data.games[name] : { d: 0, m: 0 };
     towns.push({ name, q: h.q, r: h.r, L: levelOf(name), g: g.m > g.d ? 'm' : 'd', n: g.d + g.m, online: online.has(name) });
   }
   const shown = new Set(towns.map((t) => t.name));
@@ -293,8 +291,8 @@ function snapshot(me, at) {
 
 /** Map-side facts about one player for the village card (level, games, place). */
 function playerInfo(name) {
-  if (!name || !users.usernameExists(name) || !(name in data.slots)) return null;
-  const g = data.games[name] || { d: 0, m: 0 };
+  if (!name || !users.usernameExists(name) || !has(data.slots, name)) return null;
+  const g = has(data.games, name) ? data.games[name] : { d: 0, m: 0 };
   return { level: levelOf(name), games: { d: g.d, m: g.m }, online: onlineNames().has(name), playing: live.some((x) => x.real.includes(name)) };
 }
 

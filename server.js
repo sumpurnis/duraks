@@ -20,12 +20,71 @@ const users = require('./platform/users');
 const auth = require('./platform/auth');
 const world = require('./platform/world');
 const { createRateLimiter } = require('./platform/rate-limit');
+const { TRUST_PROXY, socketIp } = require('./platform/client-ip');
 const duraks = require('./games/duraks/server');
 const { attachMeli, CLIENT_DIR: MELI_CLIENT_DIR } = require('./games/meli/server');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+// No message here needs more than a few KB (the longest is a 2000-character feedback post).
+const io = new Server(server, { maxHttpBufferSize: 32 * 1024 });
+
+// ---------- Socket safety net ----------
+// Every handler of every game: a message without data gets {} (handlers unpack their data, and
+// `undefined`/`null` used to throw and kill the whole process), and an exception — sync or async —
+// is logged instead of crashing the server for everyone.
+function guardSockets(nsp) {
+  nsp.use((socket, next) => {
+    const on = socket.on.bind(socket);
+    socket.on = (event, fn) =>
+      on(event, (...args) => {
+        if (args[0] == null) args[0] = {};
+        try {
+          const r = fn(...args);
+          if (r && typeof r.catch === 'function') r.catch((err) => console.error(`socket "${event}" failed:`, err));
+        } catch (err) {
+          console.error(`socket "${event}" failed:`, err);
+        }
+      });
+    next();
+  });
+}
+guardSockets(io);
+guardSockets(io.of('/meli'));
+
+// ---------- HTTP basics ----------
+app.disable('x-powered-by');
+// Behind Railway's proxy req.ip must come from X-Forwarded-For, or every visitor shares one address.
+app.set('trust proxy', TRUST_PROXY ? 1 : false);
+// Security headers. Every page loads its scripts from this site only and has no inline scripts or
+// handlers, so a strict script policy works and blocks injected script even if escaping is missed.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' ws: wss:",
+  "frame-ancestors 'self'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+].join('; ');
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', CSP);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  next();
+});
+// Files linked with ?v=<build> (the front page) never change under that exact URL: cache them for a year.
+app.use((req, res, next) => {
+  if (req.method === 'GET' && typeof req.query.v === 'string' && /\.(js|css|svg|png|webp|woff2?)$/.test(req.path)) res.locals.immutable = true;
+  next();
+});
+const cacheHeaders = (res) => {
+  if (res.locals.immutable) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+};
 
 // ---------- Pages ----------
 //
@@ -46,8 +105,8 @@ duraks.mountRoutes(app); // GET /duraks + Duraks' static files
 app.use('/meli', express.static(MELI_CLIENT_DIR, { index: 'index.html', setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
 // Everything below is served from the site root, so every URL stays as it always was
 // (/board.html, /guest-nudge.js, /landing.js …).
-app.use(express.static(path.join(__dirname, 'platform', 'public')));
-app.use(express.static(path.join(__dirname, 'site', 'public')));
+app.use(express.static(path.join(__dirname, 'platform', 'public'), { setHeaders: cacheHeaders }));
+app.use(express.static(path.join(__dirname, 'site', 'public'), { setHeaders: cacheHeaders }));
 
 // ---------- Accounts ----------
 // Google / Facebook sign-in routes (/auth/…).
@@ -58,6 +117,8 @@ auth.registerHttpRoutes(app);
 // token plays under its account name. Its own limiter, so flaky reconnects there can't eat into the
 // login budget of the main login.
 const meliAuthLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs: 60 * 1000 });
+// New Meļi tables per address, so one person with many tabs/scripts can't fill the server ("server full").
+const meliCreateLimiter = createRateLimiter({ max: 20, windowMs: 10 * 60 * 1000, blockMs: 10 * 60 * 1000 });
 const meli = attachMeli(io, {
   statsFile: path.join(DATA_DIR, 'meli-stats.json'),
   // The front page's map: finished games wear roads and grow villages; connected players smoke.
@@ -66,8 +127,9 @@ const meli = attachMeli(io, {
     world.recordGame('meli', names, { vsBot: !!vsAI });
   },
   onPresence: (name, id, on) => (on ? world.seen(name, 'meli:' + id) : world.gone('meli:' + id)),
+  canCreate: (socket) => meliCreateLimiter.check(socketIp(socket)).allowed,
   verifyAccount: (name, token, socket) => {
-    if (!meliAuthLimiter.check(socket.handshake.address || socket.id).allowed) return null;
+    if (!meliAuthLimiter.check(socketIp(socket)).allowed) return null;
     const rec = users.verifySessionToken(name, token);
     return rec ? rec.username : null;
   },

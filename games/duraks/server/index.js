@@ -22,6 +22,7 @@ const tournaments = require('./tournament/store');
 const { generateBracket } = require('./tournament/bracket-generator');
 const registerMultiHandlers = require('./multi-rooms');
 const { createRateLimiter } = require('../../../platform/rate-limit');
+const { socketIp } = require('../../../platform/client-ip');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -52,6 +53,12 @@ const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'zivs';
 const AI_MOVE_DELAY_MS = [500, 1100]; // randomized range, feels less instant/robotic
 
 const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs: 60 * 1000 });
+// New rooms / games per address (1-on-1, vs computer, guest vs computer, 2–4 player tables).
+const roomCreateLimiter = createRateLimiter({ max: 30, windowMs: 10 * 60 * 1000, blockMs: 5 * 60 * 1000 });
+// Chat lines per connection.
+const chatLimiter = createRateLimiter({ max: 8, windowMs: 10 * 1000, blockMs: 15 * 1000 });
+// Upper bound for a tournament: bot-filled tournaments are played out on the server.
+const MAX_TOURNAMENT_PARTICIPANTS = 64;
 
   // In-memory rooms, keyed by 4-char code. Players are identified by *username*
   // (stable across reconnects/refreshes) — socketId is just where to reach them right now.
@@ -702,7 +709,41 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
     // Fully separate room/event system for the 3-4 player vs-bots mode —
     // see games/duraks/games/duraks/server/multi-rooms.js. Shares nothing with the 2-player game
     // below except this one registration call and the username getter.
-    registerMultiHandlers(io, socket, { getUsername: () => username, users, world });
+    registerMultiHandlers(io, socket, {
+      getUsername: () => username,
+      users,
+      world,
+      canCreateRoom: () => roomCreateLimiter.check(socketIp(socket)).allowed,
+    });
+
+    // One 1-on-1 room per connection: creating a new one first closes the old one, unless a game
+    // against another person is still running there (that has to be finished or surrendered).
+    function releaseOwnRoom() {
+      const old = joinedCode && rooms.get(joinedCode);
+      if (!old) return true;
+      if (old.game && old.game.status === 'active' && !old.vsAI) return false;
+      clearMoveTimer(old);
+      if (old.aiTimer) clearTimeout(old.aiTimer);
+      if (old.cleanupTimer) clearTimeout(old.cleanupTimer);
+      if (old.players.every((p) => p.username === playerId || p.username === AI_ID)) {
+        rooms.delete(old.code);
+        broadcastOpenRooms();
+      }
+      socket.leave(old.code);
+      joinedCode = null;
+      return true;
+    }
+    function mayCreateRoom() {
+      if (!roomCreateLimiter.check(socketIp(socket)).allowed) {
+        sendError(socket, 'Pārāk daudz jaunu spēļu īsā laikā — uzgaidi dažas minūtes.');
+        return false;
+      }
+      if (!releaseOwnRoom()) {
+        sendError(socket, 'Tev jau ir aktīva spēle — vispirms to pabeidz vai padodies.');
+        return false;
+      }
+      return true;
+    }
 
     // Accounts + the feedback board (platform/auth.js) — shared by every game. Duraks only hooks in to
     // remember which socket is the account's latest, and to send its own lobby data after a login.
@@ -764,6 +805,9 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
         const maxParticipants = parseInt(config && config.maxParticipants, 10);
         if (!Number.isInteger(maxParticipants) || maxParticipants < tournaments.ABSOLUTE_MIN_PARTICIPANTS) {
           return sendError(socket, `Maksimālajam dalībnieku skaitam jābūt vismaz ${tournaments.ABSOLUTE_MIN_PARTICIPANTS}`);
+        }
+        if (maxParticipants > MAX_TOURNAMENT_PARTICIPANTS) {
+          return sendError(socket, `Turnīrā var būt ne vairāk kā ${MAX_TOURNAMENT_PARTICIPANTS} dalībnieki`);
         }
 
         const registrationEndTime = new Date(config && config.registrationEndTime);
@@ -866,7 +910,7 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
       try {
         let botIndex = 0;
         let guard = 0;
-        while (t.participants.length < t.maxParticipants && guard < 500) {
+        while (t.participants.length < Math.min(t.maxParticipants, MAX_TOURNAMENT_PARTICIPANTS) && guard < 500) {
           guard++;
           const bot = makeBotParticipant(botIndex++);
           if (t.hasJoined(bot.id)) continue; // extremely unlikely name collision, just skip and try the next
@@ -1019,6 +1063,7 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
 
     socket.on('createRoom', () => {
       if (!username) return sendError(socket, 'Vispirms ielogojies');
+      if (!mayCreateRoom()) return;
       const code = makeRoomCode();
       playerId = username;
       joinedCode = code;
@@ -1042,6 +1087,7 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
 
     socket.on('playVsAIGuest', () => {
       if (username) return sendError(socket, 'Tu jau esi ielogojies');
+      if (!mayCreateRoom()) return;
       const guestName = makeGuestName();
 
       const code = makeRoomCode();
@@ -1079,6 +1125,7 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
 
     socket.on('playVsAI', () => {
       if (!username) return sendError(socket, 'Vispirms ielogojies');
+      if (!mayCreateRoom()) return;
       const code = makeRoomCode();
       playerId = username;
       joinedCode = code;
@@ -1217,6 +1264,7 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
 
     socket.on('chatMessage', ({ text }) => {
       if (!joinedCode || !username) return;
+      if (!chatLimiter.check(socket.id).allowed) return;
       const clean = String(text || '').trim().slice(0, 300);
       if (!clean) return;
       io.to(joinedCode).emit('chatMessage', { from: username, text: clean, ts: Date.now() });
@@ -1225,6 +1273,11 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
     socket.on('rematchVote', ({ vote }) => {
       const room = rooms.get(joinedCode);
       if (!room) return;
+      // Only after a finished game. "No" during a running game used to delete the room with no result
+      // recorded (a free escape from a lost game, and a tournament match stuck "in progress" forever).
+      if (room.game && room.game.status === 'active') {
+        return sendError(socket, 'Spēle vēl notiek — lai to pamestu, padodies.');
+      }
       room.rematchVotes = room.rematchVotes || {};
 
       if (vote === 'no') {
@@ -1257,7 +1310,7 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
       // Profile stats are intentionally public (that's how the leaderboard's
       // clickable names work, for guests too) — the fix here is throttling,
       // not an auth wall, so this stays usable without complicating login.
-      const rl = profileLimiter.check(socket.handshake.address || socket.id);
+      const rl = profileLimiter.check(socketIp(socket));
       if (!rl.allowed) return sendError(socket, 'Pārāk daudz pieprasījumu. Pamēģini vēlreiz pēc brīža.');
       const stats = users.getStats(target);
       if (!stats) return sendError(socket, 'Profils nav atrasts');

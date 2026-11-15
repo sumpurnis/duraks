@@ -100,9 +100,14 @@ async function exchangeCodeForProfile(provider, code) {
   if (!profileRes.ok) throw new Error(`${provider} profile fetch failed: HTTP ${profileRes.status}`);
   const profile = await profileRes.json();
 
+  // Whether the provider vouches for the e-mail: Google says so explicitly (email_verified on the
+  // OpenID userinfo endpoint, verified_email on the older one); Facebook only returns confirmed addresses.
+  const emailVerified =
+    provider === 'facebook' ? !!profile.email : profile.email_verified === true || profile.verified_email === true;
   return {
     id: String(profile.id || profile.sub || ''),
     email: profile.email || null,
+    emailVerified: !!(profile.email && emailVerified),
     name: profile.name || null,
   };
 }

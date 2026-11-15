@@ -24,6 +24,9 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var params = new URLSearchParams(location.search);
+  // A finished Google/Facebook login puts its tokens after '#' (a fragment never reaches any server
+  // or log); read them together with the query.
+  new URLSearchParams(location.hash.slice(1)).forEach(function (v, k) { params.set(k, v); });
 
   function ls(op, key, value) {
     try {
@@ -278,8 +281,10 @@
   // ---------------------------------------------------------------- coming back from Google/Facebook
   function stripParams(keys) {
     var url = new URL(location.href);
-    keys.forEach(function (k) { url.searchParams.delete(k); });
-    history.replaceState(null, '', url.pathname + (url.search || '') + url.hash);
+    var hash = new URLSearchParams(url.hash.slice(1));
+    keys.forEach(function (k) { url.searchParams.delete(k); hash.delete(k); });
+    var h = hash.toString();
+    history.replaceState(null, '', url.pathname + (url.search || '') + (h ? '#' + h : ''));
   }
 
   var oUser = params.get('oauthUser');

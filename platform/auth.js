@@ -13,6 +13,7 @@ const users = require('./users');
 const mailer = require('./mailer');
 const oauth = require('./oauth');
 const { createRateLimiter } = require('./rate-limit');
+const { socketIp } = require('./client-ip');
 const { registerFeedbackHandlers } = require('./feedback');
 
 // Brute-force / scraping protection. Keyed by IP where possible (falls back
@@ -24,6 +25,12 @@ const registerLimiter = createRateLimiter({ max: 5, windowMs: 10 * 60 * 1000, bl
 // email twice" case, tight enough to blunt using this as a free way to
 // spam someone's inbox.
 const forgotLimiter = createRateLimiter({ max: 5, windowMs: 15 * 60 * 1000, blockMs: 15 * 60 * 1000 });
+const checkNameLimiter = createRateLimiter({ max: 60, windowMs: 60 * 1000, blockMs: 60 * 1000 });
+
+// The site's own address, for links in e-mails. Never taken from a request header: Origin/Referer
+// can be set to anything by a script, which would put a real reset token into a link to another site.
+const PUBLIC_URL = (process.env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, '');
+if (!process.env.PUBLIC_URL) console.warn('PUBLIC_URL is not set — password-reset links will point to ' + PUBLIC_URL);
 
 function sendError(socket, message) {
   socket.emit('errorMsg', message);
@@ -62,8 +69,14 @@ function suggestUsernameFrom(name) {
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '') // strip accents so e.g. "Jānis" -> "Janis"
     .replace(/[^a-zA-Z0-9]/g, '')
-    .slice(0, 16) || 'Speletajs';
-  return users.usernameExists(base) ? `${base}${Math.floor(Math.random() * 900 + 100)}` : base;
+    .slice(0, 16);
+  const safe = base.length >= 2 && !users.usernameProblem(base) ? base : null;
+  if (safe) return safe;
+  for (let i = 0; i < 20; i++) {
+    const cand = `${(base || 'Speletajs').slice(0, 14)}${Math.floor(Math.random() * 900 + 100)}`;
+    if (!users.usernameProblem(cand)) return cand;
+  }
+  return '';
 }
 
 // Where a finished login sends the browser back to. Default is the Duraks lobby (the old behaviour,
@@ -74,11 +87,14 @@ const OAUTH_RETURN_PATHS = new Set(['/', '/duraks', '/meli/']);
 function pickReturnPath(v, fallback) {
   return typeof v === 'string' && OAUTH_RETURN_PATHS.has(v) ? v : fallback;
 }
-function oauthRedirectUrl(entry, params) {
+// `secret` values (the login token, the pending sign-up token) go after '#': a URL fragment is never
+// sent to any server, so they don't end up in proxy or server logs. Pages read both places.
+function oauthRedirectUrl(entry, params, secret) {
   const base = (entry && entry.returnTo) || '/duraks';
   const qs = new URLSearchParams(params);
   if (entry && entry.next) qs.set('next', entry.next);
-  return base + '?' + qs.toString();
+  const q = qs.toString();
+  return base + (q ? '?' + q : '') + (secret ? '#' + new URLSearchParams(secret).toString() : '');
 }
 
 
@@ -130,17 +146,26 @@ function registerHttpRoutes(app) {
 
       let name = users.findUsernameByOAuth(provider, profile.id);
 
+      // Joining a provider identity to an existing account by e-mail only when BOTH sides are proven:
+      // the provider says it verified the address, and the local account's address was confirmed.
+      // Otherwise somebody could register a password account with another person's e-mail first and
+      // receive that person's later Google sign-in.
       if (!name && profile.email) {
         const emailMatch = users.findUsernameByEmail(profile.email);
         if (emailMatch) {
-          users.linkOAuth(emailMatch, provider, profile.id, profile.email);
+          if (!profile.emailVerified || !users.isEmailVerified(emailMatch)) {
+            return res.redirect(oauthRedirectUrl(stateEntry, {
+              oauthError: 'Šim e-pastam jau ir konts. Ielogojies ar lietotājvārdu un paroli (vai izmanto «Aizmirsi paroli») — pēc tam pieteikšanās ar ' + (provider === 'google' ? 'Google' : 'Facebook') + ' piesaistīsies automātiski.',
+            }));
+          }
+          users.linkOAuth(emailMatch, provider, profile.id, profile.email, true);
           name = emailMatch;
         }
       }
 
       if (name) {
         const token = users.createSessionToken(name);
-        return res.redirect(oauthRedirectUrl(stateEntry, { oauthUser: name, oauthToken: token }));
+        return res.redirect(oauthRedirectUrl(stateEntry, {}, { oauthUser: name, oauthToken: token }));
       }
 
       const pendingToken = crypto.randomBytes(24).toString('hex');
@@ -148,10 +173,11 @@ function registerHttpRoutes(app) {
         provider,
         providerId: profile.id,
         email: profile.email,
+        emailVerified: !!profile.emailVerified,
         expiresAt: Date.now() + OAUTH_PENDING_TTL_MS,
       });
       const suggested = suggestUsernameFrom(profile.name);
-      return res.redirect(oauthRedirectUrl(stateEntry, { oauthChoose: pendingToken, suggested }));
+      return res.redirect(oauthRedirectUrl(stateEntry, { suggested }, { oauthChoose: pendingToken }));
     } catch (err) {
       console.error(`${provider} OAuth callback failed:`, err);
       return res.redirect(oauthRedirectUrl(stateEntry, { oauthError: 'Pieteikšanās neizdevās, mēģini vēlreiz' }));
@@ -180,15 +206,17 @@ function registerSocketHandlers(io, socket, hooks = {}) {
     // to flag accounts that always connect from the same IP as each other —
     // one signal among several, not proof by itself (shared households,
     // NAT, and VPNs all produce the same signal innocently).
-    users.recordLoginIp(username, socket.handshake.address);
+    users.recordLoginIp(username, socketIp(socket));
     socket.emit('registered', { ...rec, sessionToken: token || null });
     if (hooks.afterRegistered) hooks.afterRegistered(socket, rec);
   }
 
-  socket.on('register', ({ username: name, password, email }) => {
-    const rl = registerLimiter.check(socket.handshake.address || socket.id);
+  socket.on('register', async ({ username: name, password, email } = {}) => {
+    const rl = registerLimiter.check(socketIp(socket));
     if (!rl.allowed) return sendError(socket, 'Pārāk daudz mēģinājumu. Pamēģini vēlreiz pēc brīža.');
-    if (!password || password.length < users.MIN_PASSWORD_LEN) {
+    const problem = users.usernameProblem(name);
+    if (problem) return sendError(socket, problem);
+    if (typeof password !== 'string' || password.length < users.MIN_PASSWORD_LEN) {
       return sendError(socket, `Parolei jābūt vismaz ${users.MIN_PASSWORD_LEN} rakstzīmes garai`);
     }
     // Email is temporarily optional at registration (the field is hidden
@@ -200,16 +228,16 @@ function registerSocketHandlers(io, socket, hooks = {}) {
     if (email && users.findUsernameByEmail(email)) {
       return sendError(socket, 'Šis e-pasts jau tiek izmantots citam kontam');
     }
-    const rec = users.createAccount(name, password, email);
+    const rec = await users.createAccount(name, password, email);
     if (!rec) return sendError(socket, 'Šis lietotājvārds jau ir aizņemts (vai ir nederīgs)');
     const token = users.createSessionToken(rec.username);
     onAuthenticated(rec, token);
   });
 
-  socket.on('login', ({ username: name, password }) => {
-    const rl = loginLimiter.check(socket.handshake.address || socket.id);
+  socket.on('login', async ({ username: name, password } = {}) => {
+    const rl = loginLimiter.check(socketIp(socket));
     if (!rl.allowed) return sendError(socket, 'Pārāk daudz mēģinājumu. Pamēģini vēlreiz pēc brīža.');
-    const rec = users.verifyLogin(name, password);
+    const rec = await users.verifyLogin(name, password);
     if (!rec) return sendError(socket, 'Nepareizs lietotājvārds vai parole');
     const token = users.createSessionToken(rec.username);
     onAuthenticated(rec, token);
@@ -218,8 +246,8 @@ function registerSocketHandlers(io, socket, hooks = {}) {
   // Token-based "remember me" reconnect — used instead of storing the
   // account password in localStorage. Rate-limited the same as a normal
   // login since a leaked/guessed token attempt looks identical.
-  socket.on('loginWithToken', ({ username: name, token }) => {
-    const rl = loginLimiter.check(socket.handshake.address || socket.id);
+  socket.on('loginWithToken', ({ username: name, token } = {}) => {
+    const rl = loginLimiter.check(socketIp(socket));
     if (!rl.allowed) return sendError(socket, 'Pārāk daudz mēģinājumu. Pamēģini vēlreiz pēc brīža.');
     const rec = users.verifySessionToken(name, token);
     if (!rec) return sendError(socket, 'Sesija vairs nav derīga, lūdzu piesakies no jauna');
@@ -233,8 +261,9 @@ function registerSocketHandlers(io, socket, hooks = {}) {
     if (name && token) users.invalidateSessionToken(name, token);
   });
 
-  socket.on('checkUsername', ({ username: name }) => {
-    socket.emit('usernameStatus', { username: name, exists: users.usernameExists(name) });
+  socket.on('checkUsername', ({ username: name } = {}) => {
+    if (!checkNameLimiter.check(socketIp(socket)).allowed) return;
+    socket.emit('usernameStatus', { username: name, exists: users.usernameExists(name), problem: users.usernameProblem(name) });
   });
 
   // ---------- Account recovery (forgot password / forgot username) ----------
@@ -244,20 +273,13 @@ function registerSocketHandlers(io, socket, hooks = {}) {
   // registered (a classic account-enumeration leak) by responding
   // differently for a match vs a miss.
 
-  function publicBaseUrl() {
-    const h = socket.handshake.headers || {};
-    const origin = h.origin || h.referer;
-    if (origin) return origin.replace(/\/$/, '');
-    return (process.env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, '');
-  }
-
   socket.on('forgotPassword', ({ email } = {}) => {
-    const rl = forgotLimiter.check(socket.handshake.address || socket.id);
+    const rl = forgotLimiter.check(socketIp(socket));
     if (!rl.allowed) return sendError(socket, 'Pārāk daudz mēģinājumu. Pamēģini vēlreiz pēc brīža.');
     const name = users.findUsernameByEmail(email);
     if (name) {
       const token = users.createPasswordResetToken(name);
-      const link = `${publicBaseUrl()}/?reset=${token}`;
+      const link = `${PUBLIC_URL}/?reset=${token}`;
       mailer
         .sendPasswordResetEmail(users.normalizeEmail(email), name, link)
         .catch((err) => console.error('Neizdevās nosūtīt paroles atiestatīšanas e-pastu:', err));
@@ -273,11 +295,11 @@ function registerSocketHandlers(io, socket, hooks = {}) {
     socket.emit('resetTokenStatus', { valid: !!name });
   });
 
-  socket.on('resetPassword', ({ token, newPassword } = {}) => {
-    if (!newPassword || newPassword.length < users.MIN_PASSWORD_LEN) {
+  socket.on('resetPassword', async ({ token, newPassword } = {}) => {
+    if (typeof newPassword !== 'string' || newPassword.length < users.MIN_PASSWORD_LEN) {
       return sendError(socket, `Parolei jābūt vismaz ${users.MIN_PASSWORD_LEN} rakstzīmes garai`);
     }
-    const ok = users.resetPasswordWithToken(token, newPassword);
+    const ok = await users.resetPasswordWithToken(token, newPassword);
     if (!ok) return sendError(socket, 'Šī saite ir nederīga vai vairs nav spēkā. Pieprasi jaunu.');
     socket.emit('passwordResetDone');
   });
@@ -297,12 +319,14 @@ function registerSocketHandlers(io, socket, hooks = {}) {
   // verified OAuth identity (see the /auth/:provider/callback route above,
   // which is what put this pendingToken in oauthPending in the first
   // place).
-  socket.on('completeOAuthSignup', ({ pendingToken, username: name } = {}) => {
-    const pending = pendingToken && oauthPending.get(pendingToken);
+  socket.on('completeOAuthSignup', async ({ pendingToken, username: name } = {}) => {
+    const pending = typeof pendingToken === 'string' && oauthPending.get(pendingToken);
     if (!pending || pending.expiresAt < Date.now()) {
       return sendError(socket, 'Šī pieteikšanās sesija vairs nav derīga. Mēģini pieteikties vēlreiz.');
     }
-    const rec = users.createAccountFromOAuth(name, pending.provider, pending.providerId, pending.email);
+    const problem = users.usernameProblem(name);
+    if (problem) return sendError(socket, problem);
+    const rec = await users.createAccountFromOAuth(name, pending.provider, pending.providerId, pending.email, pending.emailVerified);
     if (!rec) return sendError(socket, 'Šis lietotājvārds jau ir aizņemts (vai ir nederīgs)');
     oauthPending.delete(pendingToken);
     const token = users.createSessionToken(rec.username);

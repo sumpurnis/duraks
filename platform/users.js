@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const util = require('util');
+const persist = require('./persist');
 
 // DATA_DIR defaults to a folder next to this file, but can be pointed
 // somewhere else entirely via DURAKS_DATA_DIR — e.g. a Railway Volume
@@ -47,28 +49,76 @@ function blankGlobal() {
   };
 }
 
+// Loading refuses to start on a broken file (instead of starting empty and overwriting it), and
+// saving is batched + atomic (platform/persist.js): at most one write a second, temp file + rename.
 function load() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-    // Back-compat: older data files were just a flat username -> record map.
-    if (parsed && (parsed.users || parsed.global)) {
-      return { users: parsed.users || {}, global: { ...blankGlobal(), ...parsed.global } };
-    }
-    return { users: parsed || {}, global: blankGlobal() };
-  } catch {
-    return { users: {}, global: blankGlobal() };
+  const parsed = persist.loadJson(FILE, () => ({ users: {}, global: blankGlobal() }), 'users.json');
+  // Back-compat: older data files were just a flat username -> record map.
+  if (parsed && (parsed.users || parsed.global)) {
+    return { users: parsed.users || {}, global: { ...blankGlobal(), ...parsed.global } };
   }
+  return { users: parsed || {}, global: blankGlobal() };
 }
 
 let store = load();
+const saver = persist.createSaver(FILE, () => store, { label: 'users.json' });
 
 function save() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(FILE, JSON.stringify(store, null, 2));
+  saver.save();
 }
 
 function normalize(username) {
-  return String(username || '').trim().slice(0, 20);
+  return String(username || '').normalize('NFC').trim().slice(0, 20);
+}
+
+// Own properties only: names such as "constructor" or "__proto__" must never match the built-ins
+// every plain object has.
+function getRecord(name) {
+  return Object.prototype.hasOwnProperty.call(store.users, name) ? store.users[name] : undefined;
+}
+
+// ---------- Username rules (new accounts only; existing names keep working) ----------
+//
+// Letters (Latin + Latvian), digits, _ . - and single spaces, 2–20 characters. A new name may not
+// equal an existing one ignoring case, accents, separators and 0/O 1/l look-alikes ("ZIVS", "Zīvs",
+// "z.ivs" all collide with "zivs"), and names the games use for themselves are reserved.
+const NAME_CHARS = 'A-Za-z0-9ĀČĒĢĪĶĻŅŠŪŽāčēģīķļņšūž_.\\-';
+const NAME_RE = new RegExp(`^[${NAME_CHARS}]+(?: [${NAME_CHARS}]+)*$`);
+const RESERVED_PREFIXES = ['dators', 'bots', 'viesis', 'anonims', 'admin', 'moderator', 'sistema'];
+
+function foldName(name) {
+  return String(name || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\s_.-]+/g, '')
+    .replace(/0/g, 'o')
+    .replace(/1/g, 'l');
+}
+
+let foldIndex = null; // folded name -> stored name
+function foldedOwner(name) {
+  if (!foldIndex) {
+    foldIndex = new Map();
+    for (const n of Object.keys(store.users)) if (!foldIndex.has(foldName(n))) foldIndex.set(foldName(n), n);
+  }
+  return foldIndex.get(foldName(name)) || null;
+}
+function rememberName(name) {
+  if (foldIndex && !foldIndex.has(foldName(name))) foldIndex.set(foldName(name), name);
+}
+
+/** Why `username` can't be used for a NEW account (a Latvian message), or null when it can. */
+function usernameProblem(username) {
+  const raw = String(username || '').normalize('NFC').trim();
+  if (raw.length < 2 || raw.length > 20) return 'Lietotājvārdam jābūt 2–20 rakstzīmes garam';
+  if (!NAME_RE.test(raw)) return 'Lietotājvārdā drīkst būt tikai burti, cipari, atstarpe un _ . -';
+  // Starting with a letter or digit also keeps out object-internal names such as "__proto__".
+  if (!/^[A-Za-z0-9ĀČĒĢĪĶĻŅŠŪŽāčēģīķļņšūž]/.test(raw)) return 'Lietotājvārdam jāsākas ar burtu vai ciparu';
+  const folded = foldName(raw);
+  if (RESERVED_PREFIXES.some((r) => folded.startsWith(r))) return 'Šis lietotājvārds ir rezervēts';
+  if (getRecord(raw) || foldedOwner(raw)) return 'Šis lietotājvārds jau ir aizņemts';
+  return null;
 }
 
 // Deliberately simple/lenient (not full RFC 5322) — good enough to catch
@@ -100,19 +150,23 @@ function findUsernameByEmail(email) {
   return null;
 }
 
-function hashPassword(password, salt) {
-  return crypto.scryptSync(password, salt, 64).toString('hex');
+// Async scrypt: same parameters and hashes as before, but the server keeps serving other players
+// while a password is being hashed (scryptSync froze everything for ~50 ms per login).
+const scryptAsync = util.promisify(crypto.scrypt);
+
+async function hashPassword(password, salt) {
+  return (await scryptAsync(String(password), salt, 64)).toString('hex');
 }
 
-function setPassword(record, password) {
+async function setPassword(record, password) {
   const salt = crypto.randomBytes(16).toString('hex');
   record.salt = salt;
-  record.hash = hashPassword(password, salt);
+  record.hash = await hashPassword(password, salt);
 }
 
-function verifyPassword(record, password) {
-  if (!record.salt || !record.hash) return false;
-  const candidate = hashPassword(password, record.salt);
+async function verifyPassword(record, password) {
+  if (!record.salt || !record.hash || typeof password !== 'string') return false;
+  const candidate = await hashPassword(password, record.salt);
   const a = Buffer.from(candidate, 'hex');
   const b = Buffer.from(record.hash, 'hex');
   if (a.length !== b.length) return false;
@@ -161,7 +215,7 @@ function toPublic(username, record) {
 }
 
 function usernameExists(username) {
-  return !!store.users[normalize(username)];
+  return !!getRecord(normalize(username));
 }
 
 // Creates a brand-new account. Returns the public record, or null if the
@@ -170,11 +224,10 @@ function usernameExists(username) {
 // is required from here on so every new account can use the password/
 // username recovery flow below — existing accounts created before this
 // (with email: null) keep working and can add one later via updateEmail.
-function createAccount(username, password, email) {
+async function createAccount(username, password, email) {
   const name = normalize(username);
-  if (!name) return null;
-  if (!password || password.length < MIN_PASSWORD_LEN) return null;
-  if (store.users[name]) return null;
+  if (usernameProblem(name)) return null;
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LEN) return null;
   // Email is optional for now (the registration form has it hidden while
   // the email-sending flow is still being finished) — normalizeEmail
   // returns null for an empty string, which is fine; it just means no
@@ -182,9 +235,13 @@ function createAccount(username, password, email) {
   const normalizedEmail = normalizeEmail(email);
   if (normalizedEmail && findUsernameByEmail(normalizedEmail)) return null;
 
-  const record = { createdAt: Date.now(), email: normalizedEmail, stats: blankStats() };
-  setPassword(record, password);
+  // E-mails typed by the player are not confirmed: emailVerified stays false until the address is
+  // proven (a password reset sent there was used, or a provider vouched for it).
+  const record = { createdAt: Date.now(), email: normalizedEmail, emailVerified: false, stats: blankStats() };
+  await setPassword(record, password);
+  if (usernameProblem(name)) return null; // somebody took the name while the password was hashing
   store.users[name] = record;
+  rememberName(name);
   save();
   return toPublic(name, record);
 }
@@ -196,12 +253,13 @@ function createAccount(username, password, email) {
 // user-facing Latvian message otherwise.
 function updateEmail(username, email) {
   const name = normalize(username);
-  const record = store.users[name];
+  const record = getRecord(name);
   if (!record) return { ok: false, error: 'Lietotājs nav atrasts' };
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return { ok: false, error: 'Nederīga e-pasta adrese' };
   const owner = findUsernameByEmail(normalizedEmail);
   if (owner && owner !== name) return { ok: false, error: 'Šis e-pasts jau tiek izmantots citam kontam' };
+  if (record.email !== normalizedEmail) record.emailVerified = false;
   record.email = normalizedEmail;
   save();
   return { ok: true, email: normalizedEmail };
@@ -209,11 +267,11 @@ function updateEmail(username, email) {
 
 // Verifies an existing account's password. Returns the public record, or
 // null if the account doesn't exist or the password is wrong.
-function verifyLogin(username, password) {
+async function verifyLogin(username, password) {
   const name = normalize(username);
-  const record = store.users[name];
-  if (!record) return null;
-  if (!verifyPassword(record, password)) return null;
+  const record = getRecord(name);
+  if (!record || typeof password !== 'string') return null;
+  if (!(await verifyPassword(record, password))) return null;
   return toPublic(name, record);
 }
 
@@ -233,15 +291,16 @@ const SESSION_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const MAX_SESSION_TOKENS = 5;
 
 function hashToken(token) {
-  return crypto.createHash('sha256').update(token).digest('hex');
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
 }
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Mints a new session token for an existing account. Returns the raw token
 // (only ever handed out once, at creation time — never persisted or logged
 // in plaintext) or null if the account doesn't exist.
 function createSessionToken(username) {
   const name = normalize(username);
-  const record = store.users[name];
+  const record = getRecord(name);
   if (!record) return null;
 
   const token = crypto.randomBytes(32).toString('hex');
@@ -260,16 +319,19 @@ function createSessionToken(username) {
 // or a non-expired match doesn't exist.
 function verifySessionToken(username, token) {
   const name = normalize(username);
-  const record = store.users[name];
+  const record = getRecord(name);
   if (!record || !token) return null;
   const tokens = Array.isArray(record.sessionTokens) ? record.sessionTokens : [];
   const hash = hashToken(token);
   const now = Date.now();
   const match = tokens.find((t) => t.hash === hash && t.expiresAt > now);
   if (!match) return null;
-  match.expiresAt = now + SESSION_TOKEN_TTL_MS;
-  record.sessionTokens = tokens.filter((t) => t.expiresAt > now);
-  save();
+  // Slide the expiry at most once a day — every page load of a logged-in player used to rewrite users.json.
+  if (match.expiresAt - now < SESSION_TOKEN_TTL_MS - DAY_MS) {
+    match.expiresAt = now + SESSION_TOKEN_TTL_MS;
+    record.sessionTokens = tokens.filter((t) => t.expiresAt > now);
+    save();
+  }
   return toPublic(name, record);
 }
 
@@ -277,7 +339,7 @@ function verifySessionToken(username, token) {
 // For cheap "is this a logged-in player?" checks (the front page's extended stats).
 function checkSessionToken(username, token) {
   const name = normalize(username);
-  const record = store.users[name];
+  const record = getRecord(name);
   if (!record || !token) return false;
   const tokens = Array.isArray(record.sessionTokens) ? record.sessionTokens : [];
   const hash = hashToken(String(token));
@@ -289,7 +351,7 @@ function checkSessionToken(username, token) {
 // Silently no-ops if the account or token isn't found.
 function invalidateSessionToken(username, token) {
   const name = normalize(username);
-  const record = store.users[name];
+  const record = getRecord(name);
   if (!record || !token) return;
   const tokens = Array.isArray(record.sessionTokens) ? record.sessionTokens : [];
   const hash = hashToken(token);
@@ -310,7 +372,7 @@ const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 function createPasswordResetToken(username) {
   const name = normalize(username);
-  const record = store.users[name];
+  const record = getRecord(name);
   if (!record) return null;
   const token = crypto.randomBytes(32).toString('hex');
   record.resetToken = { hash: hashToken(token), expiresAt: Date.now() + RESET_TOKEN_TTL_MS };
@@ -321,7 +383,7 @@ function createPasswordResetToken(username) {
 // Looks up which account a reset token belongs to, without consuming it —
 // used to validate a token before showing the "set new password" form.
 function findUsernameByResetToken(token) {
-  if (!token) return null;
+  if (!token || typeof token !== 'string') return null;
   const hash = hashToken(token);
   const now = Date.now();
   for (const [name, record] of Object.entries(store.users)) {
@@ -335,13 +397,16 @@ function findUsernameByResetToken(token) {
 // Validates the token, sets the new password, and consumes the token (and
 // every existing session — a password reset is exactly the moment to log
 // out any device someone else might be using). Returns true on success.
-function resetPasswordWithToken(token, newPassword) {
-  if (!newPassword || newPassword.length < MIN_PASSWORD_LEN) return false;
+async function resetPasswordWithToken(token, newPassword) {
+  if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LEN) return false;
   const name = findUsernameByResetToken(token);
   if (!name) return false;
-  const record = store.users[name];
-  setPassword(record, newPassword);
+  const record = getRecord(name);
+  await setPassword(record, newPassword);
+  if (!record.resetToken) return false; // used by a parallel request meanwhile
   delete record.resetToken;
+  // The reset link was mailed to record.email and used: that proves the address.
+  if (record.email) record.emailVerified = true;
   record.sessionTokens = [];
   save();
   return true;
@@ -369,15 +434,16 @@ function findUsernameByOAuth(provider, providerId) {
 // account has no email on file yet, adopts the provider's verified email
 // for it too — a free upgrade for pre-existing no-email accounts, as long
 // as that email isn't already claimed by some other account.
-function linkOAuth(username, provider, providerId, email) {
+function linkOAuth(username, provider, providerId, email, emailVerified = false) {
   const name = normalize(username);
-  const record = store.users[name];
+  const record = getRecord(name);
   if (!record) return false;
   const normalizedEmail = normalizeEmail(email);
   record.oauth = record.oauth || {};
   record.oauth[provider] = { id: providerId, email: normalizedEmail };
-  if (!record.email && normalizedEmail && !findUsernameByEmail(normalizedEmail)) {
+  if (!record.email && normalizedEmail && emailVerified && !findUsernameByEmail(normalizedEmail)) {
     record.email = normalizedEmail;
+    record.emailVerified = true;
   }
   save();
   return true;
@@ -388,27 +454,34 @@ function linkOAuth(username, provider, providerId, email) {
 // the account still fits the existing salt/hash schema, and they can set
 // a real one later via "Aizmirsi paroli" (same reset-token flow as anyone
 // else) if they ever want to log in without the provider.
-function createAccountFromOAuth(username, provider, providerId, email) {
+async function createAccountFromOAuth(username, provider, providerId, email, emailVerified = false) {
   const name = normalize(username);
-  if (!name) return null;
-  if (store.users[name]) return null;
-  const normalizedEmail = normalizeEmail(email);
+  if (usernameProblem(name)) return null;
+  let normalizedEmail = normalizeEmail(email);
+  // An address another account already uses is not copied over (it stays on the provider link only).
+  if (normalizedEmail && findUsernameByEmail(normalizedEmail)) normalizedEmail = null;
   const record = {
     createdAt: Date.now(),
     email: normalizedEmail,
+    emailVerified: !!(normalizedEmail && emailVerified),
     stats: blankStats(),
-    oauth: { [provider]: { id: providerId, email: normalizedEmail } },
+    oauth: { [provider]: { id: providerId, email: normalizeEmail(email) } },
   };
-  setPassword(record, crypto.randomBytes(24).toString('hex'));
+  await setPassword(record, crypto.randomBytes(24).toString('hex'));
+  if (usernameProblem(name)) return null;
   store.users[name] = record;
+  rememberName(name);
   save();
   return toPublic(name, record);
 }
 
+// Bumped whenever a player's stats change, so the leaderboards are only rebuilt when needed.
+let statsVersion = 0;
+
 function recordResult(username, didWin, isForfeit) {
   const name = normalize(username);
-  if (!name || !store.users[name]) return;
-  const record = store.users[name];
+  if (!name || !getRecord(name)) return;
+  const record = getRecord(name);
   const stats = { ...blankStats(), ...record.stats };
 
   // All-time.
@@ -438,7 +511,14 @@ function recordResult(username, didWin, isForfeit) {
   stats.daily = daily;
 
   record.stats = stats;
+  statsVersion++;
   save();
+}
+
+/** True when the account's e-mail is confirmed (a provider vouched for it, or a reset mailed there was used). */
+function isEmailVerified(username) {
+  const record = getRecord(normalize(username));
+  return !!(record && record.email && record.emailVerified);
 }
 
 // Every account's name, registration time and Duraks games played — used once by the front
@@ -446,7 +526,7 @@ function recordResult(username, didWin, isForfeit) {
 // What anyone may see about a player (the front page's village card): no e-mail, no history.
 function getPublicProfile(username) {
   const name = normalize(username);
-  const record = store.users[name];
+  const record = getRecord(name);
   if (!record) return null;
   const s = publicStats(record);
   return {
@@ -467,7 +547,7 @@ function listAccounts() {
 
 function getStats(username) {
   const name = normalize(username);
-  const record = store.users[name];
+  const record = getRecord(name);
   return record ? publicStats(record) : null;
 }
 
@@ -484,8 +564,8 @@ const HISTORY_LIMIT = 100;
 
 function recordGameHistoryEntry(username, entry) {
   const name = normalize(username);
-  if (!name || !store.users[name]) return;
-  const record = store.users[name];
+  if (!name || !getRecord(name)) return;
+  const record = getRecord(name);
   const history = Array.isArray(record.history) ? record.history : [];
   history.unshift({ ...entry, timestamp: entry.timestamp || Date.now() });
   record.history = history.slice(0, HISTORY_LIMIT);
@@ -494,7 +574,7 @@ function recordGameHistoryEntry(username, entry) {
 
 function getGameHistory(username, limit) {
   const name = normalize(username);
-  const record = store.users[name];
+  const record = getRecord(name);
   if (!record || !Array.isArray(record.history)) return [];
   const n = Number.isInteger(limit) && limit > 0 ? limit : HISTORY_LIMIT;
   return record.history.slice(0, n);
@@ -513,8 +593,8 @@ const KNOWN_IPS_LIMIT = 20;
 
 function recordLoginIp(username, ip) {
   const name = normalize(username);
-  if (!name || !store.users[name] || !ip) return;
-  const record = store.users[name];
+  if (!name || !getRecord(name) || !ip) return;
+  const record = getRecord(name);
   const knownIps = Array.isArray(record.knownIps) ? record.knownIps : [];
   const existing = knownIps.find((e) => e.ip === ip);
   if (existing) {
@@ -537,8 +617,8 @@ function recordLoginIp(username, ip) {
 // click to actually host.
 function saveLastRoomSettings(username, settings) {
   const name = normalize(username);
-  if (!name || !store.users[name]) return;
-  const record = store.users[name];
+  if (!name || !getRecord(name)) return;
+  const record = getRecord(name);
   record.lastRoomSettings = {
     totalPlayers: settings.totalPlayers,
     aiCount: settings.aiCount,
@@ -582,7 +662,7 @@ const ELO_POOLS = ['oneVOne', 'multi'];
 
 function getElo(username, pool) {
   const name = normalize(username);
-  const record = store.users[name];
+  const record = getRecord(name);
   if (!record) return null;
   const val = record.eloByPool && record.eloByPool[pool];
   return typeof val === 'number' ? val : DEFAULT_ELO;
@@ -601,7 +681,7 @@ function applyRankedGameResult(placements, pool) {
   if (!ELO_POOLS.includes(pool)) throw new Error(`applyRankedGameResult: unknown elo pool '${pool}'`);
   const eligible = (placements || [])
     .map((p) => ({ username: normalize(p.username), placement: p.placement }))
-    .filter((p) => p.username && store.users[p.username]);
+    .filter((p) => p.username && getRecord(p.username));
   if (eligible.length < 2) return null;
 
   const before = {};
@@ -624,7 +704,7 @@ function applyRankedGameResult(placements, pool) {
   for (const p of eligible) {
     const avgDelta = Math.round(deltaSum[p.username] / n);
     const newElo = before[p.username] + avgDelta;
-    const record = store.users[p.username];
+    const record = getRecord(p.username);
     record.eloByPool = record.eloByPool || {};
     record.eloByPool[pool] = newElo;
     result[p.username] = { before: before[p.username], after: newElo, delta: avgDelta };
@@ -692,7 +772,22 @@ function winPct(played, won) {
 // Builds the "Labākie spēlētāji TOP10" lists (by win %), plus the single
 // record-holders for longest win streak and most games played, each split
 // into today / all-time.
+// The TOP lists scan and sort every account, so they are cached until a result changes them (or the
+// day rolls over); the small counters next to them are always fresh.
+let leaderCache = null;
+
 function getLeaderboards() {
+  const key = statsVersion + '|' + todayStr();
+  if (!leaderCache || leaderCache.key !== key) leaderCache = { key, lists: buildLeaderLists() };
+  return {
+    games: getGameCounts(),
+    gamesVsBot: getVsBotGameCounts(),
+    pageVisits: getPageVisitCounts(),
+    ...leaderCache.lists,
+  };
+}
+
+function buildLeaderLists() {
   const entries = Object.entries(store.users);
 
   const topByWinRate = (getPlayed, getWon) =>
@@ -721,9 +816,6 @@ function getLeaderboards() {
   };
 
   return {
-    games: getGameCounts(),
-    gamesVsBot: getVsBotGameCounts(),
-    pageVisits: getPageVisitCounts(),
     topWinRate: {
       today: topByWinRate((s, d) => d.played, (s, d) => d.won),
       allTime: topByWinRate((s) => s.played, (s) => s.won),
@@ -741,6 +833,9 @@ function getLeaderboards() {
 
 module.exports = {
   usernameExists,
+  usernameProblem,
+  isEmailVerified,
+  flush: () => saver.flush(),
   listAccounts,
   getPublicProfile,
   checkSessionToken,
