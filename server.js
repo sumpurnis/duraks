@@ -140,7 +140,8 @@ duraks.attach(io);
 // ---------- Front-page map ----------
 world.provide('meli', () =>
   [...meli.manager.rooms.values()]
-    .filter((r) => r.status === 'playing')
+    // a table whose player has left (still within the reconnect grace time) isn't shown as live
+    .filter((r) => r.status === 'playing' && r.seats.some((s) => s && !s.ai && s.connected))
     .map((r) => ({ id: r.code, players: r.seats.filter((s) => s && !s.ai && s.account).map((s) => s.name), guests: r.seats.filter((s) => s && !s.ai && !s.account).length, vsBot: !!r.vsAI }))
 );
 world.seedGames('meli', Object.fromEntries(Object.entries(meli.manager.stats.data.players || {}).map(([n, p]) => [n, p.played || 0])));

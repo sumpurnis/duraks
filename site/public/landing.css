@@ -88,6 +88,7 @@ p { margin: 0; }
 .feed { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(var(--cards-h) + 28px); z-index: 3; display: flex; flex-direction: column; gap: 6px; max-width: min(360px, calc(100% - 32px)); }
 .ev { background: rgba(14,40,54,.82); color: var(--room-fg); border-radius: 10px; padding: 6px 10px; font-size: 13px; border: 1px solid rgba(255,255,255,.12); animation: evIn .4s ease-out; }
 .ev b { color: var(--gold-bright); }
+.ev.gone { opacity: 0; transform: translateY(4px); transition: opacity .5s ease, transform .5s ease; }
 @keyframes evIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .cardpop { position: absolute; z-index: 4; width: 250px; transform: translate(-50%, calc(-100% - 14px)); background: linear-gradient(180deg, #1f5874, #122f3f); color: var(--room-fg); border: 1px solid rgba(226,195,116,.6); border-radius: 12px; padding: 12px; box-shadow: 0 10px 24px rgba(0,0,0,.35); }
 .cardpop h3 { font-size: 18px; display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }

@@ -32,6 +32,7 @@ const LEVELS = [0, 1, 5, 12, 25, 45, 75, 120, 180, 260];
 const WINDOW = 3; // hex rings sent around the centre of the view (the page draws a margin around the screen for dragging)
 const MAX_EVENTS = 30;
 const POLL_MS = 3000;
+const EVENT_MAX_AGE_MS = 10 * 60 * 1000;
 
 // ------------------------------------------------------------------ storage
 function blank() {
@@ -285,7 +286,8 @@ function buildSnapshot(me, at) {
     matches,
     solo,
     counts: { playing, online: online.size + guestsPlaying, tables },
-    events: events.slice(-12),
+    // only recent news: the ticker must not keep showing a game that started an hour ago
+    events: events.filter((e) => Date.now() - e.t < EVENT_MAX_AGE_MS).slice(-12),
   };
 }
 

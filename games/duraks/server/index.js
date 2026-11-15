@@ -69,6 +69,8 @@ const MAX_TOURNAMENT_PARTICIPANTS = 64;
     const out = [];
     for (const room of rooms.values()) {
       if (!room.game || room.game.status !== 'active') continue;
+      // a game whose player has closed the page (30 s grace before it's forfeited) isn't shown as live
+      if (!room.players.some((p) => p.username !== AI_ID && p.connected)) continue;
       out.push({ id: 'r' + room.code, players: room.players.map((p) => p.username).filter((u) => u !== AI_ID), vsBot: !!room.vsAI });
     }
     return out.concat(registerMultiHandlers.listActive().map((g) => ({ ...g, id: 'm' + g.id })));
@@ -1318,6 +1320,9 @@ const MAX_TOURNAMENT_PARTICIPANTS = 64;
       const eloByPool = { oneVOne: users.getElo(target, 'oneVOne'), multi: users.getElo(target, 'multi') };
       socket.emit('profileData', { username: target, stats, history, eloByPool });
     });
+
+    // Logging out (the tab stays open) ends the front-page "online" status for this connection.
+    socket.on('logout', () => world.gone(socket.id));
 
     socket.on('disconnect', () => {
       world.gone(socket.id);

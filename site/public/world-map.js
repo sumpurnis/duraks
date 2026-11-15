@@ -571,6 +571,8 @@ function addEvent(html) {
   const d = document.createElement('div');
   d.className = 'ev'; d.innerHTML = html;
   f.appendChild(d);
+  // a news line fades out after a while instead of staying on the map forever
+  setTimeout(() => { d.classList.add('gone'); setTimeout(() => d.remove(), 600); }, 90 * 1000);
   while (f.children.length > 3) f.removeChild(f.firstChild);
 }
 
@@ -631,7 +633,9 @@ function apply(data) {
 
   // ticker; finished games between two villages on screen get a "+1" over their road
   const fresh = (data.events || []).filter((e) => e.id > lastEvent);
-  (firstLoad ? fresh.slice(-3) : fresh).forEach((e) => {
+  // on opening the page only the last few minutes are news; older lines would read as "happening now"
+  const recent = (e) => !e.t || Date.now() - e.t < 3 * 60 * 1000;
+  (firstLoad ? fresh.filter(recent).slice(-3) : fresh).forEach((e) => {
     const h = eventHtml(e);
     if (h) addEvent(h);
     if (!firstLoad && e.type === 'finish') {

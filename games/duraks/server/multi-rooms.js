@@ -646,30 +646,15 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     scheduleMultiCleanup(room);
   });
 
-  socket.on('multiLeaveRoom', () => {
-    const room = currentRoom();
-    if (room) {
-      const username = effectiveUsername();
-      // Leaving after already going safe (won, or finished ahead of the
-      // durak) shouldn't affect anyone else's game — just remove this
-      // human from the room so the server stops sending them updates,
-      // and let the remaining active players continue normally.
-      if (room.game && room.game.status === 'active' && !room.game.activePlayers.includes(username)) {
-        room.humans = room.humans.filter((h) => h.username !== username);
-      }
-      socket.leave(room.code);
-      socket.join(MULTI_LOBBY_ROOM);
-    }
-    multiJoinedCode = null;
-  });
-
-  socket.on('disconnect', () => {
-    const room = currentRoom();
-    if (!room) return;
+  // A player leaves a room: by the "leave" button or by closing the page. Both end the same way —
+  // a waiting room gives the seat back (or is cancelled when its creator leaves), and a running game
+  // the player is still in ends as their loss. Before, the button only detached the player, so the
+  // game kept running with nobody there ("plays against the computer" stuck on the front page) and a
+  // left waiting room kept the seat taken.
+  function leaveRoom(room, reason) {
     const username = effectiveUsername();
-
     if (room.status === 'waiting') {
-      room.humans = room.humans.filter((h) => h.socketId !== socket.id);
+      room.humans = room.humans.filter((h) => h.socketId !== socket.id && h.username !== username);
       if (username === room.creatorUsername || room.humans.length === 0) {
         for (const h of room.humans) {
           const sock = io.sockets.sockets.get(h.socketId);
@@ -682,15 +667,36 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
       broadcastMultiOpenRooms();
       return;
     }
-
     if (!room.game || room.game.status !== 'active') return;
+    if (!room.game.activePlayers.includes(username)) {
+      // already safe (won, or finished ahead of the durak): the others play on without them
+      room.humans = room.humans.filter((h) => h.username !== username);
+      return;
+    }
     room.game.status = 'finished';
     room.game.durakId = username;
-    room.endReason = 'disconnect';
+    room.game.log.push(`${username} pameta spēli`);
+    room.endReason = reason;
     clearMultiMoveTimer(room);
     if (room.botTimer) clearTimeout(room.botTimer);
+    broadcastMultiState(room);
     recordMultiGameHistory(room);
     scheduleMultiCleanup(room);
+  }
+
+  socket.on('multiLeaveRoom', () => {
+    const room = currentRoom();
+    if (room) {
+      leaveRoom(room, 'surrender');
+      socket.leave(room.code);
+      socket.join(MULTI_LOBBY_ROOM);
+    }
+    multiJoinedCode = null;
+  });
+
+  socket.on('disconnect', () => {
+    const room = currentRoom();
+    if (room) leaveRoom(room, 'disconnect');
   });
 };
 
