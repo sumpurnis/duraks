@@ -5,7 +5,8 @@
 //   #cv  the ground, roads, trees and villages (redrawn only when the world changes or on resize)
 //   #fx  everything that moves: smoke, walkers, bunting, the free plot, "+1", and taps.
 // The first part is the drawing kit (villages for 10 levels, roads that wear from grass to
-// cobbles); the second part reads /api/world (platform/world.js) and animates it.
+// cobbles); the second part reads /api/world (platform/world.js), animates it and lets the
+// visitor move around (drag / two fingers, zoom) and open a village's stats card.
 (function () {
 'use strict';
 /* ================================================================== drawing kit */
@@ -313,37 +314,55 @@ function naturalRoads(c,P,k,roads,bbox,cell){
   const cob=roads.filter(r=>r.q===3).map(r=>({pts:r.pts,w:1.15}));
   if(cob.length)cobbleUnion(c,P,k,cob,[]);
 }
-
-
-
 /* ================================================================== live map */
 // Everything below draws what /api/world says (platform/world.js): the villages around the
-// centre of the view, roads worn by the games played between players, walkers for games in
-// progress, smoke for players online, bunting for tournament hosts.
+// part of the world being looked at, roads worn by the games played between players, walkers
+// for games in progress, smoke for players online, bunting for tournament hosts.
+//
+// Moving around: drag with the mouse (desktop) or two fingers (phones — one finger keeps
+// scrolling the page), zoom with the +/− buttons, a trackpad pinch or a two-finger pinch.
+// While moving, the already drawn ground canvas only slides/scales (CSS transform); it is
+// drawn again once when the gesture ends. The ground canvas is bigger than the screen by a
+// margin on every side, so an ordinary drag only reveals ground that is already drawn.
 MODE = 'new';
 const API = '/api/world';
 const POLL_MS = 10000;
+const K_MIN = 4.5, K_MAX = 20;
 
 // Every village sits on its own place of a hex grid. The spacing is sized for the BIGGEST
 // possible village (level 10: stone wall radius ~9.8, gate towers) plus room for a road
 // between neighbours, so villages never overlap however much they grow.
 const R_MAX = 10.4, ROAD_GAP = 4.2, D = 2 * R_MAX + ROAD_GAP, HROW = D * 0.866;
 const hexXY = (h) => ({ x: D * (h.q + h.r / 2), y: HROW * h.r });
+function xyHex(x, y) {
+  // nearest hex to a ground point (cube rounding)
+  const r = y / HROW, q = x / D - r / 2, s = -q - r;
+  let rq = Math.round(q), rr = Math.round(r), rs = Math.round(s);
+  const dq = Math.abs(rq - q), dr = Math.abs(rr - r), ds = Math.abs(rs - s);
+  if (dq > dr && dq > ds) rq = -rr - rs; else if (dr > ds) rr = -rq - rs;
+  return { q: rq, r: rr };
+}
+const hexDist = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.q + a.r - b.q - b.r) + Math.abs(a.r - b.r)) / 2;
 const quality = (n) => (n >= 100 ? 3 : n >= 25 ? 2 : n >= 5 ? 1 : 0);
 const ROAD_NAMES = ['', 'iemītu taciņu', 'dubļainu taciņu', 'bruģētu ceļu'];
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const nameHash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) % 100000 + 1; };
+const plural = (n, one, many) => n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? one : many);
 const site = () => (window.UzsSite ? window.UzsSite.state() : { me: null, known: null });
 
 let VIEW = 'guest';
-let TOWNS = [], PLOT = null, PAIRS = [], CENTER = { x: 0, y: 0 };
+let TOWNS = [], PLOT = null, PAIRS = [], HOME = null, EXTENT = 2, MINE = null;
+const townsBy = new Map(); // name -> town (everything seen so far while moving around)
+const pairsBy = new Map(); // "a\u0001b" -> games played between them
+let reqCenter = null; // hex the last data was asked for
 let baseSig = '';
 
 // Routes go AROUND every village that isn't the start or the goal (and around the free plot):
 // the straight line is pushed out past each circle it would cut, then smoothed.
 // Roads may still cross each other.
 function planRoute(A, B, skip) {
-  const obs = TOWNS.map((t, i) => ({ x: t.x, y: t.y, r: R_MAX + 1.2, i })).filter((o) => !skip.includes(o.i));
+  const near = (o) => Math.hypot(o.x - (A.x + B.x) / 2, o.y - (A.y + B.y) / 2) < Math.hypot(A.x - B.x, A.y - B.y) / 2 + R_MAX * 2;
+  const obs = TOWNS.map((t, i) => ({ x: t.x, y: t.y, r: R_MAX + 1.2, i })).filter((o) => !skip.includes(o.i) && near(o));
   if (PLOT) obs.push({ x: PLOT.x, y: PLOT.y, r: R_MAX + 1.2, i: -1 });
   let pts = [[A.x, A.y], [B.x, B.y]];
   for (let it = 0; it < 12; it++) {
@@ -386,78 +405,132 @@ function planRoute(A, B, skip) {
 function pathLen(p) { let L = 0; for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return L || 1; }
 const fenceR = (t) => FENCE[Math.max(2, t.L) - 1];
 
-/* ---------- canvas + projection ---------- */
+/* ---------- view: projection, ground canvas with a margin ---------- */
 const hero = document.getElementById('hero'), cv = document.getElementById('cv'), fx = document.getElementById('fx');
-let W = 0, H = 0, dpr = 1, K = 10, P = null, unP = null, roads = [], townT = [];
-function fitProj() {
-  // frame all villages (and the plot); the map fills the lower part of the hero, under the buttons
-  const pts = TOWNS.concat(PLOT ? [PLOT] : []);
-  if (!pts.length) pts.push(CENTER);
+let W = 0, H = 0, dpr = 1, M = 200;
+let K = 10, ox = 0, oy = 0;          // the live view (what the moving layer and taps use)
+let bK = 10, bOx = 0, bOy = 0;       // the view the ground canvas was last drawn with
+let roads = [], townT = new Map(), fitted = false;
+const P = (x, y, z = 0) => [ox + (x - y) * K, oy + (x + y) * K * 0.5 - z * K];
+const unP = (sx, sy) => { const a = (sx - ox) / K, b = 2 * (sy - oy) / K; return [(a + b) / 2, (b - a) / 2]; };
+const focusY = () => H * 0.62; // the middle of the map area, under the buttons
+const viewCenter = () => unP(W / 2, focusY());
+function lookAt(x, y) { ox = W / 2 - (x - y) * K; oy = focusY() - (x + y) * K * 0.5; }
+
+function sizeCanvases() {
+  const r = hero.getBoundingClientRect();
+  W = r.width; H = r.height;
+  M = Math.round(clamp(Math.min(W, H) * 0.45, 160, 360));
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  // keep the ground canvas within a sane memory budget on big/high-density screens
+  while (dpr > 1 && (W + 2 * M) * (H + 2 * M) * dpr * dpr > 9e6) dpr -= 0.25;
+  cv.width = Math.round((W + 2 * M) * dpr); cv.height = Math.round((H + 2 * M) * dpr);
+  Object.assign(cv.style, { left: -M + 'px', top: -M + 'px', width: W + 2 * M + 'px', height: H + 2 * M + 'px', transformOrigin: '0 0' });
+  const fd = Math.min(2, window.devicePixelRatio || 1);
+  fx.width = Math.round(W * fd); fx.height = Math.round(H * fd); fx._dpr = fd;
+}
+
+// first view: frame the nearby villages; on phones keep the player's own village (or the plot) centred
+function fit() {
+  const homeXY = MINE ? MINE : PLOT || HOME || { x: 0, y: 0 };
+  const pts = TOWNS.filter((t) => Math.hypot(t.x - homeXY.x, t.y - homeXY.y) < D * 2.2).concat(PLOT ? [PLOT] : []);
+  if (!pts.length) pts.push(homeXY);
   let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
   pts.forEach((t) => { const sx = t.x - t.y, sy = (t.x + t.y) / 2; x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy); });
-  K = Math.max(W < 700 ? 6.5 : 7, Math.min(13, (W * 0.94) / (x1 - x0 + 30), (H * 0.46) / (y1 - y0 + 14)));
+  K = clamp(Math.min(13, (W * 0.94) / (x1 - x0 + 30), (H * 0.46) / (y1 - y0 + 14)), W < 700 ? 6.5 : 7, K_MAX);
   let cx = (x0 + x1) / 2;
-  // phones can't show everything: keep the player's own village (or the free plot) in the middle
-  const focus = TOWNS.find((t) => t.mine) || PLOT;
-  if (focus && (x1 - x0 + 30) * K > W) cx = focus.x - focus.y;
-  const ox = W / 2 - cx * K, oy = H * (W < 700 ? 0.5 : 0.45) - (y0 - 5) * K;
-  P = (x, y, z = 0) => [ox + (x - y) * K, oy + (x + y) * K * 0.5 - z * K];
-  // screen -> ground, used to scatter trees evenly over what is visible
-  unP = (sx, sy) => { const a = (sx - ox) / K, b = 2 * (sy - oy) / K; return [(a + b) / 2, (b - a) / 2]; };
+  if ((x1 - x0 + 30) * K > W) cx = homeXY.x - homeXY.y;
+  const cy = (y0 + y1) / 2;
+  // centre (cx, cy) in iso space -> ground point
+  lookAt(cy + cx / 2, cy - cx / 2);
+  fitted = true;
 }
+
+// keep the view over the inhabited part of the world
+function clampView() {
+  const [cx, cy] = viewCenter();
+  const lim = (EXTENT + 1.6) * D, d = Math.hypot(cx, cy);
+  if (d > lim) lookAt(cx * lim / d, cy * lim / d);
+}
+
+// while moving: slide/scale the ground canvas instead of drawing it again
+function placeGround() {
+  const s = K / bK;
+  const tx = ox - s * (M + bOx) + M, ty = oy - s * (M + bOy) + M;
+  cv.style.transform = s === 1 && tx === 0 && ty === 0 ? '' : `translate(${tx}px,${ty}px) scale(${s})`;
+}
+
 function render() {
-  const r = hero.getBoundingClientRect();
-  W = r.width; H = r.height; dpr = Math.min(2, window.devicePixelRatio || 1);
-  cv.width = fx.width = W * dpr; cv.height = fx.height = H * dpr;
-  fitProj();
+  if (!W) return;
+  bK = K; bOx = ox; bOy = oy;
+  cv.style.transform = '';
   const c = cv.getContext('2d');
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const g = c.createRadialGradient(W / 2, H * 0.62, 60, W / 2, H * 0.62, Math.max(W, H) * 0.8);
+  const BW = W + 2 * M, BH = H + 2 * M;
+  // ground canvas coordinates = screen + M
+  const Pb = (x, y, z = 0) => { const p = P(x, y, z); return [p[0] + M, p[1] + M]; };
+  const inside = (x, y, pad) => { const p = Pb(x, y); return p[0] > -pad && p[0] < BW + pad && p[1] > -pad && p[1] < BH + pad; };
+  const g = c.createRadialGradient(BW / 2, BH * 0.6, 60, BW / 2, BH * 0.6, Math.max(BW, BH) * 0.75);
   g.addColorStop(0, '#92b76c'); g.addColorStop(1, '#68904b');
-  c.fillStyle = g; c.fillRect(0, 0, W, H);
-  const R = rng(5);
-  const scatter = () => unP(-40 + R() * (W + 80), -30 + R() * (H + 60));
-  const area = (W * H) / 1e4;
-  for (let i = 0; i < area * 2.2; i++) { const [x, y] = scatter(); poly(c, blob(P, x, y, 0.8 + R() * 1.8, R() * 9, 12), R() < 0.5 ? 'rgba(120,160,80,.25)' : 'rgba(170,190,110,.2)'); }
+  c.fillStyle = g; c.fillRect(0, 0, BW, BH);
+  // scatter is seeded by the ground position, so trees stay put when the map moves
+  const scatterCell = 9;
+  const [wx0, wy0] = unP(-M - 60, -M - 60), [wx1, wy1] = unP(W + M + 60, H + M + 60), [wx2, wy2] = unP(W + M + 60, -M - 60), [wx3, wy3] = unP(-M - 60, H + M + 60);
+  const gx0 = Math.floor(Math.min(wx0, wx1, wx2, wx3) / scatterCell), gx1 = Math.ceil(Math.max(wx0, wx1, wx2, wx3) / scatterCell);
+  const gy0 = Math.floor(Math.min(wy0, wy1, wy2, wy3) / scatterCell), gy1 = Math.ceil(Math.max(wy0, wy1, wy2, wy3) / scatterCell);
+  const cells = [];
+  for (let gx = gx0; gx <= gx1; gx++) for (let gy = gy0; gy <= gy1; gy++) cells.push([gx, gy]);
 
-  // a river near the right edge, unless it would run through a village
-  let river = [];
-  for (let i = 0; i <= 30; i++) { const sy = H * 0.3 + i * (H * 0.8 / 30); river.push(unP(W * 0.93 + Math.sin(i * 0.5) * 18, sy)); }
-  if (TOWNS.some((t) => river.some((q) => Math.hypot(q[0] - t.x, q[1] - t.y) < fenceR(t) + 5)) || (PLOT && river.some((q) => Math.hypot(q[0] - PLOT.x, q[1] - PLOT.y) < R_MAX))) river = [];
-  if (river.length) { line(c, P, river, 2.6, '#3b8fb3', K); line(c, P, river, 1.6, '#4aa0c4', K); }
+  const near = (x, y) =>
+    TOWNS.some((t) => Math.abs(t.x - x) < 14 && Math.abs(t.y - y) < 14 && Math.hypot(t.x - x, t.y - y) < Math.max(4, fenceR(t)) + 3) ||
+    (PLOT && Math.hypot(PLOT.x - x, PLOT.y - y) < 7.5) ||
+    roads.some((rd) => rd.q && rd.bb[0] - 2 < x && x < rd.bb[2] + 2 && rd.bb[1] - 2 < y && y < rd.bb[3] + 2 && rd.pts.some((q) => Math.abs(q[0] - x) < 1.8 && Math.abs(q[1] - y) < 1.8));
 
-  roads = PAIRS.map((p) => ({ pts: planRoute(TOWNS[p.a], TOWNS[p.b], [p.a, p.b]), q: quality(p.n), p }));
+  // grass patches
+  cells.forEach(([gx, gy]) => {
+    const R = rng(((gx * 73856093) ^ (gy * 19349663)) >>> 0 || 1);
+    for (let i = 0; i < 2; i++) { const x = (gx + R()) * scatterCell, y = (gy + R()) * scatterCell; if (inside(x, y, 40)) poly(c, blob(Pb, x, y, 0.8 + R() * 1.8, R() * 9, 12), R() < 0.5 ? 'rgba(120,160,80,.25)' : 'rgba(170,190,110,.2)'); }
+  });
+
+  // roads between villages near the drawn area
+  const vis = new Set(TOWNS.map((t, i) => (inside(t.x, t.y, 900) ? i : -1)).filter((i) => i >= 0));
+  roads = PAIRS.filter((p) => vis.has(p.a) || vis.has(p.b)).map((p) => {
+    const pts = planRoute(TOWNS[p.a], TOWNS[p.b], [p.a, p.b]);
+    let bb = [1e9, 1e9, -1e9, -1e9];
+    pts.forEach(([x, y]) => { bb = [Math.min(bb[0], x), Math.min(bb[1], y), Math.max(bb[2], x), Math.max(bb[3], y)]; });
+    return { pts, bb, q: quality(p.n), p };
+  });
   if (roads.length) {
-    let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
-    roads.forEach((rd) => rd.pts.forEach(([x, y]) => { bx0 = Math.min(bx0, x); by0 = Math.min(by0, y); bx1 = Math.max(bx1, x); by1 = Math.max(by1, y); }));
-    naturalRoads(c, P, K, roads, [bx0 - 10, by0 - 10, bx1 + 10, by1 + 10], 0.3);
+    let bb = [1e9, 1e9, -1e9, -1e9];
+    roads.forEach((rd) => { bb = [Math.min(bb[0], rd.bb[0]), Math.min(bb[1], rd.bb[1]), Math.max(bb[2], rd.bb[2]), Math.max(bb[3], rd.bb[3])]; });
+    naturalRoads(c, Pb, K, roads, [bb[0] - 10, bb[1] - 10, bb[2] + 10, bb[3] + 10], 0.3);
   }
   if (PLOT) {
-    poly(c, blob(P, PLOT.x, PLOT.y, 6.5, 3, 32), 'rgba(170,196,118,.35)');
-    poly(c, blob(P, PLOT.x, PLOT.y, 3.4, 3, 28), 'rgba(196,190,128,.4)');
+    poly(c, blob(Pb, PLOT.x, PLOT.y, 6.5, 3, 32), 'rgba(170,196,118,.35)');
+    poly(c, blob(Pb, PLOT.x, PLOT.y, 3.4, 3, 28), 'rgba(196,190,128,.4)');
   }
-  // trees, avoiding villages, roads, the plot and the river
-  const near = (x, y) =>
-    TOWNS.some((t) => Math.hypot(t.x - x, t.y - y) < Math.max(4, fenceR(t)) + 3) ||
-    (PLOT && Math.hypot(PLOT.x - x, PLOT.y - y) < 7.5) ||
-    roads.some((rd) => rd.q && rd.pts.some((q) => Math.hypot(q[0] - x, q[1] - y) < 1.8)) ||
-    river.some((q) => Math.hypot(q[0] - x, q[1] - y) < 3);
-  const trees = [];
-  for (let i = 0; i < area * 5.5; i++) {
-    const [x, y] = scatter();
-    if (!near(x, y)) trees.push({ k: R() < 0.4 ? 'pine' : R() < 0.12 ? 'bush' : 'tree', x, y, s: 0.8 + R() * 0.6 });
-  }
-  const ents = trees.map((t) => ({ t: 'tree', d: t.x + t.y, o: t })).concat(TOWNS.map((t) => ({ t: 'town', d: t.x + t.y, o: t })));
+
+  // trees (seeded per ground cell) + villages, back to front
+  const ents = [];
+  cells.forEach(([gx, gy]) => {
+    const R = rng((((gx + 7919) * 2654435761) ^ ((gy + 104729) * 40503)) >>> 0 || 1);
+    for (let i = 0; i < 4; i++) {
+      const x = (gx + R()) * scatterCell, y = (gy + R()) * scatterCell, k = R() < 0.4 ? 'pine' : R() < 0.12 ? 'bush' : 'tree', s = 0.8 + R() * 0.6;
+      if (R() < 0.45 || !inside(x, y, 30) || near(x, y)) continue;
+      ents.push({ t: 'tree', d: x + y, o: { x, y, k, s } });
+    }
+  });
+  TOWNS.forEach((t, i) => { if (inside(t.x, t.y, 250)) ents.push({ t: 'town', d: t.x + t.y, o: t, i }); });
   ents.sort((a, b) => a.d - b.d);
-  townT = [];
+  townT = new Map();
   ents.forEach((e) => {
-    if (e.t === 'tree') { tree(c, P, e.o.x, e.o.y, e.o.s, K, e.o.k); return; }
+    if (e.t === 'tree') { tree(c, Pb, e.o.x, e.o.y, e.o.s, K, e.o.k); return; }
     const t = e.o;
     try {
       const T = buildTown(t.L, t.seed, t.g);
-      const P2 = (x, y, z = 0) => P(x + t.x, y + t.y, z);
-      drawTown(c, P2, K, T, { cell: 0.18 });
-      townT[TOWNS.indexOf(t)] = T;
+      drawTown(c, (x, y, z = 0) => Pb(x + t.x, y + t.y, z), K, T, { cell: 0.18 });
+      // chimney positions in ground-canvas pixels -> keep as ground offsets so smoke follows the map
+      townT.set(t.name, { T, at: { K, ox, oy } });
     } catch (err) { console.error('village', t.name, err); }
   });
 }
@@ -466,6 +539,7 @@ function render() {
 let matches = [], aiGames = [], smoke = [], floats = [];
 let lastEvent = 0, firstLoad = true;
 const idx = (name) => TOWNS.findIndex((t) => t.name === name);
+const pkey = (a, b) => (a < b ? a + '\u0001' + b : b + '\u0001' + a);
 
 function eventHtml(e) {
   const n = (e.names || []).map((x) => '<b>' + esc(x) + '</b>');
@@ -474,7 +548,7 @@ function eventHtml(e) {
   switch (e.type) {
     case 'start': return both + ' sāka spēlēt ' + game;
     case 'startSolo': return n[0] + (e.vsBot ? ' spēlē ' + game + ' pret datoru' : ' sāka spēlēt ' + game);
-    case 'finish': return both + ' nospēlēja ' + (e.game === 'm' ? 'Meļus' : 'Duraku');
+    case 'finish': return both + ' nospēlēja ' + game;
     case 'road': return 'Ceļš starp ' + n[0] + ' un ' + n[1] + ' kļuva par «' + (ROAD_NAMES[e.quality] || '') + '»';
     case 'level': return n[0] + ' ciemats izauga līdz <b>' + e.level + '.</b> līmenim';
     default: return null;
@@ -491,14 +565,36 @@ function addEvent(html) {
 function apply(data) {
   const s = site();
   VIEW = s.me ? 'in' : s.known ? 'known' : 'guest';
-  const mine = data.me || null;
-  CENTER = hexXY(data.center || { q: 0, r: 0 });
-  TOWNS = (data.towns || []).map((t) => ({ ...t, ...hexXY(t), seed: nameHash(t.name), mine: !!mine && t.name === mine }));
-  PLOT = VIEW === 'guest' && data.plot ? hexXY(data.plot) : null;
-  PAIRS = (data.pairs || []).map((p) => ({ a: idx(p.a), b: idx(p.b), n: p.n })).filter((p) => p.a >= 0 && p.b >= 0);
+  EXTENT = data.extent || EXTENT;
+  HOME = hexXY(data.home || data.center || { q: 0, r: 0 });
+  reqCenter = data.center || reqCenter;
 
+  // merge what came in with what was seen before; anything inside the window that is missing
+  // now is gone (deleted account); things outside the window keep their last state, minus "online"
+  const seen = new Set();
+  (data.towns || []).forEach((t) => {
+    seen.add(t.name);
+    const old = townsBy.get(t.name);
+    const nt = { ...t, ...hexXY(t), seed: nameHash(t.name) };
+    townsBy.set(t.name, old ? Object.assign(old, nt) : nt);
+  });
+  for (const [name, t] of townsBy) {
+    if (seen.has(name)) continue;
+    if (hexDist(t, data.center) <= 3) townsBy.delete(name);
+    else { t.online = false; }
+  }
+  (data.pairs || []).forEach((p) => pairsBy.set(pkey(p.a, p.b), p.n));
+  TOWNS = [...townsBy.values()];
+  MINE = data.me ? townsBy.get(data.me) || null : null;
+  TOWNS.forEach((t) => { t.mine = !!MINE && t === MINE; });
+  PLOT = VIEW === 'guest' && data.plot ? hexXY(data.plot) : null;
+  PAIRS = [];
+  for (const [k, n] of pairsBy) { const [a, b] = k.split('\u0001'); const ia = idx(a), ib = idx(b); if (ia >= 0 && ib >= 0) PAIRS.push({ a: ia, b: ib, n }); }
+
+  if (!fitted) { fit(); clampView(); }
   const sig = JSON.stringify([TOWNS.map((t) => [t.name, t.L, t.g, t.x, t.y]), PAIRS.map((p) => [p.a, p.b, quality(p.n)]), PLOT]);
-  if (sig !== baseSig) { baseSig = sig; render(); }
+  if (sig !== baseSig && !gesture) { baseSig = sig; render(); }
+  else if (sig !== baseSig) needRender = true;
 
   // walkers: keep the ones still playing where they are, add new ones
   const was = new Map(matches.map((m) => [m.id, m]));
@@ -506,19 +602,19 @@ function apply(data) {
     const a = idx(m.a), b = idx(m.b);
     if (a < 0 || b < 0) return null;
     const old = was.get(m.id);
-    if (old && old.a === a && old.b === b) return old;
+    if (old && old.an === m.a && old.bn === m.b) return Object.assign(old, { a, b });
     const A = TOWNS[a], B = TOWNS[b];
     const road = roads.find((r) => (r.p.a === a && r.p.b === b) || (r.p.a === b && r.p.b === a));
     const pts = road ? road.pts : planRoute(A, B, [a, b]);
     const len = pathLen(pts), lo = (fenceR(A) + 0.6) / len, hi = 1 - (fenceR(B) + 0.6) / len;
     if (hi <= lo) return null;
-    return { id: m.id, a, b, g: m.g, pts, lo, hi, t: lo + Math.random() * (hi - lo), dir: 1 };
+    return { id: m.id, a, b, an: m.a, bn: m.b, g: m.g, pts, lo, hi, t: lo + Math.random() * (hi - lo), dir: 1 };
   }).filter(Boolean);
   const wasAi = new Map(aiGames.map((g) => [g.id, g]));
   aiGames = (data.solo || []).map((g) => {
     const i = idx(g.name);
     if (i < 0) return null;
-    return wasAi.get(g.id) || { id: g.id, i, g: g.g, t: Math.random() * 6.28 };
+    return Object.assign(wasAi.get(g.id) || { id: g.id, g: g.g, t: Math.random() * 6.28 }, { i });
   }).filter(Boolean);
 
   // ticker; finished games between two villages on screen get a "+1" over their road
@@ -538,39 +634,51 @@ function apply(data) {
   const c = data.counts || { playing: 0, online: 0, tables: { d: 0, m: 0 } };
   document.getElementById('liveN').textContent = c.playing;
   document.getElementById('onlineN').textContent = Math.max(c.online, c.playing);
-  const tbl = (n) => 'Tagad notiek: ' + n + (n % 10 === 1 && n % 100 !== 11 ? ' spēle' : ' spēles');
-  document.getElementById('dStat').textContent = tbl(c.tables.d || 0);
-  document.getElementById('mStat').textContent = tbl(c.tables.m || 0);
-
-  if (sel != null && !TOWNS[sel]) { sel = null; pop.hidden = true; }
+  document.getElementById('dStat').textContent = 'Tagad notiek: ' + plural(c.tables.d || 0, 'spēle', 'spēles');
+  document.getElementById('mStat').textContent = 'Tagad notiek: ' + plural(c.tables.m || 0, 'spēle', 'spēles');
+  updHomeBtn();
 }
 
-let loading = false, again = false;
-function load() {
-  if (loading) { again = true; return; }
+let loading = false, again = null;
+function load(at) {
+  if (loading) { again = at || reqCenter || true; return; }
   loading = true;
   const who = site().known;
-  fetch(API + (who ? '?me=' + encodeURIComponent(who) : ''), { cache: 'no-store' })
+  const qs = [];
+  if (who) qs.push('me=' + encodeURIComponent(who));
+  if (at && at !== true) qs.push('q=' + at.q, 'r=' + at.r);
+  fetch(API + (qs.length ? '?' + qs.join('&') : ''), { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => { if (d) apply(d); })
     .catch(() => { /* offline for a moment: keep the last picture */ })
-    .then(() => { loading = false; if (again) { again = false; load(); } });
+    .then(() => { loading = false; if (again) { const a = again; again = null; load(a); } });
+}
+// after the map has moved: ask for the area now in view, if it is a new one
+function loadView() {
+  const [x, y] = viewCenter();
+  const h = xyHex(x, y);
+  if (!reqCenter || hexDist(h, reqCenter) >= 1) load(h);
 }
 
 /* ---------- frame ---------- */
 function frame(ts) {
-  const c = fx.getContext('2d');
-  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, fx.width, fx.height); c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (!P) { requestAnimationFrame(frame); return; }
-  // smoke from villages whose owner is online
-  TOWNS.forEach((t, i) => {
-    const T = townT[i];
-    if (!T || !t.online || !T.chimneys.length) return;
-    if (!reduce && Math.random() < 0.12) { const ch = T.chimneys[Math.random() * T.chimneys.length | 0]; smoke.push({ x: ch[0], y: ch[1], r: 1.5, a: 0.55 }); }
+  const c = fx.getContext('2d'), fd = fx._dpr || 1;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, fx.width, fx.height); c.setTransform(fd, 0, 0, fd, 0, 0);
+  if (!W || !fitted) { requestAnimationFrame(frame); return; }
+  // smoke from villages whose owner is online (chimneys were found when the village was drawn)
+  TOWNS.forEach((t) => {
+    const e = townT.get(t.name);
+    if (!e || !t.online || !e.T.chimneys.length) return;
+    if (!reduce && Math.random() < 0.12) {
+      const ch = e.T.chimneys[Math.random() * e.T.chimneys.length | 0];
+      // chimney pixel (ground canvas) -> ground-relative offset, so it follows drags and zoom
+      const k = K / e.at.K;
+      smoke.push({ name: t.name, dx: (ch[0] - M - e.at.ox) / e.at.K, dy: (ch[1] - M - e.at.oy) / e.at.K, up: 0, r: 1.5, a: 0.55, k });
+    }
   });
-  smoke.forEach((s) => { s.y -= 0.35; s.x += 0.15; s.r += 0.05; s.a -= 0.005; });
+  smoke.forEach((s) => { s.up += 0.35; s.dx += 0.015; s.r += 0.05; s.a -= 0.005; });
   smoke = smoke.filter((s) => s.a > 0);
-  smoke.forEach((s) => { c.fillStyle = `rgba(236,240,242,${s.a})`; c.beginPath(); c.arc(s.x, s.y, s.r, 0, 7); c.fill(); });
+  smoke.forEach((s) => { const x = ox + s.dx * K, y = oy + s.dy * K - s.up; c.fillStyle = `rgba(236,240,242,${s.a})`; c.beginPath(); c.arc(x, y, s.r * K / 10, 0, 7); c.fill(); });
   // tournament bunting
   TOWNS.forEach((t) => {
     if (!t.tour) return;
@@ -638,72 +746,237 @@ function frame(ts) {
     for (let i = 0; i < 5; i++) { const a = i * 1.26 + ts / 1400, s = P(PLOT.x + Math.cos(a) * 2.1, PLOT.y + Math.sin(a) * 2.1, 0.6 + 0.4 * Math.sin(ts / 400 + i)); c.fillStyle = `rgba(255,240,190,${0.5 + 0.5 * Math.sin(ts / 300 + i)})`; c.beginPath(); c.arc(s[0], s[1], 2.2, 0, 7); c.fill(); }
   }
   // my own village: a gold ring once we know who this is
-  if (VIEW !== 'guest') {
-    const t = TOWNS.find((x) => x.mine);
-    if (t) {
-      const r = fenceR(t) + 1.1;
-      c.setLineDash([3, 6]); poly(c, blob(P, t.x, t.y, r, 2, 40), null, 'rgba(226,195,116,.85)', 2); c.setLineDash([]);
-      const p = P(t.x, t.y - r - 0.6);
-      c.font = '700 12px -apple-system,Segoe UI,sans-serif'; c.textAlign = 'center';
-      const lbl = VIEW === 'in' ? 'Tavs ciemats' : 'Tavs ciemats? Ielogojies';
-      const tw = c.measureText(lbl).width + 14;
-      c.fillStyle = 'rgba(226,195,116,.95)'; c.beginPath(); c.roundRect(p[0] - tw / 2, p[1] - 14, tw, 19, 9); c.fill();
-      c.fillStyle = '#2a2005'; c.textBaseline = 'alphabetic'; c.fillText(lbl, p[0], p[1]);
-    }
+  if (VIEW !== 'guest' && MINE) {
+    const t = MINE, r = fenceR(t) + 1.1;
+    c.setLineDash([3, 6]); poly(c, blob(P, t.x, t.y, r, 2, 40), null, 'rgba(226,195,116,.85)', 2); c.setLineDash([]);
+    const p = P(t.x, t.y - r - 0.6);
+    c.font = '700 12px -apple-system,Segoe UI,sans-serif'; c.textAlign = 'center';
+    const lbl = VIEW === 'in' ? 'Tavs ciemats' : 'Tavs ciemats? Ielogojies';
+    const tw = c.measureText(lbl).width + 14;
+    c.fillStyle = 'rgba(226,195,116,.95)'; c.beginPath(); c.roundRect(p[0] - tw / 2, p[1] - 14, tw, 19, 9); c.fill();
+    c.fillStyle = '#2a2005'; c.textBaseline = 'alphabetic'; c.fillText(lbl, p[0], p[1]);
   }
-  if (sel != null && TOWNS[sel]) { const t = TOWNS[sel], r = Math.max(3, fenceR(t)) + 0.8; c.setLineDash([6, 5]); poly(c, blob(P, t.x, t.y, r, 1, 36), null, '#e2c374', 2); c.setLineDash([]); }
+  if (sel && townsBy.get(sel)) { const t = townsBy.get(sel), r = Math.max(3, fenceR(t)) + 0.8; c.setLineDash([6, 5]); poly(c, blob(P, t.x, t.y, r, 1, 36), null, '#e2c374', 2); c.setLineDash([]); }
   requestAnimationFrame(frame);
 }
 
+/* ---------- moving around ---------- */
+const ctl = document.createElement('div');
+ctl.className = 'mapctl';
+ctl.innerHTML = '<button type="button" class="mbtn home" id="mapHome" hidden></button><div class="zoom"><button type="button" class="mbtn" id="zoomIn" aria-label="Pietuvināt">+</button><button type="button" class="mbtn" id="zoomOut" aria-label="Attālināt">−</button></div>';
+hero.appendChild(ctl);
+const tip = document.createElement('div');
+tip.className = 'maptip'; tip.hidden = true; tip.setAttribute('role', 'status');
+tip.textContent = 'Izmanto divus pirkstus, lai pārvietotu karti';
+hero.appendChild(tip);
+let tipTimer = null;
+function showTip() { tip.hidden = false; clearTimeout(tipTimer); tipTimer = setTimeout(() => { tip.hidden = true; }, 1600); }
+
+let gesture = null, needRender = false, movedAt = 0;
+function closePops() { pop.hidden = true; plotPop.hidden = true; sel = null; }
+function startMove() { closePops(); }
+function moveBy(dx, dy) { ox += dx; oy += dy; clampView(); placeGround(); }
+function zoomAt(f, sx, sy) {
+  const nk = clamp(K * f, K_MIN, K_MAX), [wx, wy] = unP(sx, sy);
+  K = nk;
+  ox = sx - (wx - wy) * K; oy = sy - (wx + wy) * K * 0.5;
+  clampView(); placeGround();
+}
+// one redraw when the movement ends (or mid-drag, if it has run past the drawn margin)
+function settle() {
+  const s = K / bK, tx = ox - bOx, ty = oy - bOy;
+  if (s !== 1 || Math.abs(tx) > 1 || Math.abs(ty) > 1 || needRender) { needRender = false; render(); }
+  loadView();
+  updHomeBtn();
+}
+function pastMargin() { return Math.abs(ox - bOx) > M * 0.85 || Math.abs(oy - bOy) > M * 0.85; }
+
+// mouse: grab and drag
+fx.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'mouse' || e.button !== 0) return;
+  gesture = { kind: 'mouse', x: e.clientX, y: e.clientY, moved: false, id: e.pointerId };
+});
+window.addEventListener('pointermove', (e) => {
+  if (!gesture || gesture.kind !== 'mouse') return;
+  const dx = e.clientX - gesture.x, dy = e.clientY - gesture.y;
+  if (!gesture.moved && Math.hypot(dx, dy) < 5) return;
+  if (!gesture.moved) { gesture.moved = true; startMove(); fx.classList.add('grabbing'); try { fx.setPointerCapture(gesture.id); } catch (err) { /* fine */ } }
+  gesture.x = e.clientX; gesture.y = e.clientY;
+  moveBy(dx, dy);
+  if (pastMargin()) render();
+});
+window.addEventListener('pointerup', () => {
+  if (!gesture || gesture.kind !== 'mouse') return;
+  const moved = gesture.moved;
+  gesture = null; fx.classList.remove('grabbing');
+  if (moved) { movedAt = performance.now(); settle(); }
+});
+// trackpad pinch (arrives as ctrl+wheel); a plain wheel keeps scrolling the page
+fx.addEventListener('wheel', (e) => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  closePops();
+  const r = fx.getBoundingClientRect();
+  zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+  clearTimeout(fx._wt); fx._wt = setTimeout(settle, 180);
+}, { passive: false });
+
+// touch: two fingers move and pinch; one finger scrolls the page as usual
+const mid = (t) => [(t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2];
+const spread = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+let oneFinger = null;
+fx.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const [mx, my] = mid(e.touches);
+    gesture = { kind: 'touch', mx, my, d: spread(e.touches) };
+    startMove();
+  } else if (e.touches.length === 1) {
+    oneFinger = { x: e.touches[0].clientX, y: e.touches[0].clientY, warned: false };
+  }
+}, { passive: false });
+fx.addEventListener('touchmove', (e) => {
+  if (gesture && gesture.kind === 'touch' && e.touches.length >= 2) {
+    e.preventDefault();
+    const [mx, my] = mid(e.touches), d = spread(e.touches), r = fx.getBoundingClientRect();
+    moveBy(mx - gesture.mx, my - gesture.my);
+    if (gesture.d > 20) zoomAt(d / gesture.d, mx - r.left, my - r.top);
+    gesture.mx = mx; gesture.my = my; gesture.d = d;
+    if (pastMargin()) render();
+  } else if (oneFinger && e.touches.length === 1 && !oneFinger.warned) {
+    const dx = e.touches[0].clientX - oneFinger.x, dy = e.touches[0].clientY - oneFinger.y;
+    // a sideways swipe with one finger: tell how to move the map (an up/down swipe just scrolls)
+    if (Math.abs(dx) > 24 && Math.abs(dx) > Math.abs(dy) * 1.5) { oneFinger.warned = true; showTip(); }
+  }
+}, { passive: false });
+fx.addEventListener('touchend', (e) => {
+  if (gesture && gesture.kind === 'touch' && e.touches.length < 2) { gesture = null; movedAt = performance.now(); settle(); }
+  if (!e.touches.length) oneFinger = null;
+});
+fx.addEventListener('touchcancel', () => { if (gesture) { gesture = null; settle(); } oneFinger = null; });
+
+// buttons: zoom, and back home with a short glide
+function zoomBtn(f) { closePops(); zoomAt(f, W / 2, focusY()); clearTimeout(fx._zt); fx._zt = setTimeout(settle, 250); }
+document.getElementById('zoomIn').addEventListener('click', () => zoomBtn(1.3));
+document.getElementById('zoomOut').addEventListener('click', () => zoomBtn(1 / 1.3));
+const homeTarget = () => MINE || PLOT || HOME;
+function updHomeBtn() {
+  const b = document.getElementById('mapHome'), h = homeTarget();
+  if (!h || !W) { b.hidden = true; return; }
+  const [cx, cy] = viewCenter();
+  b.textContent = MINE ? '⌂ Uz manu ciematu' : PLOT ? '⌂ Uz brīvo zemi' : '⌂ Atpakaļ';
+  b.hidden = Math.hypot(cx - h.x, cy - h.y) < D * 0.9;
+}
+document.getElementById('mapHome').addEventListener('click', () => {
+  const h = homeTarget();
+  if (!h) return;
+  closePops();
+  const [sx, sy] = viewCenter(), t0 = performance.now(), dur = reduce ? 0 : 450;
+  const step = (now) => {
+    const u = dur ? Math.min(1, (now - t0) / dur) : 1, e = 1 - Math.pow(1 - u, 3);
+    lookAt(sx + (h.x - sx) * e, sy + (h.y - sy) * e);
+    placeGround();
+    if (u < 1) requestAnimationFrame(step); else settle();
+  };
+  requestAnimationFrame(step);
+});
+
 /* ---------- tap a village or the plot ---------- */
-let sel = null;
+let sel = null; // selected village's name
 const pop = document.getElementById('pop');
 const plotPop = document.getElementById('plotPop');
-function openAuth(m) { plotPop.hidden = true; pop.hidden = true; sel = null; if (window.UzsSite) window.UzsSite.openModal(m); }
+function openAuth(m) { closePops(); if (window.UzsSite) window.UzsSite.openModal(m); }
+// place a card above a point, or below it when there is no room above (the header lives there)
+function placeCard(el, x, y) {
+  el.classList.remove('below');
+  el.style.left = clamp(x, 145, W - 145) + 'px';
+  el.style.top = y + 'px';
+  el.hidden = false;
+  if (y - el.offsetHeight - 14 < 64) { el.classList.add('below'); el.style.top = (y + 18) + 'px'; }
+}
+const pct = (w, n) => (n ? Math.round(w / n * 100) + '%' : '—');
+let cardReq = 0;
+function villageCard(t) {
+  const status = (s) => (s.online ? (s.playing ? 'tagad spēlē' : 'tiešsaistē') : 'nav tiešsaistē');
+  // this page doesn't keep a connection open, so the server can't see you here: you are online
+  const meHere = t.mine && VIEW === 'in';
+  const head = (L, s) => '<h3><span class="lv">' + L + '</span>' + esc(t.name) + '</h3><p>' + status(meHere ? { online: true, playing: s.playing } : s) + (t.tour ? ' · rīko turnīru' : '') + '</p>';
+  const playingNow = matches.some((m) => m.an === t.name || m.bn === t.name) || aiGames.some((g) => TOWNS[g.i] === t);
+  let foot = '';
+  if (t.mine && VIEW === 'known') foot = '<div class="row"><button type="button" class="gold" id="popLogin">Ielogoties</button></div>';
+  // the full profile window (ELO chart, latest games …) is for logged-in players; others get a way in
+  else if (VIEW !== 'in') foot = '<div class="row more"><button type="button" id="popMoreLogin">🔒 Pilna statistika — ielogojies</button></div>';
+  pop.innerHTML = head(t.L, { online: t.online, playing: playingNow }) + '<p class="loading">Ielādē statistiku…</p>' + foot;
+  const p = P(t.x, t.y, 1);
+  placeCard(pop, p[0], Math.max(150, p[1] - t.L * 3));
+  wireLogin(t);
+  const my = ++cardReq;
+  fetch('/api/player?name=' + encodeURIComponent(t.name), { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null)
+    .then((s) => {
+      if (my !== cardReq || pop.hidden || sel !== t.name) return;
+      if (!s) { pop.querySelector('.loading').textContent = 'Statistika nav pieejama.'; return; }
+      const rows = [];
+      rows.push(['Spēles kopā', String(s.games.d + s.games.m)]);
+      rows.push(['Duraks', s.duraks.played ? s.duraks.won + ' / ' + s.duraks.played + ' uzvaras · ' + pct(s.duraks.won, s.duraks.played) : 'vēl nav spēlēts']);
+      if (s.duraks.played) rows.push(['ELO', s.elo.oneVOne + ' (1:1) · ' + s.elo.multi + ' (3–4)']);
+      rows.push(['Meļi', s.meli.played ? s.meli.won + ' / ' + s.meli.played + ' uzvaras · ' + pct(s.meli.won, s.meli.played) : 'vēl nav spēlēts']);
+      const streak = Math.max(s.duraks.longestStreak || 0, s.meli.longestStreak || 0);
+      if (streak > 1) rows.push(['Garākā sērija', plural(streak, 'uzvara', 'uzvaras') + ' pēc kārtas']);
+      const me = site().me;
+      if (me && me !== t.name) { const n = pairsBy.get(pkey(me, t.name)) || 0; rows.push(['Kopā ar tevi', plural(n, 'spēle', 'spēles')]); }
+      if (s.since) rows.push(['Ciematā kopš', new Date(s.since).toLocaleDateString('lv-LV', { year: 'numeric', month: 'long' })]);
+      pop.innerHTML = head(s.level, s) + '<dl class="pstats">' + rows.map(([k, v]) => '<dt>' + k + '</dt><dd>' + esc(v) + '</dd>').join('') + '</dl>' + foot;
+      placeCard(pop, p[0], Math.max(150, p[1] - t.L * 3));
+      wireLogin(t);
+    });
+}
+function wireLogin(t) {
+  const ml = document.getElementById('popMoreLogin');
+  if (ml) ml.onclick = () => openAuth(site().known ? 'login' : 'signup');
+  const pl = document.getElementById('popLogin');
+  if (pl) pl.onclick = () => { openAuth('login'); const u = document.getElementById('fUser'); if (u) u.value = t.name; };
+}
 fx.addEventListener('click', (e) => {
-  if (!P) return;
+  if (!W || performance.now() - movedAt < 250) return; // that was the end of a drag, not a tap
   const r = fx.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
   plotPop.hidden = true;
   if (PLOT) {
     const g = P(PLOT.x, PLOT.y);
-    if (Math.hypot(mx - g[0], (my - g[1]) * 2) < 3.6 * K) {
+    if (Math.hypot(mx - g[0], (my - g[1]) * 2) < Math.max(3.6 * K, 26)) {
       pop.hidden = true; sel = null;
       plotPop.innerHTML = '<h3>Brīvs zemes gabals</h3><p>Reģistrējies, un šeit uzcelsim tavu pirmo būdiņu. Ar katru spēli tā augs.</p><div class="row"><button type="button" class="gold" id="ppReg">Reģistrēties</button><button type="button" id="ppHave">Man jau ir konts</button></div>';
-      plotPop.style.left = clamp(g[0], 135, W - 135) + 'px'; plotPop.style.top = (g[1] - 12) + 'px'; plotPop.hidden = false;
+      placeCard(plotPop, g[0], g[1] - 12);
       document.getElementById('ppReg').onclick = () => openAuth('signup');
       document.getElementById('ppHave').onclick = () => openAuth('login');
       return;
     }
   }
-  let best = -1, bd = 1e9;
-  TOWNS.forEach((t, i) => { const p = P(t.x, t.y); const d = Math.hypot(p[0] - mx, p[1] - my); if (d < bd) { bd = d; best = i; } });
-  if (best < 0) return;
-  const t = TOWNS[best];
-  if (bd > (Math.max(3, fenceR(t)) + 1) * K) { sel = null; pop.hidden = true; return; }
-  sel = best;
-  const p = P(t.x, t.y, 1);
-  const playing = matches.some((m) => m.a === best || m.b === best) || aiGames.some((g) => g.i === best);
-  const status = t.online ? (playing ? 'tagad spēlē' : 'tiešsaistē') : 'nav tiešsaistē';
-  const games = t.n + (t.n % 10 === 1 && t.n % 100 !== 11 ? ' spēle' : ' spēles');
-  let row = '';
-  if (t.mine && VIEW === 'known') row = '<div class="row"><button type="button" class="gold" id="popLogin">Ielogoties</button></div>';
-  else if (!t.mine) row = '<div class="row"><a class="b" href="' + (t.g === 'm' ? '/meli/' : '/duraks') + '">Spēlēt ' + (t.g === 'm' ? 'Meļus' : 'Duraku') + '</a></div>';
-  pop.innerHTML = '<h3><span class="lv">' + t.L + '</span>' + esc(t.name) + '</h3><p>' + (t.g === 'm' ? 'Galvenokārt Meļi' : 'Galvenokārt Duraks') + ' · ' + games + ' · ' + status + (t.tour ? ' · rīko turnīru' : '') + '</p>' + row;
-  pop.style.left = clamp(p[0], 135, W - 135) + 'px';
-  pop.style.top = Math.max(170, p[1] - t.L * 3) + 'px';
-  pop.hidden = false;
-  const pl = document.getElementById('popLogin');
-  if (pl) pl.onclick = () => { openAuth('login'); const u = document.getElementById('fUser'); if (u) u.value = t.name; };
+  let best = null, bd = 1e9;
+  TOWNS.forEach((t) => { const p = P(t.x, t.y); const d = Math.hypot(p[0] - mx, p[1] - my); if (d < bd) { bd = d; best = t; } });
+  if (!best || bd > Math.max((Math.max(3, fenceR(best)) + 1) * K, 22)) { closePops(); return; }
+  if (VIEW === 'in' && window.UzsProfile && window.UzsProfile.open(best.name)) { closePops(); return; }
+  sel = best.name;
+  villageCard(best);
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { pop.hidden = true; plotPop.hidden = true; sel = null; } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePops(); });
 
 /* ---------- start ---------- */
 let rt = null;
-new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { if (baseSig) render(); pop.hidden = true; plotPop.hidden = true; sel = null; }, 120); }).observe(hero);
-if (window.UzsSite) window.UzsSite.onChange(() => load());
+function onResize() {
+  const keep = W ? viewCenter() : null;
+  sizeCanvases();
+  if (keep && fitted) { lookAt(keep[0], keep[1]); render(); }
+  closePops(); updHomeBtn();
+}
+new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(onResize, 120); }).observe(hero);
+sizeCanvases();
+let lastWho = JSON.stringify(site());
+if (window.UzsSite) window.UzsSite.onChange(() => { const who = JSON.stringify(site()); if (who === lastWho) return; lastWho = who; fitted = false; townsBy.clear(); pairsBy.clear(); baseSig = ''; reqCenter = null; load(); });
 load();
-setInterval(() => { if (!document.hidden) load(); }, POLL_MS);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+setInterval(() => { if (!document.hidden && !gesture) load(reqCenter); }, POLL_MS);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) load(reqCenter); });
 requestAnimationFrame(frame);
 
 })();

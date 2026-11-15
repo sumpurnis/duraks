@@ -51,7 +51,9 @@ p { margin: 0; }
 /* ---------- Hero map ---------- */
 .hero { position: relative; height: min(78vh, 780px); min-height: 560px; overflow: hidden; background: #7fa35a; }
 .hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-#fx { cursor: pointer; }
+#cv { will-change: transform; }
+#fx { cursor: grab; touch-action: pan-y; }
+#fx.grabbing { cursor: grabbing; }
 .scrim { position: absolute; inset: 0 0 auto; height: 42%; background: linear-gradient(180deg, rgba(14,40,54,.88) 0%, rgba(14,40,54,.55) 45%, rgba(14,40,54,0) 100%); pointer-events: none; }
 .top { position: absolute; inset: 0 0 auto; display: flex; align-items: center; gap: 12px; padding-block: 14px; z-index: 3; }
 .logo { font-family: var(--font-display); font-weight: 700; font-size: 24px; color: var(--gold-bright); letter-spacing: .01em; text-decoration: none; }
@@ -91,7 +93,22 @@ p { margin: 0; }
 .cardpop button, .cardpop a.b { font: inherit; font-size: 13px; font-weight: 700; border-radius: 8px; padding: 7px 10px; border: 1px solid rgba(226,195,116,.6); background: rgba(255,255,255,.08); color: var(--room-fg); cursor: pointer; flex: 1; text-align: center; text-decoration: none; }
 .cardpop button.gold, .cardpop a.b.gold { background: linear-gradient(180deg, #e2c374, #c9a24b); color: #2a2005; }
 .hint { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); bottom: 16px; z-index: 3; background: rgba(14,40,54,.7); color: var(--muted); border-radius: 99px; padding: 5px 12px; font-size: 12px; }
+.cardpop.below { transform: translate(-50%, 0); }
+.cardpop .loading { font-style: italic; }
+.pstats { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 10px 0 0; font-size: 13px; }
+.pstats dt { color: var(--muted); }
+.pstats dd { margin: 0; color: var(--room-fg); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.mapctl { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); bottom: 52px; z-index: 3; display: flex; align-items: flex-end; gap: 8px; }
+.mapctl .zoom { display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; border: 1px solid rgba(226,195,116,.6); box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+.mbtn { font: inherit; font-weight: 700; color: var(--room-fg); background: rgba(14,40,54,.85); border: 0; cursor: pointer; min-width: 40px; min-height: 40px; font-size: 20px; line-height: 1; }
+.mbtn:hover { background: rgba(31,88,116,.95); }
+.mbtn:focus-visible { outline: 3px solid #fff; outline-offset: -3px; }
+.zoom .mbtn + .mbtn { border-top: 1px solid rgba(226,195,116,.35); }
+.mbtn.home { font-size: 14px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(226,195,116,.6); background: linear-gradient(180deg, #e2c374, #c9a24b); color: #2a2005; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+.maptip { position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%); z-index: 5; background: rgba(14,40,54,.9); color: var(--room-fg); border: 1px solid rgba(226,195,116,.6); border-radius: 12px; padding: 10px 14px; font-size: 14px; font-weight: 600; pointer-events: none; text-align: center; max-width: calc(100% - 48px); }
 @media (max-width: 640px) {
+  .mapctl { bottom: 12px; }
+  .feed { max-width: calc(100% - 120px); }
   .tbtn.alt { display: none; }
   .tbtn { padding: 7px 10px; }
   .feed .ev:not(:last-child) { display: none; }
@@ -220,6 +237,8 @@ p { margin: 0; }
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
 }
 
+
+.cardpop .more { margin-top: 10px; }
 
 @media (prefers-reduced-motion: reduce) {
   .dot, .ev { animation: none; }

@@ -28,7 +28,7 @@ const FILE = path.join(DATA_DIR, 'world.json');
 const GAMES = { duraks: 'd', meli: 'm' };
 // Games needed for each of the 10 village levels.
 const LEVELS = [0, 1, 5, 12, 25, 45, 75, 120, 180, 260];
-const WINDOW = 2; // hex rings shown around the centre of the view (up to 18 neighbours)
+const WINDOW = 3; // hex rings sent around the centre of the view (the page draws a margin around the screen for dragging)
 const MAX_EVENTS = 30;
 const POLL_MS = 3000;
 
@@ -226,14 +226,19 @@ if (pollTimer.unref) pollTimer.unref();
  * What the front page draws. `me` (optional) is a username the browser says it belongs to;
  * the view is centred on that village. Without one it is centred on the next free place,
  * which is shown as the "free plot" — exactly where a new player's village will appear.
+ * `at` ({ q, r }, optional) is where the visitor has dragged the map to; it overrides the centre.
  */
-function snapshot(me) {
+function snapshot(me, at) {
   seedAccounts();
   pollLive();
   const online = onlineNames();
   const meName = me && users.usernameExists(me) ? me : null;
   const freeHex = slotToHex(data.next);
-  const center = meName ? slotToHex(slotOf(meName)) : freeHex;
+  const home = meName ? slotToHex(slotOf(meName)) : freeHex;
+  const center = at && Number.isInteger(at.q) && Number.isInteger(at.r) ? { q: at.q, r: at.r } : home;
+  // how far out the villages go: the page doesn't let the map be dragged much past this
+  let extent = 1;
+  while (1 + 3 * extent * (extent + 1) < data.next + 1) extent++;
 
   const towns = [];
   for (const [name, idx] of Object.entries(data.slots)) {
@@ -273,6 +278,8 @@ function snapshot(me) {
 
   return {
     center,
+    home,
+    extent,
     me: meName,
     plot: meName ? null : freeHex,
     towns,
@@ -284,4 +291,11 @@ function snapshot(me) {
   };
 }
 
-module.exports = { recordGame, seen, gone, provide, provideTournamentHosts, seedGames, snapshot, levelOf, _slotToHex: slotToHex };
+/** Map-side facts about one player for the village card (level, games, place). */
+function playerInfo(name) {
+  if (!name || !users.usernameExists(name) || !(name in data.slots)) return null;
+  const g = data.games[name] || { d: 0, m: 0 };
+  return { level: levelOf(name), games: { d: g.d, m: g.m }, online: onlineNames().has(name), playing: live.some((x) => x.real.includes(name)) };
+}
+
+module.exports = { playerInfo, recordGame, seen, gone, provide, provideTournamentHosts, seedGames, snapshot, levelOf, _slotToHex: slotToHex };

@@ -74,6 +74,8 @@
   }
   window.UzsSite = {
     state: function () { return { me: me, known: me || known() || null }; },
+    // the saved login, for the logged-in-only extended stats (null when not logged in)
+    creds: function () { var t = ls('get', TOKEN_KEY); return me && t ? { me: me, token: t } : null; },
     onChange: function (fn) { listeners.push(fn); },
     openModal: function (m) { openModal(m); },
   };

@@ -273,6 +273,18 @@ function verifySessionToken(username, token) {
   return toPublic(name, record);
 }
 
+// Same check as verifySessionToken, but read-only: doesn't slide the expiry or write the file.
+// For cheap "is this a logged-in player?" checks (the front page's extended stats).
+function checkSessionToken(username, token) {
+  const name = normalize(username);
+  const record = store.users[name];
+  if (!record || !token) return false;
+  const tokens = Array.isArray(record.sessionTokens) ? record.sessionTokens : [];
+  const hash = hashToken(String(token));
+  const now = Date.now();
+  return tokens.some((t) => t.hash === hash && t.expiresAt > now);
+}
+
 // Invalidates one specific session token (explicit logout on that device).
 // Silently no-ops if the account or token isn't found.
 function invalidateSessionToken(username, token) {
@@ -431,6 +443,20 @@ function recordResult(username, didWin, isForfeit) {
 
 // Every account's name, registration time and Duraks games played — used once by the front
 // page's map (platform/world.js) to give existing players their village places.
+// What anyone may see about a player (the front page's village card): no e-mail, no history.
+function getPublicProfile(username) {
+  const name = normalize(username);
+  const record = store.users[name];
+  if (!record) return null;
+  const s = publicStats(record);
+  return {
+    username: name,
+    since: record.createdAt || null,
+    duraks: { played: s.played, won: s.won, lost: s.lost, longestStreak: s.longestStreak },
+    elo: { oneVOne: getElo(name, 'oneVOne'), multi: getElo(name, 'multi') },
+  };
+}
+
 function listAccounts() {
   return Object.entries(store.users).map(([username, r]) => ({
     username,
@@ -716,6 +742,8 @@ function getLeaderboards() {
 module.exports = {
   usernameExists,
   listAccounts,
+  getPublicProfile,
+  checkSessionToken,
   createAccount,
   verifyLogin,
   createSessionToken,

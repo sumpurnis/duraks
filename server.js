@@ -88,8 +88,52 @@ const worldLimiter = createRateLimiter({ max: 120, windowMs: 60 * 1000, blockMs:
 app.get('/api/world', (req, res) => {
   if (!worldLimiter.check(req.ip || 'x').allowed) return res.status(429).json({ error: 'slow down' });
   const me = typeof req.query.me === 'string' ? req.query.me.slice(0, 20) : null;
+  const q = Number(req.query.q), r = Number(req.query.r);
+  const at = Number.isInteger(q) && Number.isInteger(r) && Math.abs(q) < 1000 && Math.abs(r) < 1000 && req.query.q !== undefined ? { q, r } : null;
   res.set('Cache-Control', 'no-store');
-  res.json(world.snapshot(me));
+  res.json(world.snapshot(me, at));
+});
+
+// POST /api/player/full { name, me, token } — extended stats for logged-in players: the same as the
+// Duraks profile window (ELO, wins/losses incl. forfeits, streaks, today, recent games with ELO changes)
+// plus Meļi. The token is checked read-only (no write to users.json per click).
+app.post('/api/player/full', express.json({ limit: '2kb' }), (req, res) => {
+  if (!worldLimiter.check(req.ip || 'x').allowed) return res.status(429).json({ error: 'slow down' });
+  const b = req.body || {};
+  const me = typeof b.me === 'string' ? b.me.slice(0, 20) : '';
+  if (!me || !users.checkSessionToken(me, typeof b.token === 'string' ? b.token : '')) return res.status(401).json({ error: 'login' });
+  const name = typeof b.name === 'string' ? b.name.slice(0, 20) : '';
+  const stats = users.getStats(name);
+  const map = world.playerInfo(name);
+  if (!stats || !map) return res.status(404).json({ error: 'not found' });
+  const history = users.getGameHistory(name, 50).map((e) => ({
+    outcome: e.outcome, placement: e.placement || null, ranked: !!e.ranked, mode: e.mode, totalPlayers: e.totalPlayers,
+    deckSize: e.deckSize, vsBots: !!e.vsBots, opponents: e.opponents || [], eloPool: e.eloPool || null,
+    eloAfter: typeof e.eloAfter === 'number' ? e.eloAfter : null, eloChange: typeof e.eloChange === 'number' ? e.eloChange : null,
+    endReason: e.endReason || null, timestamp: e.timestamp,
+  }));
+  const m = (meli.manager.stats.data.players || {})[name] || null;
+  const mToday = m && m.daily && m.daily.date === new Date().toISOString().slice(0, 10) ? m.daily : null;
+  const profile = users.getPublicProfile(name);
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    username: name, since: profile.since, ...map, stats, history,
+    elo: profile.elo,
+    meli: m ? { played: m.played || 0, won: m.won || 0, currentStreak: m.currentStreak || 0, longestStreak: m.longestStreak || 0,
+      today: mToday ? { played: mToday.played, won: mToday.won } : { played: 0, won: 0 } } : { played: 0, won: 0, currentStreak: 0, longestStreak: 0, today: { played: 0, won: 0 } },
+  });
+});
+
+// GET /api/player?name=<name> — the village card: public stats from both games + the map's level.
+app.get('/api/player', (req, res) => {
+  if (!worldLimiter.check(req.ip || 'x').allowed) return res.status(429).json({ error: 'slow down' });
+  const name = typeof req.query.name === 'string' ? req.query.name.slice(0, 20) : '';
+  const profile = users.getPublicProfile(name);
+  const map = world.playerInfo(name);
+  if (!profile || !map) return res.status(404).json({ error: 'not found' });
+  const m = (meli.manager.stats.data.players || {})[name] || {};
+  res.set('Cache-Control', 'no-store');
+  res.json({ ...profile, meli: { played: m.played || 0, won: m.won || 0, longestStreak: m.longestStreak || 0 }, ...map });
 });
 
 const PORT = process.env.PORT || 3000;

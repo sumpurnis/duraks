@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Uzspēlēsim.lv — kāršu spēles internetā</title>
 <meta name="description" content="Duraks, Meļi un citas kāršu spēles internetā. Katram spēlētājam savs ciemats, kas aug ar katru spēli." />
-<link rel="stylesheet" href="landing.css" />
+<link rel="stylesheet" href="landing.css?v=202611151027" />
+<link rel="stylesheet" href="duraks-profile.css?v=202611151027" />
 </head>
 <body>
 
@@ -13,7 +14,7 @@
      played between them, walkers for games in progress. Header and the two game buttons sit on top. -->
 <section class="hero" id="hero" aria-label="Spēlētāju ciematu karte">
   <canvas id="cv" aria-hidden="true"></canvas>
-  <canvas id="fx" aria-label="Spēlētāju ciematu karte. Pieskaries ciematam, lai redzētu, kam tas pieder."></canvas>
+  <canvas id="fx" aria-label="Spēlētāju ciematu karte. Velc, lai pārvietotu; pieskaries ciematam, lai redzētu spēlētāja statistiku."></canvas>
   <div class="scrim"></div>
 
   <header class="top gut">
@@ -46,7 +47,7 @@
   <div class="cardpop" id="plotPop" hidden></div>
   <div class="cardpop" id="pop" hidden></div>
   <div class="feed" id="feed" aria-live="polite"></div>
-  <div class="hint">Pieskaries ciematam, lai redzētu, kam tas pieder</div>
+  <div class="hint">Velc karti, lai apskatītu apkārtni · pieskaries ciematam, lai redzētu statistiku</div>
 </section>
 
 <main class="below gut">
@@ -131,10 +132,55 @@
   </div>
 </div>
 
+<!-- The Duraks profile window (copied from games/duraks/public/index.html), opened from a village -->
+<div id="profileModal" class="dk dk-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+    <div class="modal-card modal-card-scrollable">
+      <div class="modal-scroll-body">
+      <h2 id="profileTitle">Profils</h2>
+      <div class="profile-stats">
+        <div class="profile-stat-row"><span><span class="elo-swatch elo-swatch-oneVOne"></span>ELO (1v1)</span><strong id="statEloOneVOne">—</strong></div>
+        <div class="profile-stat-row"><span><span class="elo-swatch elo-swatch-multi"></span>ELO (3-4 spēlētāji)</span><strong id="statEloMulti">—</strong></div>
+        <div class="profile-stat-row"><span>Spēles spēlētas</span><strong id="statPlayed">—</strong></div>
+        <div class="profile-stat-row"><span>Spēles uzvarētas</span><strong id="statWon">—</strong></div>
+        <div class="profile-stat-row"><span>Spēles zaudētas</span><strong id="statLost">—</strong></div>
+        <div class="profile-stat-row muted-row"><span>t.sk. uzvaras piespiedu kārtā</span><strong id="statWonForfeit">—</strong></div>
+        <div class="profile-stat-row muted-row"><span>t.sk. zaudējumi piespiedu kārtā</span><strong id="statLostForfeit">—</strong></div>
+        <div class="profile-stat-row"><span>Pašreizējā uzvaru sērija</span><strong id="statCurrentStreak">—</strong></div>
+        <div class="profile-stat-row"><span>Garākā uzvaru sērija (visu laiku)</span><strong id="statLongestStreak">—</strong></div>
+        <p class="profile-stats-divider">Šodien</p>
+        <div class="profile-stat-row"><span>Spēles šodien</span><strong id="statPlayedToday">—</strong></div>
+        <div class="profile-stat-row"><span>Uzvaras šodien</span><strong id="statWonToday">—</strong></div>
+        <div class="profile-stat-row"><span>Zaudējumi šodien</span><strong id="statLostToday">—</strong></div>
+        <div class="profile-stat-row"><span>Garākā sērija šodien</span><strong id="statLongestStreakToday">—</strong></div>
+      </div>
+      <div class="profile-elo-chart">
+        <div class="profile-elo-chart-header">
+          <p class="profile-stats-divider profile-elo-chart-divider">ELO svārstības</p>
+          <div class="elo-toggle-row" id="profileEloToggles">
+            <label class="elo-toggle"><input type="checkbox" data-pool="oneVOne" checked /><span class="elo-swatch elo-swatch-oneVOne"></span>1v1</label>
+            <label class="elo-toggle"><input type="checkbox" data-pool="multi" checked /><span class="elo-swatch elo-swatch-multi"></span>3-4 spēlētāji</label>
+          </div>
+        </div>
+        <div id="profileEloChart">
+          <p class="muted small">Nepietiek ranked spēļu grafikam (vajag vismaz 2 izvēlētajā skatā)</p>
+        </div>
+      </div>
+      <div class="profile-history">
+        <p class="profile-stats-divider">Pēdējās spēles</p>
+        <div id="profileHistoryList" class="profile-history-list">
+          <p class="muted small">Nav vēl izspēlētu spēļu…</p>
+        </div>
+      </div>
+      </div>
+      <button id="profileCloseBtn" class="btn btn-secondary">Aizvērt</button>
+    </div>
+  </div>
+
 <div id="toast" class="toast hidden" role="status"></div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="landing.js"></script>
-<script src="world-map.js" defer></script>
+<script src="landing.js?v=202611151027"></script>
+<script src="player-stats.js?v=202611151027" defer></script>
+<script src="world-map.js?v=202611151027" defer></script>
 </body>
 </html>
