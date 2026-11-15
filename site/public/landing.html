@@ -2,95 +2,85 @@
 <html lang="lv">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="color-scheme" content="light" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Uzspēlēsim.lv — kāršu spēles internetā</title>
-<meta name="description" content="Duraks, Meļi un citas kāršu spēles internetā. Viens konts visām spēlēm." />
+<meta name="description" content="Duraks, Meļi un citas kāršu spēles internetā. Katram spēlētājam savs ciemats, kas aug ar katru spēli." />
 <link rel="stylesheet" href="landing.css" />
 </head>
 <body>
 
-<header class="site-header" id="siteHeader">
-  <div class="site-header-inner">
-    <a class="wordmark" href="/" aria-label="Uzspēlēsim.lv — sākumlapa">Uzspēlēsim<span class="accent">.lv</span></a>
-    <nav class="site-nav" aria-label="Galvenā izvēlne">
-      <a href="#games">Spēles</a>
-      <a href="#how">Kā tas darbojas</a>
-    </nav>
-    <div class="site-auth">
-      <div id="guestArea" class="site-auth-row">
-        <button type="button" id="loginOpen" class="btn btn-secondary btn-sm">Pieslēgties</button>
-        <button type="button" id="signupOpen" class="btn btn-primary btn-sm">Reģistrēties</button>
+<!-- A full-width "living map": every registered player's village, roads worn by the games
+     played between them, walkers for games in progress. Header and the two game buttons sit on top. -->
+<section class="hero" id="hero" aria-label="Spēlētāju ciematu karte">
+  <canvas id="cv" aria-hidden="true"></canvas>
+  <canvas id="fx" aria-label="Spēlētāju ciematu karte. Pieskaries ciematam, lai redzētu, kam tas pieder."></canvas>
+  <div class="scrim"></div>
+
+  <header class="top gut">
+    <a class="logo" href="/" aria-label="Uzspēlēsim.lv — sākumlapa">Uzspēlē<span>sim</span></a>
+    <span class="sp"></span>
+    <div class="auth">
+      <div id="guestArea" class="auth-row">
+        <button type="button" id="loginOpen" class="tbtn">Ielogoties</button>
+        <button type="button" id="signupOpen" class="tbtn gold">Reģistrēties</button>
       </div>
-      <div id="userArea" class="site-auth-row hidden">
-        <span class="hello">Sveiki, <strong id="userName"></strong></span>
-        <button type="button" id="logoutBtn" class="btn btn-secondary btn-sm">Iziet</button>
+      <div id="knownArea" class="auth-row hidden">
+        <button type="button" id="knownLogin" class="tbtn gold">Ielogoties kā <span id="knownName"></span></button>
+        <button type="button" id="otherAccount" class="tbtn alt">Cits konts</button>
+      </div>
+      <div id="userArea" class="auth-row hidden">
+        <span class="who"><span class="av" id="userAv" aria-hidden="true"></span><span id="userName"></span></span>
+        <button type="button" id="logoutBtn" class="tbtn">Iziet</button>
       </div>
     </div>
+  </header>
+
+  <div class="center gut">
+    <div class="gbtns">
+      <a class="gbtn d" href="/duraks"><span class="suit" aria-hidden="true">♠</span>Spēlēt Duraku</a>
+      <a class="gbtn m" href="/meli/"><span class="suit" aria-hidden="true">♥</span>Spēlēt Meļus</a>
+    </div>
+    <span class="live" aria-live="polite"><span class="dot"></span>Tagad spēlē <b id="liveN">0</b> · <span id="onlineN">0</span> tiešsaistē</span>
   </div>
-</header>
 
-<main>
-  <section id="games" class="games">
-    <div class="wrap">
-      <h1 class="games-title">Izvēlies spēli</h1>
-      <p class="games-sub">Viens konts visām spēlēm. Nospied uz spēles — tā atvērsies savā lapā.</p>
+  <div class="cardpop" id="plotPop" hidden></div>
+  <div class="cardpop" id="pop" hidden></div>
+  <div class="feed" id="feed" aria-live="polite"></div>
+  <div class="hint">Pieskaries ciematam, lai redzētu, kam tas pieder</div>
+</section>
 
-      <div class="picker" id="picker" role="group" aria-label="Spēles">
-        <div class="picker-item">
-          <a class="picker-btn" href="/duraks" data-game="duraks">
-            <span class="mini-cards" aria-hidden="true"><i></i><i></i></span>
-            <span class="picker-name">Duraks</span>
-            <span class="picker-note">2–4 spēlētāju kāršu spēle</span>
-          </a>
-        </div>
-        <div class="picker-item">
-          <a class="picker-btn" href="/meli/" data-game="meli">
-            <span class="mini-cards" aria-hidden="true"><i></i><i></i><i></i></span>
-            <span class="picker-name">Meļi</span>
-            <span class="picker-note">Blefa kāršu spēle</span>
-          </a>
-        </div>
-        <div class="picker-item">
-          <div class="picker-btn picker-soon" aria-disabled="true">
-            <span class="soon-plus" aria-hidden="true">+</span>
-            <span class="picker-note">Drīzumā vairāk spēļu</span>
-          </div>
-        </div>
-      </div>
-      <p class="games-foot">Spēlēt var arī kā viesis. Konts vajadzīgs statistikai, turnīriem un atsauksmēm — un derēs visās spēlēs.</p>
+<main class="below gut">
+  <div class="gcards">
+    <a class="gcard d" href="/duraks">
+      <h2>♠ Duraks</h2>
+      <p>Klasiskā kāršu spēle 2–4 spēlētājiem, ar padošanu, turnīriem un ELO reitingu.</p>
+      <span class="stat" id="dStat">Tagad galdos: 0</span>
+    </a>
+    <a class="gcard m" href="/meli/">
+      <h2>♥ Meļi</h2>
+      <p>Blefošanas spēle: noliec kārti, paziņo mastu un ceri, ka neviens Tevi nepieķers melos!</p>
+      <span class="stat" id="mStat">Tagad galdos: 0</span>
+    </a>
+  </div>
+
+  <section class="legend" aria-labelledby="legendTitle">
+    <h2 id="legendTitle">Ko nozīmē karte</h2>
+    <div class="grid">
+      <div class="note"><h3>Tavs ciemats</h3><p>Katram reģistrētam spēlētājam ir savs ciemats. Ar katru spēli tas aug: no būdiņas līdz pilsētai ar mūri.</p></div>
+      <div class="note"><h3>Ceļi starp ciematiem</h3><p>Jo vairāk spēlē ar kādu, jo labāks ceļš starp jums: zāle, iemīta taciņa, dubļi, bruģis.</p></div>
+      <div class="note"><h3>Dūmi un gājēji</h3><p>Skurstenis kūp, kamēr spēlētājs ir tiešsaistē. Gājējs uz ceļa nozīmē, ka tieši tagad notiek spēle.</p></div>
+      <div class="note"><h3>Karogi</h3><p>Ciematā, kura saimnieks rīko turnīru, plīvo karodziņi.</p></div>
     </div>
-  </section>
-
-  <section id="how" class="how">
-    <div class="wrap">
-      <h2>Kā tas darbojas</h2>
-      <div class="steps">
-        <div class="step">
-          <span class="step-n">1</span>
-          <h3>Izveido vienu kontu</h3>
-          <p>Ar lietotājvārdu vai Google. Aizņem minūti.</p>
-        </div>
-        <div class="step">
-          <span class="step-n">2</span>
-          <h3>Izvēlies spēli</h3>
-          <p>Duraks jau tagad, Meļi blakus, vēlāk — vairāk.</p>
-        </div>
-        <div class="step">
-          <span class="step-n">3</span>
-          <h3>Spēlē un saglabā progresu</h3>
-          <p>Statistika un turnīru dalība seko tavam kontam.</p>
-        </div>
-      </div>
-    </div>
+    <p class="guest-note">Spēlēt var arī kā viesis. Konts vajadzīgs ciematam, statistikai un turnīriem — un derēs visās spēlēs.</p>
   </section>
 </main>
 
 <footer class="site-footer">
-  <div class="wrap footer-inner">
-    <span class="wordmark small">Uzspēlēsim<span class="accent">.lv</span></span>
+  <div class="footer-inner gut">
+    <span class="logo small">Uzspēlē<span>sim</span></span>
     <nav aria-label="Kājene">
-      <a href="#games">Spēles</a>
+      <a href="/duraks">Duraks</a>
+      <a href="/meli/">Meļi</a>
       <a href="/board.html">Atsauksmes</a>
       <a href="/privacy.html">Privātums</a>
       <a href="/data-deletion.html">Datu dzēšana</a>
@@ -145,5 +135,6 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="landing.js"></script>
+<script src="world-map.js" defer></script>
 </body>
 </html>

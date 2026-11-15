@@ -429,6 +429,16 @@ function recordResult(username, didWin, isForfeit) {
   save();
 }
 
+// Every account's name, registration time and Duraks games played — used once by the front
+// page's map (platform/world.js) to give existing players their village places.
+function listAccounts() {
+  return Object.entries(store.users).map(([username, r]) => ({
+    username,
+    createdAt: r.createdAt || 0,
+    played: (r.stats && r.stats.played) || 0,
+  }));
+}
+
 function getStats(username) {
   const name = normalize(username);
   const record = store.users[name];
@@ -705,6 +715,7 @@ function getLeaderboards() {
 
 module.exports = {
   usernameExists,
+  listAccounts,
   createAccount,
   verifyLogin,
   createSessionToken,

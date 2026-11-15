@@ -145,7 +145,7 @@ function makeRoomPassword() {
   return Array.from({ length: 6 }, () => GUEST_CHARS[Math.floor(Math.random() * GUEST_CHARS.length)]).join('');
 }
 
-module.exports = function registerMultiHandlers(io, socket, { getUsername, users }) {
+module.exports = function registerMultiHandlers(io, socket, { getUsername, users, world }) {
   let multiJoinedCode = null;
   let multiGuestUsername = null;
 
@@ -243,6 +243,9 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     } else {
       users.recordGameCompleted();
     }
+
+    // The front page's map: road wear between the players, village growth.
+    if (world) world.recordGame('duraks', room.humans.map((h) => h.username), { vsBot: vsBots });
 
     for (const h of room.humans) {
       const username = h.username;
@@ -679,4 +682,11 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     recordMultiGameHistory(room);
     scheduleMultiCleanup(room);
   });
+};
+
+// Games being played right now, for the front page's map (platform/world.js).
+module.exports.listActive = function listActive() {
+  return Array.from(multiRooms.values())
+    .filter((r) => r.game && r.game.status === 'active')
+    .map((r) => ({ id: r.code, players: r.humans.map((h) => h.username), vsBot: r.bots.length > 0 }));
 };

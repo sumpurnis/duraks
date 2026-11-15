@@ -16,6 +16,7 @@ const express = require('express');
 const gamesRegistry = require('./games/registry');
 const users = require('../../../platform/users');
 const auth = require('../../../platform/auth');
+const world = require('../../../platform/world');
 const { chooseMove } = require('./ai');
 const tournaments = require('./tournament/store');
 const { generateBracket } = require('./tournament/bracket-generator');
@@ -55,6 +56,19 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
   // In-memory rooms, keyed by 4-char code. Players are identified by *username*
   // (stable across reconnects/refreshes) — socketId is just where to reach them right now.
   const rooms = new Map();
+
+  // The front page's map shows the games being played right now and who runs a tournament.
+  world.provide('duraks', () => {
+    const out = [];
+    for (const room of rooms.values()) {
+      if (!room.game || room.game.status !== 'active') continue;
+      out.push({ id: 'r' + room.code, players: room.players.map((p) => p.username).filter((u) => u !== AI_ID), vsBot: !!room.vsAI });
+    }
+    return out.concat(registerMultiHandlers.listActive().map((g) => ({ ...g, id: 'm' + g.id })));
+  });
+  world.provideTournamentHosts(() =>
+    tournaments.listAll().filter((t) => t.status === 'active' || t.status === 'registration').map((t) => t.createdBy)
+  );
 
   function makeRoomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -215,6 +229,7 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
   // means that one entry is skipped by duration-based checks there.
   function recordTwoPlayerHistory(room, winnerId, durakId, draw, forfeit, endReason) {
     const usernames = room.players.map((p) => p.username).filter((u) => u !== AI_ID);
+    world.recordGame('duraks', usernames, { vsBot: !!room.vsAI });
     const durationMs = room.startedAt ? Date.now() - room.startedAt : undefined;
     for (const username of usernames) {
       let outcome;
@@ -687,7 +702,7 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
     // Fully separate room/event system for the 3-4 player vs-bots mode —
     // see games/duraks/games/duraks/server/multi-rooms.js. Shares nothing with the 2-player game
     // below except this one registration call and the username getter.
-    registerMultiHandlers(io, socket, { getUsername: () => username, users });
+    registerMultiHandlers(io, socket, { getUsername: () => username, users, world });
 
     // Accounts + the feedback board (platform/auth.js) — shared by every game. Duraks only hooks in to
     // remember which socket is the account's latest, and to send its own lobby data after a login.
@@ -695,6 +710,7 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
       beforeRegistered(sock, rec) {
         username = rec.username;
         userSockets.set(username, socket.id);
+        world.seen(username, socket.id);
       },
       afterRegistered() {
         socket.emit('openRoomsUpdated', listOpenRooms());
@@ -1251,6 +1267,7 @@ const profileLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs
     });
 
     socket.on('disconnect', () => {
+      world.gone(socket.id);
       if (username && userSockets.get(username) === socket.id) userSockets.delete(username);
       if (!joinedCode || !rooms.has(joinedCode)) return;
       const room = rooms.get(joinedCode);

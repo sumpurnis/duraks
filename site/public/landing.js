@@ -6,11 +6,19 @@
 //   - the same server-side Google/Facebook OAuth routes (/auth/google, /auth/facebook).
 // The only addition is `?return=/` on those routes, so the finished login comes back to this page.
 // The game buttons are plain links to /duraks and /meli/ (each game has its own page).
+//
+// Three header states:
+//   guest  — never logged in on this browser: Ielogoties / Reģistrēties (the map shows the free plot);
+//   known  — logged in here before, now logged out: «Ielogoties kā <name>» + «Cits konts»;
+//   in     — logged in.
+// "Known" is a small flag (uzs_known = last username) set on every login and kept on logout.
+// The map (world-map.js) reads the state through window.UzsSite.
 (function () {
   'use strict';
 
   var USER_KEY = 'duraks_username';
   var TOKEN_KEY = 'duraks_token';
+  var KNOWN_KEY = 'uzs_known';
   var SESSION_EXPIRED_MSG = 'Sesija vairs nav derīga, lūdzu piesakies no jauna';
   var NEXT_OK = { '/duraks': true, '/meli/': true };
 
@@ -51,11 +59,24 @@
   var autoLoginTried = false;
   var releaseTimer = null;
 
+  var listeners = [];
+  function known() { return ls('get', KNOWN_KEY); }
   function renderAccount() {
-    $('guestArea').classList.toggle('hidden', !!me);
+    if (me) ls('set', KNOWN_KEY, me);
+    var k = !me && known();
+    $('guestArea').classList.toggle('hidden', !!me || !!k);
+    $('knownArea').classList.toggle('hidden', !k);
     $('userArea').classList.toggle('hidden', !me);
     $('userName').textContent = me || '';
+    $('userAv').textContent = me ? me.charAt(0).toUpperCase() : '';
+    $('knownName').textContent = k || '';
+    listeners.forEach(function (fn) { try { fn(); } catch (e) { /* the map must never break the header */ } });
   }
+  window.UzsSite = {
+    state: function () { return { me: me, known: me || known() || null }; },
+    onChange: function (fn) { listeners.push(fn); },
+    openModal: function (m) { openModal(m); },
+  };
   function useSocket(fn) {
     clearTimeout(releaseTimer);
     if (socket.connected) fn();
@@ -184,11 +205,20 @@
   }
 
   $('loginOpen').addEventListener('click', function () { openModal('login'); });
+  $('knownLogin').addEventListener('click', function () {
+    openModal('login');
+    $('fUser').value = known() || '';
+    setTimeout(function () { $('fPass').focus(); }, 10);
+  });
+  $('otherAccount').addEventListener('click', function () {
+    openModal('login');
+    $('fUser').value = '';
+  });
   $('signupOpen').addEventListener('click', function () { openModal('signup'); });
   $('amClose').addEventListener('click', closeModal);
   $('amGuest').addEventListener('click', function () {
     closeModal();
-    $('games').scrollIntoView();
+    document.querySelector('.gcards').scrollIntoView({ behavior: 'smooth' });
   });
   $('amForgot').addEventListener('click', function () { setMode('forgot'); });
   $('amSwitch').addEventListener('click', function () {

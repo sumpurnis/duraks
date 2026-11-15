@@ -18,6 +18,7 @@ const { Server } = require('socket.io');
 const { DATA_DIR } = require('./platform/config');
 const users = require('./platform/users');
 const auth = require('./platform/auth');
+const world = require('./platform/world');
 const { createRateLimiter } = require('./platform/rate-limit');
 const duraks = require('./games/duraks/server');
 const { attachMeli, CLIENT_DIR: MELI_CLIENT_DIR } = require('./games/meli/server');
@@ -57,8 +58,14 @@ auth.registerHttpRoutes(app);
 // token plays under its account name. Its own limiter, so flaky reconnects there can't eat into the
 // login budget of the main login.
 const meliAuthLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs: 60 * 1000 });
-attachMeli(io, {
+const meli = attachMeli(io, {
   statsFile: path.join(DATA_DIR, 'meli-stats.json'),
+  // The front page's map: finished games wear roads and grow villages; connected players smoke.
+  onResult: ({ winner, loser, vsAI }) => {
+    const names = [winner, loser].filter((s) => s && !s.ai && s.account).map((s) => s.name);
+    world.recordGame('meli', names, { vsBot: !!vsAI });
+  },
+  onPresence: (name, id, on) => (on ? world.seen(name, 'meli:' + id) : world.gone('meli:' + id)),
   verifyAccount: (name, token, socket) => {
     if (!meliAuthLimiter.check(socket.handshake.address || socket.id).allowed) return null;
     const rec = users.verifySessionToken(name, token);
@@ -67,6 +74,23 @@ attachMeli(io, {
 });
 
 duraks.attach(io);
+
+// ---------- Front-page map ----------
+world.provide('meli', () =>
+  [...meli.manager.rooms.values()]
+    .filter((r) => r.status === 'playing')
+    .map((r) => ({ id: r.code, players: r.seats.filter((s) => s && !s.ai && s.account).map((s) => s.name), guests: r.seats.filter((s) => s && !s.ai && !s.account).length, vsBot: !!r.vsAI }))
+);
+world.seedGames('meli', Object.fromEntries(Object.entries(meli.manager.stats.data.players || {}).map(([n, p]) => [n, p.played || 0])));
+
+// GET /api/world?me=<name> — what the map draws. `me` only chooses where the view is centred.
+const worldLimiter = createRateLimiter({ max: 120, windowMs: 60 * 1000, blockMs: 60 * 1000 });
+app.get('/api/world', (req, res) => {
+  if (!worldLimiter.check(req.ip || 'x').allowed) return res.status(429).json({ error: 'slow down' });
+  const me = typeof req.query.me === 'string' ? req.query.me.slice(0, 20) : null;
+  res.set('Cache-Control', 'no-store');
+  res.json(world.snapshot(me));
+});
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

@@ -53,8 +53,16 @@ function staticHandler(req, res) {
  * told via the `account` event. Without it, or without valid credentials, names stay free-text
  * guest names exactly as before.
  */
-function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null } = {}) {
+function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null } = {}) {
   const stats = new MeliStats(statsFile);
+  // Optional outside listener for finished games (the site's front-page map). Never breaks the game.
+  if (onResult) {
+    const record = stats.record.bind(stats);
+    stats.record = (r) => {
+      record(r);
+      try { onResult(r); } catch (err) { console.error('Meļi onResult failed:', err); }
+    };
+  }
   const manager = new RoomManager(target, { ...cfg, stats });
 
   target.on('connection', (socket) => {
@@ -73,6 +81,7 @@ function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null } = {}) {
       }
     }
     socket.emit('account', account ? { username: account } : null);
+    if (account && onPresence) onPresence(account, socket.id, true);
     // `account` is set here by the server only (never taken from the client), so only real accounts count in the rankings.
     const named = (m) => ({ ...(m || {}), ...(account ? { name: account } : {}), account: !!account });
 
@@ -103,16 +112,20 @@ function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null } = {}) {
     socket.on('play', guard((m) => manager.play(socket, m)));
     socket.on('surrender', guard(() => manager.surrender(socket)));
     socket.on('challenge', guard(() => manager.challenge(socket)));
-    socket.on('disconnect', () => manager.disconnect(socket));
+    socket.on('disconnect', () => {
+      if (account && onPresence) onPresence(account, socket.id, false);
+      manager.disconnect(socket);
+    });
   });
 
+  manager.stats = stats;
   return manager;
 }
 
 /** Mounted mode: attach Meļi to a namespace (default `/meli`) of an existing Socket.io server. */
-function attachMeli(io, { namespace = '/meli', cfg = {}, verifyAccount, statsFile = null } = {}) {
+function attachMeli(io, { namespace = '/meli', cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null } = {}) {
   const nsp = io.of(namespace);
-  const manager = wireMeli(nsp, { cfg, verifyAccount, statsFile });
+  const manager = wireMeli(nsp, { cfg, verifyAccount, statsFile, onResult, onPresence });
   return { nsp, manager, dispose: () => manager.dispose() };
 }
 
