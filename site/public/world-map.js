@@ -413,13 +413,25 @@ let bK = 10, bOx = 0, bOy = 0;       // the view the ground canvas was last draw
 let roads = [], townT = new Map(), fitted = false;
 const P = (x, y, z = 0) => [ox + (x - y) * K, oy + (x + y) * K * 0.5 - z * K];
 const unP = (sx, sy) => { const a = (sx - ox) / K, b = 2 * (sy - oy) / K; return [(a + b) / 2, (b - a) / 2]; };
-const focusY = () => H * 0.62; // the middle of the map area, under the buttons
+// The open part of the map: between the game buttons at the top and the game cards at the bottom.
+const heroCards = document.getElementById('heroCards'), heroTop = document.querySelector('.hero .center');
+let mapTop = 220, mapBottom = 560;
+function measureArea() {
+  const hr = hero.getBoundingClientRect();
+  const cardsH = heroCards ? heroCards.getBoundingClientRect().height : 0;
+  hero.style.setProperty('--cards-h', Math.round(cardsH) + 'px');
+  mapTop = heroTop ? heroTop.getBoundingClientRect().bottom - hr.top + 10 : H * 0.3;
+  mapBottom = hr.height - cardsH - 24;
+  if (mapBottom - mapTop < 160) { mapTop = H * 0.3; mapBottom = H * 0.9; }
+}
+const focusY = () => (mapTop + mapBottom) / 2;
 const viewCenter = () => unP(W / 2, focusY());
 function lookAt(x, y) { ox = W / 2 - (x - y) * K; oy = focusY() - (x + y) * K * 0.5; }
 
 function sizeCanvases() {
   const r = hero.getBoundingClientRect();
   W = r.width; H = r.height;
+  measureArea();
   M = Math.round(clamp(Math.min(W, H) * 0.45, 160, 360));
   dpr = Math.min(2, window.devicePixelRatio || 1);
   // keep the ground canvas within a sane memory budget on big/high-density screens
@@ -437,7 +449,7 @@ function fit() {
   if (!pts.length) pts.push(homeXY);
   let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
   pts.forEach((t) => { const sx = t.x - t.y, sy = (t.x + t.y) / 2; x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy); });
-  K = clamp(Math.min(13, (W * 0.94) / (x1 - x0 + 30), (H * 0.46) / (y1 - y0 + 14)), W < 700 ? 6.5 : 7, K_MAX);
+  K = clamp(Math.min(13, (W * 0.94) / (x1 - x0 + 30), ((mapBottom - mapTop) * 0.75) / (y1 - y0 + 14)), W < 700 ? 6.5 : 7, K_MAX);
   let cx = (x0 + x1) / 2;
   if ((x1 - x0 + 30) * K > W) cx = homeXY.x - homeXY.y;
   const cy = (y0 + y1) / 2;
