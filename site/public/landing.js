@@ -93,6 +93,7 @@
   }
 
   socket.on('registered', function (rec) {
+    if (rec.notice) alert(rec.notice); // the server renamed this account (one-time note)
     me = rec.username;
     ls('set', USER_KEY, me);
     // sessionToken is only present on register/login/loginWithToken; a plain token reconnect keeps the old one.

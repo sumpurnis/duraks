@@ -342,4 +342,14 @@ function registerFeedbackHandlers(io, socket, { getUsername }) {
   });
 }
 
-module.exports = { registerFeedbackHandlers, POST_TYPES, STATUSES };
+/** A renamed account: its posts and comments show the new name (guests' free-text names are not accounts). */
+function renameAuthor(oldName, newName) {
+  let changed = false;
+  for (const p of store.posts) {
+    if (p.author === oldName && !p.isGuest) { p.author = newName; changed = true; }
+    for (const c of p.comments || []) if (c.author === oldName && !c.isGuest) { c.author = newName; changed = true; }
+  }
+  if (changed) save();
+}
+
+module.exports = { registerFeedbackHandlers, renameAuthor, POST_TYPES, STATUSES };

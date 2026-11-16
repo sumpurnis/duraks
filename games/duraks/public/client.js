@@ -345,6 +345,22 @@ el('emailSettingsSaveBtn').addEventListener('click', () => {
   socket.emit('updateEmail', { email });
 });
 
+// ---- Admin only: set another player's e-mail (the server checks that this account is the admin) ----
+socket.on('adminStatus', ({ isAdmin }) => {
+  el('adminEmailWrap').classList.toggle('hidden', !isAdmin);
+});
+el('adminEmailLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  const name = (window.prompt('Spēlētāja lietotājvārds (precīzi, ar lielajiem/mazajiem burtiem):') || '').trim();
+  if (!name) return;
+  const email = (window.prompt(`E-pasts spēlētājam «${name}»:`) || '').trim();
+  if (!email) return;
+  socket.emit('adminSetEmail', { username: name, email });
+});
+socket.on('adminEmailSet', ({ username, email }) => {
+  showToast(`Spēlētājam «${username}» e-pasts iestatīts: ${email}`);
+});
+
 socket.on('emailUpdated', ({ email }) => {
   myEmail = email;
   const p = el('emailSettingsStatus');
@@ -445,6 +461,8 @@ el('switchUserLink').addEventListener('click', (e) => {
 
 socket.on('registered', (rec) => {
   myUsername = rec.username;
+  el('adminEmailWrap').classList.add('hidden'); // shown again by 'adminStatus' for the admin account
+  if (rec.notice) { showLobbyError(rec.notice); showToast(rec.notice); }
   myEmail = rec.email || null;
   myLinkedProviders = rec.linkedProviders || [];
   autoLoginAttempted = false;

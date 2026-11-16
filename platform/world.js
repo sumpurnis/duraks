@@ -291,6 +291,22 @@ function buildSnapshot(me, at) {
   };
 }
 
+/** A renamed account keeps its village, its level and its roads. */
+function renameName(oldName, newName) {
+  if (has(data.slots, oldName) && !has(data.slots, newName)) { data.slots[newName] = data.slots[oldName]; delete data.slots[oldName]; }
+  if (has(data.games, oldName) && !has(data.games, newName)) { data.games[newName] = data.games[oldName]; delete data.games[oldName]; }
+  for (const key of Object.keys(data.pairs)) {
+    const [a, b] = key.split('\u0001');
+    if (a !== oldName && b !== oldName) continue;
+    const n = data.pairs[key];
+    delete data.pairs[key];
+    data.pairs[pairKey(a === oldName ? newName : a, b === oldName ? newName : b)] = n;
+  }
+  for (const e of events) if (e.names) e.names = e.names.map((x) => (x === oldName ? newName : x));
+  snapCache.clear();
+  saveSoon();
+}
+
 /** Map-side facts about one player for the village card (level, games, place). */
 function playerInfo(name) {
   if (!name || !users.usernameExists(name) || !has(data.slots, name)) return null;
@@ -298,4 +314,4 @@ function playerInfo(name) {
   return { level: levelOf(name), games: { d: g.d, m: g.m }, online: onlineNames().has(name), playing: live.some((x) => x.real.includes(name)) };
 }
 
-module.exports = { playerInfo, recordGame, seen, gone, provide, provideTournamentHosts, seedGames, snapshot, levelOf, _slotToHex: slotToHex };
+module.exports = { renameName, playerInfo, recordGame, seen, gone, provide, provideTournamentHosts, seedGames, snapshot, levelOf, _slotToHex: slotToHex };

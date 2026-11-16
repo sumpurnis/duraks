@@ -5,6 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const util = require('util');
 const persist = require('./persist');
+const profanity = require('./profanity');
 
 // DATA_DIR defaults to a folder next to this file, but can be pointed
 // somewhere else entirely via DURAKS_DATA_DIR — e.g. a Railway Volume
@@ -108,6 +109,70 @@ function rememberName(name) {
   if (foldIndex && !foldIndex.has(foldName(name))) foldIndex.set(foldName(name), name);
 }
 
+// ---------- Renamed accounts ----------
+// An account whose name breaks the rules (e.g. a rude word, see platform/profanity.js) is renamed by
+// the server. Its old name keeps working for logging in (password or saved login) and leads to the
+// new one; the first login afterwards tells the player about the change.
+let aliases = null; // old name -> current name
+function aliasMap() {
+  if (!aliases) {
+    aliases = new Map();
+    for (const [n, r] of Object.entries(store.users)) for (const old of r.renamedFrom || []) aliases.set(old, n);
+  }
+  return aliases;
+}
+function resolveName(username) {
+  const name = normalize(username);
+  return getRecord(name) ? name : aliasMap().get(name) || name;
+}
+
+/** Accounts whose current name is offensive. */
+function offensiveAccounts() {
+  return Object.keys(store.users).filter((n) => profanity.isOffensive(n));
+}
+
+/** A free neutral name such as "Spēlētājs4821". */
+function freeReplacementName() {
+  for (let i = 0; i < 1000; i++) {
+    const cand = 'Spēlētājs' + (1000 + Math.floor(Math.random() * 9000));
+    if (!usernameProblem(cand)) return cand;
+  }
+  return 'Spēlētājs' + Date.now();
+}
+
+/**
+ * Renames an account everywhere inside users.json: the record itself and other players' game
+ * history (opponent names). Other stores (map, Meļi, tournaments, feedback) are renamed by the caller.
+ */
+function renameAccount(oldName, newName) {
+  const record = getRecord(oldName);
+  if (!record || getRecord(newName)) return false;
+  delete store.users[oldName];
+  store.users[newName] = record;
+  record.renamedFrom = [...(record.renamedFrom || []), oldName];
+  record.renameNotice = { from: oldName, to: newName, at: Date.now() };
+  for (const r of Object.values(store.users)) {
+    for (const h of r.history || []) {
+      if (Array.isArray(h.opponents)) h.opponents = h.opponents.map((o) => (o === oldName ? newName : o));
+    }
+  }
+  aliasMap().set(oldName, newName);
+  foldIndex = null;
+  statsVersion++;
+  save();
+  return true;
+}
+
+/** The one-time "your name was changed" message for this account (cleared once taken). */
+function takeRenameNotice(username) {
+  const record = getRecord(username);
+  if (!record || !record.renameNotice) return null;
+  const n = record.renameNotice;
+  delete record.renameNotice;
+  save();
+  return `Tavs iepriekšējais lietotājvārds «${n.from}» nebija atļauts, tāpēc tas nomainīts uz «${n.to}». Turpmāk ielogojies ar jauno vārdu — parole un visa statistika ir tās pašas.`;
+}
+
 /** Why `username` can't be used for a NEW account (a Latvian message), or null when it can. */
 function usernameProblem(username) {
   const raw = String(username || '').normalize('NFC').trim();
@@ -117,6 +182,7 @@ function usernameProblem(username) {
   if (!/^[A-Za-z0-9ĀČĒĢĪĶĻŅŠŪŽāčēģīķļņšūž]/.test(raw)) return 'Lietotājvārdam jāsākas ar burtu vai ciparu';
   const folded = foldName(raw);
   if (RESERVED_PREFIXES.some((r) => folded.startsWith(r))) return 'Šis lietotājvārds ir rezervēts';
+  if (profanity.isOffensive(raw)) return 'Šāds lietotājvārds nav atļauts — lūdzu, izvēlies citu';
   if (getRecord(raw) || foldedOwner(raw)) return 'Šis lietotājvārds jau ir aizņemts';
   return null;
 }
@@ -268,7 +334,7 @@ function updateEmail(username, email) {
 // Verifies an existing account's password. Returns the public record, or
 // null if the account doesn't exist or the password is wrong.
 async function verifyLogin(username, password) {
-  const name = normalize(username);
+  const name = resolveName(username);
   const record = getRecord(name);
   if (!record || typeof password !== 'string') return null;
   if (!(await verifyPassword(record, password))) return null;
@@ -318,7 +384,7 @@ function createSessionToken(username) {
 // in) and returns the public record; returns null if the account, token,
 // or a non-expired match doesn't exist.
 function verifySessionToken(username, token) {
-  const name = normalize(username);
+  const name = resolveName(username);
   const record = getRecord(name);
   if (!record || !token) return null;
   const tokens = Array.isArray(record.sessionTokens) ? record.sessionTokens : [];
@@ -338,7 +404,7 @@ function verifySessionToken(username, token) {
 // Same check as verifySessionToken, but read-only: doesn't slide the expiry or write the file.
 // For cheap "is this a logged-in player?" checks (the front page's extended stats).
 function checkSessionToken(username, token) {
-  const name = normalize(username);
+  const name = resolveName(username);
   const record = getRecord(name);
   if (!record || !token) return false;
   const tokens = Array.isArray(record.sessionTokens) ? record.sessionTokens : [];
@@ -350,7 +416,7 @@ function checkSessionToken(username, token) {
 // Invalidates one specific session token (explicit logout on that device).
 // Silently no-ops if the account or token isn't found.
 function invalidateSessionToken(username, token) {
-  const name = normalize(username);
+  const name = resolveName(username);
   const record = getRecord(name);
   if (!record || !token) return;
   const tokens = Array.isArray(record.sessionTokens) ? record.sessionTokens : [];
@@ -833,6 +899,10 @@ function buildLeaderLists() {
 
 module.exports = {
   usernameExists,
+  offensiveAccounts,
+  freeReplacementName,
+  renameAccount,
+  takeRenameNotice,
   usernameProblem,
   isEmailVerified,
   flush: () => saver.flush(),

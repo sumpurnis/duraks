@@ -207,7 +207,9 @@ function registerSocketHandlers(io, socket, hooks = {}) {
     // one signal among several, not proof by itself (shared households,
     // NAT, and VPNs all produce the same signal innocently).
     users.recordLoginIp(username, socketIp(socket));
-    socket.emit('registered', { ...rec, sessionToken: token || null });
+    // a one-time note when the server renamed this account (offensive name), shown by the pages
+    const notice = users.takeRenameNotice(username);
+    socket.emit('registered', { ...rec, sessionToken: token || null, ...(notice ? { notice } : {}) });
     if (hooks.afterRegistered) hooks.afterRegistered(socket, rec);
   }
 

@@ -78,6 +78,7 @@ const socket = io();
   el('passwordInput').addEventListener('keydown', function (e) { if (e.key === 'Enter' && authMode === 'login') submitAuth(); });
 
   socket.on('registered', function (rec) {
+    if (rec.notice) alert(rec.notice); // the server renamed this account (one-time note)
     ls('set', USER_KEY, rec.username);
     if (rec.sessionToken) ls('set', TOKEN_KEY, rec.sessionToken);
     location.reload(); // the page starts again as this account

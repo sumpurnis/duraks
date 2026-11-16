@@ -19,6 +19,8 @@ const { DATA_DIR } = require('./platform/config');
 const users = require('./platform/users');
 const auth = require('./platform/auth');
 const world = require('./platform/world');
+const feedback = require('./platform/feedback');
+const profanity = require('./platform/profanity');
 const { createRateLimiter } = require('./platform/rate-limit');
 const { TRUST_PROXY, socketIp } = require('./platform/client-ip');
 const duraks = require('./games/duraks/server');
@@ -128,6 +130,7 @@ const meli = attachMeli(io, {
   },
   onPresence: (name, id, on) => (on ? world.seen(name, 'meli:' + id) : world.gone('meli:' + id)),
   canCreate: (socket) => meliCreateLimiter.check(socketIp(socket)).allowed,
+  nameFilter: profanity.isOffensive,
   verifyAccount: (name, token, socket) => {
     if (!meliAuthLimiter.check(socketIp(socket)).allowed) return null;
     const rec = users.verifySessionToken(name, token);
@@ -145,6 +148,31 @@ world.provide('meli', () =>
     .map((r) => ({ id: r.code, players: r.seats.filter((s) => s && !s.ai && s.account).map((s) => s.name), guests: r.seats.filter((s) => s && !s.ai && !s.account).length, vsBot: !!r.vsAI }))
 );
 world.seedGames('meli', Object.fromEntries(Object.entries(meli.manager.stats.data.players || {}).map(([n, p]) => [n, p.played || 0])));
+
+// ---------- Offensive usernames ----------
+// On every start, accounts whose name contains a rude word (platform/profanity.js) are renamed to a
+// neutral "Spēlētājs1234" everywhere: accounts and game history, the map, Meļi stats, tournaments and
+// the feedback board. The old name keeps working for logging in, and the player's first login after
+// the change shows them a note. New names are refused at registration. Set RENAME_OFFENSIVE_USERNAMES=0
+// to only list them in the log; ALLOWED_NAMES="Name1,Name2" exempts a real name the filter gets wrong.
+for (const oldName of users.offensiveAccounts()) {
+  if (process.env.RENAME_OFFENSIVE_USERNAMES === '0') {
+    console.warn(`Offensive username (not renamed, RENAME_OFFENSIVE_USERNAMES=0): ${oldName}`);
+    continue;
+  }
+  const newName = users.freeReplacementName();
+  if (!users.renameAccount(oldName, newName)) continue;
+  world.renameName(oldName, newName);
+  duraks.renameUser(oldName, newName);
+  feedback.renameAuthor(oldName, newName);
+  const mp = meli.manager.stats.data.players || {};
+  if (Object.prototype.hasOwnProperty.call(mp, oldName) && !Object.prototype.hasOwnProperty.call(mp, newName)) {
+    mp[newName] = mp[oldName];
+    delete mp[oldName];
+    meli.manager.stats.persistSoon();
+  }
+  console.log(`Renamed offensive username «${oldName}» → «${newName}»`);
+}
 
 // GET /api/world?me=<name> — what the map draws. `me` only chooses where the view is centred.
 const worldLimiter = createRateLimiter({ max: 120, windowMs: 60 * 1000, blockMs: 60 * 1000 });

@@ -53,7 +53,7 @@ function staticHandler(req, res) {
  * told via the `account` event. Without it, or without valid credentials, names stay free-text
  * guest names exactly as before.
  */
-function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null, canCreate = null } = {}) {
+function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null, canCreate = null, nameFilter = null } = {}) {
   const stats = new MeliStats(statsFile);
   // Optional outside listener for finished games (the site's front-page map). Never breaks the game.
   if (onResult) {
@@ -83,7 +83,12 @@ function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult 
     socket.emit('account', account ? { username: account } : null);
     if (account && onPresence) onPresence(account, socket.id, true);
     // `account` is set here by the server only (never taken from the client), so only real accounts count in the rankings.
-    const named = (m) => ({ ...(m || {}), ...(account ? { name: account } : {}), account: !!account });
+    // Guests type their own name; the host site can veto rude ones (they become plain "Viesis").
+    const named = (m) => {
+      const out = { ...(m || {}), ...(account ? { name: account } : {}), account: !!account };
+      if (!account && nameFilter && typeof out.name === 'string' && nameFilter(out.name)) out.name = 'Viesis';
+      return out;
+    };
 
     const guard = (fn) => (msg) => {
       try {
@@ -127,9 +132,9 @@ function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult 
 }
 
 /** Mounted mode: attach Meļi to a namespace (default `/meli`) of an existing Socket.io server. */
-function attachMeli(io, { namespace = '/meli', cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null, canCreate = null } = {}) {
+function attachMeli(io, { namespace = '/meli', cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null, canCreate = null, nameFilter = null } = {}) {
   const nsp = io.of(namespace);
-  const manager = wireMeli(nsp, { cfg, verifyAccount, statsFile, onResult, onPresence, canCreate });
+  const manager = wireMeli(nsp, { cfg, verifyAccount, statsFile, onResult, onPresence, canCreate, nameFilter });
   return { nsp, manager, dispose: () => manager.dispose() };
 }
 

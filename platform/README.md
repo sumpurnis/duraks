@@ -11,3 +11,9 @@ but can't be parsed (it falls back to the `.bak` first). `client-ip.js` — the 
 Railway's proxy (last `X-Forwarded-For` entry; trusted on Railway or with `TRUST_PROXY=1`).
 
 Environment: `PUBLIC_URL` must be set in production — password-reset links are built only from it.
+
+`profanity.js` — rude-word filter for player names (Latvian, English, Russian slang). New names are refused at
+registration (also OAuth sign-up and Meļi guest names); on every start, existing offensive account names are
+renamed to "Spēlētājs1234" everywhere (old name still logs in, one-time note to the player). Preview on real data:
+`node tools/check-usernames.js data/users.json`. Settings: `BLOCKED_NAME_WORDS` (extra words), `ALLOWED_NAMES`
+(exceptions), `RENAME_OFFENSIVE_USERNAMES=0` (only log, don't rename).

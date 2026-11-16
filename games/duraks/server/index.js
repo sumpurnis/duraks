@@ -758,7 +758,20 @@ const MAX_TOURNAMENT_PARTICIPANTS = 64;
       afterRegistered() {
         socket.emit('openRoomsUpdated', listOpenRooms());
         socket.emit('leaderboardsData', users.getLeaderboards());
+        if (username === ADMIN_USERNAME) socket.emit('adminStatus', { isAdmin: true });
       },
+    });
+
+    // Admin: set another player's e-mail (e.g. an account made with only a username and password, so it
+    // can use "forgot password"). Goes through the running server so it is saved like any other change.
+    socket.on('adminSetEmail', ({ username: target, email } = {}) => {
+      if (username !== ADMIN_USERNAME) return sendError(socket, 'Tikai administrators var mainīt citu spēlētāju e-pastu');
+      const name = typeof target === 'string' ? target.trim() : '';
+      if (!name || !users.usernameExists(name)) return sendError(socket, `Spēlētājs «${name}» nav atrasts (pārbaudi lielos/mazos burtus)`);
+      const result = users.updateEmail(name, email);
+      if (!result.ok) return sendError(socket, result.error);
+      console.log(`Admin ${username} set the e-mail of «${name}»`);
+      socket.emit('adminEmailSet', { username: name, email: result.email });
     });
 
     // ---------- Tournaments ----------
@@ -1365,4 +1378,9 @@ const MAX_TOURNAMENT_PARTICIPANTS = 64;
 
 }
 
-module.exports = { mountRoutes, attach };
+/** Renames a player inside the Duraks data that isn't in users.json (tournaments). */
+function renameUser(oldName, newName) {
+  tournaments.renameUser(oldName, newName);
+}
+
+module.exports = { mountRoutes, attach, renameUser };

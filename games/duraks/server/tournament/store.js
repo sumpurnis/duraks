@@ -503,7 +503,31 @@ function recordSeriesGameResult(tournamentId, matchId, gameWinnerId, roomCode) {
   return { ...match, seriesComplete };
 }
 
+// A renamed account (see platform/users.js renameAccount): every place a tournament stores the player's
+// name — organiser, participants, bracket, results — gets the new one. Names are exact strings, so a
+// deep replace of equal string values is safe.
+function replaceDeep(value, oldName, newName, seen = new Set()) {
+  if (!value || typeof value !== 'object' || seen.has(value)) return;
+  seen.add(value);
+  for (const key of Object.keys(value)) {
+    const v = value[key];
+    if (v === oldName) value[key] = newName;
+    else if (v && typeof v === 'object') replaceDeep(v, oldName, newName, seen);
+  }
+}
+function renameUser(oldName, newName) {
+  for (const t of registry.values()) replaceDeep(t, oldName, newName);
+  if (Object.prototype.hasOwnProperty.call(results, oldName) && !Object.prototype.hasOwnProperty.call(results, newName)) {
+    results[newName] = results[oldName];
+    delete results[oldName];
+  }
+  replaceDeep(results, oldName, newName);
+  persistTournaments();
+  persistResults();
+}
+
 module.exports = {
+  renameUser,
   ABSOLUTE_MIN_PARTICIPANTS,
   MIN_GAMES_TO_CREATE,
   statsToRating,
