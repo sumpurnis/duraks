@@ -354,6 +354,57 @@ html, body {
   pointer-events: none;
   color-scheme: light;
 }
+/* The trump card's three stages (client.js renderDeckTrump): .last = only the trump card is left (no pile
+   on it, no count); .empty = deck used up (the same spot shows only the trump suit). */
+.deck-pile.last .deck-stack-img,
+.deck-pile.last .deck-count,
+.deck-pile.empty .deck-stack-img,
+.deck-pile.empty .deck-count {
+  display: none;
+}
+.deck-last-chip {
+  display: none;
+  position: absolute;
+  top: 1cqw;
+  left: 13cqw;
+  z-index: 3;
+  white-space: nowrap;
+  padding: 0.4cqw 1.1cqw;
+  border-radius: 999px;
+  background: rgba(14, 40, 54, 0.85);
+  border: 1px solid rgba(226, 195, 116, 0.6);
+  color: var(--cream, #faf6ec);
+  font-size: 1.5cqw;
+  font-weight: 700;
+}
+.deck-pile.last .deck-last-chip { display: block; }
+.deck-pile.empty .deck-trump-card { box-shadow: none; overflow: visible; background: none; }
+.trump-ghost {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5cqw;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border-radius: 6px;
+  background: rgba(250, 246, 236, 0.9);
+  border: 0.25cqw dashed var(--gold, #c9a24b);
+  box-shadow: 0 0.5cqw 1.2cqw rgba(0, 0, 0, 0.25);
+  line-height: 1;
+}
+.trump-ghost .sym { font-family: var(--font-display, Georgia, serif); font-size: 6.6cqw; }
+.trump-ghost .lbl { font-size: 1.1cqw; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #5a4a2a; }
+.trump-ghost.red .sym { color: var(--red, #a8331f); }
+.trump-ghost.black .sym { color: #1d232a; }
+/* phones shrink the whole deck corner: bigger words there */
+@media (max-width: 640px) {
+  .deck-last-chip { font-size: 2.6cqw; padding: 0.6cqw 1.6cqw; }
+  .trump-ghost .sym { font-size: 9.5cqw; }
+  .trump-ghost .lbl { font-size: 1.8cqw; }
+}
+
 .deck-count {
   position: absolute;
   top: 0;

@@ -805,9 +805,7 @@ function render(state) {
   const oppId = state.opponent;
   el('opponentName').textContent = (state.names && state.names[oppId]) || 'Pretinieks';
 
-  const trumpEl = el('trumpCard');
-  trumpEl.innerHTML = '';
-  trumpEl.appendChild(cardChip(state.trumpCard));
+  renderDeckTrump(el('trumpCard'), state, cardChip);
 
   const banner = el('roleBanner');
   const isAttacker = state.yourRole === 'attacker';
@@ -820,6 +818,35 @@ function render(state) {
   renderActions(state);
 
   if (state.status === 'finished') showGameOver(state);
+}
+
+// The trump card keeps its place under the deck for the whole game; only what it shows changes:
+//   cards left  -> the pile with the count on top, the trump card (rank + suit) peeking out under it
+//   only 1 left -> just the trump card (nothing lies on it any more), marked "pēdējā kārts"
+//   0 left      -> the same spot and shape, only the trump suit + "TRUMPIS", no rank (the real card
+//                  is in someone's hand by now; showing its rank again only confused players)
+// Shared with multi-client.js.
+const TRUMP_SUIT_SYMBOL = { hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠' };
+const TRUMP_SUIT_NAME = { hearts: 'ercens', diamonds: 'kāravs', clubs: 'kreicis', spades: 'pīķis' };
+function renderDeckTrump(trumpEl, state, chipFn) {
+  const pileEl = trumpEl.parentElement;
+  const count = state.deckCount;
+  pileEl.classList.toggle('last', count === 1);
+  pileEl.classList.toggle('empty', count === 0);
+  trumpEl.innerHTML = '';
+  trumpEl.removeAttribute('title');
+  trumpEl.removeAttribute('aria-label');
+  if (count === 0 && state.trumpSuit) {
+    const suit = state.trumpSuit;
+    const ghost = document.createElement('span');
+    ghost.className = 'trump-ghost ' + (suit === 'hearts' || suit === 'diamonds' ? 'red' : 'black');
+    ghost.innerHTML = '<span class="sym">' + (TRUMP_SUIT_SYMBOL[suit] || '?') + '</span><span class="lbl">trumpis</span>';
+    trumpEl.appendChild(ghost);
+    trumpEl.title = 'Kava ir beigusies. Trumpji: ' + (TRUMP_SUIT_NAME[suit] || suit);
+    trumpEl.setAttribute('aria-label', trumpEl.title);
+  } else if (state.trumpCard) {
+    trumpEl.appendChild(chipFn(state.trumpCard));
+  }
 }
 
 function cardChip(card) {

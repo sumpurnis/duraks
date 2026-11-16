@@ -519,9 +519,7 @@ window.addEventListener('resize', function () {
 
 function multiRenderTable(state) {
   el('multiDeckCount').textContent = state.deckCount;
-  const trumpEl = el('multiTrumpCard');
-  trumpEl.innerHTML = '';
-  if (state.trumpCard) trumpEl.appendChild(multiCardChip(state.trumpCard));
+  renderDeckTrump(el('multiTrumpCard'), state, multiCardChip);
 
   const container = el('multiTableSlots');
   container.innerHTML = '';
