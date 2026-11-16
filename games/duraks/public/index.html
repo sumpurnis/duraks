@@ -100,7 +100,6 @@
         <p class="muted small">Istabas kods: <strong id="multiWaitingCode"></strong></p>
         <p id="multiWaitingPasswordRow" class="muted small hidden">Parole: <strong id="multiWaitingPassword"></strong></p>
         <div class="share-box">
-          <p class="muted small">Saite uz šo galdu — iepost Discord vai citur, lai atrastu spēlētājus:</p>
           <div class="share-link-row">
             <input id="multiShareLink" type="text" readonly aria-label="Saite uz galdu" />
             <button id="multiCopyLinkBtn" class="btn btn-secondary" type="button">Kopēt</button>
@@ -108,7 +107,6 @@
           </div>
           <p id="multiSharePrivateNote" class="muted small hidden">🔒 Parole saitē nav iekļauta — nosūti to atsevišķi tam, ar ko gribi spēlēt.</p>
         </div>
-        <button id="multiWaitingChatBtn" class="btn btn-secondary chat-toggle" type="button">💬 Čats</button>
         <button id="multiRoomCancelBtn" class="btn btn-danger hidden">Atcelt istabu</button>
         <button id="multiRoomLeaveWaitingBtn" class="btn btn-secondary hidden">Pamest istabu</button>
       </div>
@@ -193,12 +191,26 @@
       </div>
     </div>
 
+    <div class="lobby-col">
     <div id="boardPreviewPanel" class="stats-panel board-preview-panel">
       <h2 class="stats-title">Atsauksmes</h2>
       <div id="boardPreviewList" class="board-preview-list">
         <p class="muted small">Ielādē…</p>
       </div>
       <a href="/board.html" class="board-preview-link">Skatīt visus / pievienot ierakstu →</a>
+    </div>
+
+    <!-- The table's chat while waiting for players (shown only then; in the game it's the 💬 panel) -->
+    <section id="lobbyChatPanel" class="stats-panel lobby-chat-panel hidden" aria-label="Galda čats">
+      <h2 class="stats-title">Galda čats</h2>
+      <div id="lobbyChatMessages" class="lobby-chat-messages" aria-live="polite">
+        <p class="muted small lobby-chat-empty">Uzraksti kaut ko, kamēr gaidi spēlētājus.</p>
+      </div>
+      <div class="lobby-chat-input">
+        <input id="lobbyChatInput" type="text" placeholder="Uzraksti ziņu…" maxlength="300" aria-label="Ziņa" />
+        <button id="lobbyChatSendBtn" class="btn btn-primary" type="button">Sūtīt</button>
+      </div>
+    </section>
     </div>
     </div>
   </div>

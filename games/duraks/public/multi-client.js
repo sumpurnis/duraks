@@ -1017,10 +1017,16 @@ el('multiJoinPasswordModalInput').addEventListener('keydown', function (e) {
 
 // ================= Table chat =================
 // Everyone at a 2–4 player table can chat — guests too — while waiting, playing and after the game.
-// The server masks rude words; messages are shown as text (never as HTML).
+// While waiting for players the chat is an open block in the lobby (under "Atsauksmes"); in the game it
+// is the 💬 panel. Both show the same messages. The server masks rude words; messages are shown as
+// text (never as HTML).
 let multiChatOpen = false;
 let multiChatUnread = 0;
-const MULTI_CHAT_BUTTONS = ['multiChatBtn', 'multiWaitingChatBtn'];
+const MULTI_CHAT_BUTTONS = ['multiChatBtn'];
+const lobbyChatVisible = () => !el('lobbyChatPanel').classList.contains('hidden');
+function lobbyChatShow(on) {
+  el('lobbyChatPanel').classList.toggle('hidden', !on);
+}
 function multiChatBadge() {
   MULTI_CHAT_BUTTONS.forEach(function (id) {
     const btn = el(id);
@@ -1048,22 +1054,28 @@ function multiChatSetOpen(open) {
 }
 function multiChatReset() {
   el('multiChatMessages').innerHTML = '';
+  el('lobbyChatMessages').innerHTML = '<p class="muted small lobby-chat-empty">Uzraksti kaut ko, kamēr gaidi spēlētājus.</p>';
+  lobbyChatShow(false);
   multiChatUnread = 0;
   multiChatBadge();
   multiChatSetOpen(false);
 }
 function multiChatAdd(msg) {
-  const wrap = el('multiChatMessages');
-  const row = document.createElement('div');
   const mine = msg.from === (myUsername || multiMyUsername);
-  row.className = 'chat-msg' + (mine ? ' own' : '');
-  const who = document.createElement('span');
-  who.className = 'who';
-  who.textContent = msg.from + ':';
-  row.appendChild(who);
-  row.appendChild(document.createTextNode(' ' + msg.text));
-  wrap.appendChild(row);
-  wrap.scrollTop = wrap.scrollHeight;
+  ['multiChatMessages', 'lobbyChatMessages'].forEach(function (id) {
+    const wrap = el(id);
+    const empty = wrap.querySelector('.lobby-chat-empty');
+    if (empty) empty.remove();
+    const row = document.createElement('div');
+    row.className = 'chat-msg' + (mine ? ' own' : '');
+    const who = document.createElement('span');
+    who.className = 'who';
+    who.textContent = msg.from + ':';
+    row.appendChild(who);
+    row.appendChild(document.createTextNode(' ' + msg.text));
+    wrap.appendChild(row);
+    wrap.scrollTop = wrap.scrollHeight;
+  });
   return mine;
 }
 MULTI_CHAT_BUTTONS.forEach(function (id) {
@@ -1079,14 +1091,27 @@ function multiChatSend() {
 }
 el('multiChatSendBtn').addEventListener('click', multiChatSend);
 el('multiChatInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') multiChatSend(); });
+function lobbyChatSend() {
+  const input = el('lobbyChatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  socket.emit('multiChat', { text: text });
+  input.value = '';
+}
+el('lobbyChatSendBtn').addEventListener('click', lobbyChatSend);
+el('lobbyChatInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') lobbyChatSend(); });
 socket.on('multiChat', function (msg) {
   const mine = multiChatAdd(msg);
-  if (!multiChatOpen && !mine) {
+  if (!multiChatOpen && !mine && !lobbyChatVisible()) {
     multiChatUnread += 1;
     multiChatBadge();
   }
 });
 socket.on('multiChatHistory', function (list) {
   el('multiChatMessages').innerHTML = '';
+  el('lobbyChatMessages').innerHTML = '';
   (list || []).forEach(multiChatAdd);
 });
+// waiting for players: the open chat block in the lobby; the game starting: it hides (the 💬 panel takes over)
+socket.on('multiRoomWaiting', function () { lobbyChatShow(true); });
+socket.on('multiGameStarted', function () { lobbyChatShow(false); });
