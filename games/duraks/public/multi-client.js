@@ -33,6 +33,7 @@ function multiShowScreen() {
 }
 
 function multiReturnToLobby() {
+  multiChatReset();
   el('multiGame').classList.add('hidden');
   el('multiGameOverModal').classList.add('hidden');
   el('multiSafeModal').classList.add('hidden');
@@ -135,6 +136,7 @@ function multiRenderRoomsList(rooms) {
         if (r.isPrivate) {
           multiPendingJoinCode = r.code;
           el('multiJoinPasswordModalInput').value = '';
+          el('multiJoinPasswordError').classList.add('hidden');
           el('multiJoinPasswordModal').classList.remove('hidden');
           el('multiJoinPasswordModalInput').focus();
         } else {
@@ -319,6 +321,11 @@ socket.on('multiRoomWaiting', function (data) {
   el('multiRoomCancelBtn').classList.toggle('hidden', !data.isCreator);
   el('multiRoomLeaveWaitingBtn').classList.toggle('hidden', !!data.isCreator);
 
+  // the table's own link, to post on Discord etc. (never with the password in it)
+  el('multiShareLink').value = multiTableLink(data.code);
+  el('multiSharePrivateNote').classList.toggle('hidden', !data.isPrivate);
+  el('multiShareBtn').classList.toggle('hidden', !navigator.share);
+
   const passwordRow = el('multiWaitingPasswordRow');
   if (data.isPrivate && data.password) {
     el('multiWaitingPassword').textContent = data.password;
@@ -329,6 +336,7 @@ socket.on('multiRoomWaiting', function (data) {
 });
 
 socket.on('multiRoomCancelled', function () {
+  multiChatReset();
   el('multiRoomWaiting').classList.add('hidden');
   showToast('Istaba tika atcelta');
 });
@@ -337,6 +345,7 @@ el('multiRoomCancelBtn').addEventListener('click', function () {
   socket.emit('cancelMultiRoom');
 });
 el('multiRoomLeaveWaitingBtn').addEventListener('click', function () {
+  multiChatReset();
   socket.emit('multiLeaveRoom');
   el('multiRoomWaiting').classList.add('hidden');
 });
@@ -934,3 +943,150 @@ function multiAttachCardInteraction(cardEl, card, kind) {
     window.addEventListener('pointercancel', onUp);
   });
 }
+
+// ================= Table links =================
+// The waiting box shows /duraks?table=CODE. Opening it: a logged-in player (or one with a saved login)
+// joins that table straight away; anyone else is asked "play as a guest or log in". A private table
+// asks for its password, which the host sends separately — the link never carries it.
+function multiTableLink(code) {
+  return location.origin + '/duraks?table=' + encodeURIComponent(code);
+}
+el('multiCopyLinkBtn').addEventListener('click', function () {
+  const input = el('multiShareLink');
+  const done = function () { showToast('Saite nokopēta'); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(input.value).then(done, function () { input.select(); document.execCommand('copy'); done(); });
+  } else {
+    input.select();
+    document.execCommand('copy');
+    done();
+  }
+});
+el('multiShareBtn').addEventListener('click', function () {
+  if (!navigator.share) return;
+  navigator.share({ title: 'Duraks — pievienojies galdam', text: 'Uzspēlējam Duraku!', url: el('multiShareLink').value }).catch(function () {});
+});
+
+let pendingTableCode = (new URLSearchParams(location.search).get('table') || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 12) || null; // codes look like M-777N
+function clearTableParam() {
+  const u = new URL(location.href);
+  u.searchParams.delete('table');
+  history.replaceState(null, '', u.pathname + u.search + u.hash);
+}
+function joinPendingTable() {
+  if (!pendingTableCode) return;
+  const code = pendingTableCode;
+  pendingTableCode = null;
+  el('tableInviteModal').classList.add('hidden');
+  clearTableParam();
+  socket.emit('joinMultiRoom', { code: code });
+}
+function showTableInvite() {
+  if (!pendingTableCode) return;
+  el('tableInviteCode').textContent = pendingTableCode;
+  el('tableInviteModal').classList.remove('hidden');
+}
+// logged in (by hand, or by the saved login on page load): go to the table
+socket.on('registered', function () { if (pendingTableCode) joinPendingTable(); });
+// a saved login that turned out stale: ask as for any visitor
+socket.on('errorMsg', function (msg) { if (pendingTableCode && msg === SESSION_EXPIRED_MSG) showTableInvite(); });
+if (pendingTableCode && !localStorage.getItem(TOKEN_KEY)) showTableInvite();
+el('tableInviteGuestBtn').addEventListener('click', joinPendingTable);
+el('tableInviteLoginBtn').addEventListener('click', function () {
+  // stays pending: the 'registered' handler above joins once they're in
+  el('tableInviteModal').classList.add('hidden');
+  const name = document.getElementById('nameInput');
+  if (name) name.focus();
+});
+el('tableInviteCancelBtn').addEventListener('click', function () {
+  pendingTableCode = null;
+  el('tableInviteModal').classList.add('hidden');
+  clearTableParam();
+});
+// private table: ask for the password (also after a wrong one)
+socket.on('multiNeedPassword', function (data) {
+  multiPendingJoinCode = data.code;
+  el('multiJoinPasswordModalInput').value = '';
+  el('multiJoinPasswordError').classList.toggle('hidden', !data.wrong);
+  el('multiJoinPasswordModal').classList.remove('hidden');
+  el('multiJoinPasswordModalInput').focus();
+});
+el('multiJoinPasswordModalInput').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') el('multiJoinPasswordSubmitBtn').click();
+});
+
+// ================= Table chat =================
+// Everyone at a 2–4 player table can chat — guests too — while waiting, playing and after the game.
+// The server masks rude words; messages are shown as text (never as HTML).
+let multiChatOpen = false;
+let multiChatUnread = 0;
+const MULTI_CHAT_BUTTONS = ['multiChatBtn', 'multiWaitingChatBtn'];
+function multiChatBadge() {
+  MULTI_CHAT_BUTTONS.forEach(function (id) {
+    const btn = el(id);
+    let badge = btn.querySelector('.chat-badge');
+    if (multiChatUnread > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'chat-badge';
+        btn.appendChild(badge);
+      }
+      badge.textContent = multiChatUnread > 9 ? '9+' : String(multiChatUnread);
+    } else if (badge) {
+      badge.remove();
+    }
+  });
+}
+function multiChatSetOpen(open) {
+  multiChatOpen = open;
+  el('multiChatPanel').classList.toggle('hidden', !open);
+  if (open) {
+    multiChatUnread = 0;
+    multiChatBadge();
+    el('multiChatInput').focus();
+  }
+}
+function multiChatReset() {
+  el('multiChatMessages').innerHTML = '';
+  multiChatUnread = 0;
+  multiChatBadge();
+  multiChatSetOpen(false);
+}
+function multiChatAdd(msg) {
+  const wrap = el('multiChatMessages');
+  const row = document.createElement('div');
+  const mine = msg.from === (myUsername || multiMyUsername);
+  row.className = 'chat-msg' + (mine ? ' own' : '');
+  const who = document.createElement('span');
+  who.className = 'who';
+  who.textContent = msg.from + ':';
+  row.appendChild(who);
+  row.appendChild(document.createTextNode(' ' + msg.text));
+  wrap.appendChild(row);
+  wrap.scrollTop = wrap.scrollHeight;
+  return mine;
+}
+MULTI_CHAT_BUTTONS.forEach(function (id) {
+  el(id).addEventListener('click', function () { multiChatSetOpen(!multiChatOpen); });
+});
+el('multiChatCloseBtn').addEventListener('click', function () { multiChatSetOpen(false); });
+function multiChatSend() {
+  const input = el('multiChatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  socket.emit('multiChat', { text: text });
+  input.value = '';
+}
+el('multiChatSendBtn').addEventListener('click', multiChatSend);
+el('multiChatInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') multiChatSend(); });
+socket.on('multiChat', function (msg) {
+  const mine = multiChatAdd(msg);
+  if (!multiChatOpen && !mine) {
+    multiChatUnread += 1;
+    multiChatBadge();
+  }
+});
+socket.on('multiChatHistory', function (list) {
+  el('multiChatMessages').innerHTML = '';
+  (list || []).forEach(multiChatAdd);
+});

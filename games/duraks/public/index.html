@@ -99,6 +99,16 @@
         <p id="multiWaitingInfo" class="muted"></p>
         <p class="muted small">Istabas kods: <strong id="multiWaitingCode"></strong></p>
         <p id="multiWaitingPasswordRow" class="muted small hidden">Parole: <strong id="multiWaitingPassword"></strong></p>
+        <div class="share-box">
+          <p class="muted small">Saite uz šo galdu — iepost Discord vai citur, lai atrastu spēlētājus:</p>
+          <div class="share-link-row">
+            <input id="multiShareLink" type="text" readonly aria-label="Saite uz galdu" />
+            <button id="multiCopyLinkBtn" class="btn btn-secondary" type="button">Kopēt</button>
+            <button id="multiShareBtn" class="btn btn-secondary hidden" type="button">Dalīties</button>
+          </div>
+          <p id="multiSharePrivateNote" class="muted small hidden">🔒 Parole saitē nav iekļauta — nosūti to atsevišķi tam, ar ko gribi spēlēt.</p>
+        </div>
+        <button id="multiWaitingChatBtn" class="btn btn-secondary chat-toggle" type="button">💬 Čats</button>
         <button id="multiRoomCancelBtn" class="btn btn-danger hidden">Atcelt istabu</button>
         <button id="multiRoomLeaveWaitingBtn" class="btn btn-secondary hidden">Pamest istabu</button>
       </div>
@@ -415,10 +425,37 @@
     </div>
   </div>
 
+  <!-- Opened from a table link (/duraks?table=CODE) by someone who isn't logged in -->
+  <div id="tableInviteModal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Uzaicinājums uz galdu</h2>
+      <p class="playing-as">Tevi aicina spēlēt Duraku pie galda <strong id="tableInviteCode"></strong>.</p>
+      <div class="rematch-choice-row">
+        <button id="tableInviteGuestBtn" class="btn btn-primary" type="button">Spēlēt kā viesis</button>
+        <button id="tableInviteLoginBtn" class="btn btn-secondary" type="button">Ielogoties</button>
+      </div>
+      <button id="tableInviteCancelBtn" class="btn btn-ghost-danger" type="button">Atcelt</button>
+    </div>
+  </div>
+
+  <!-- Chat at a 2–4 player table (also while waiting for players) -->
+  <div id="multiChatPanel" class="chat-panel hidden" role="dialog" aria-label="Galda čats">
+    <div class="chat-header">
+      <span>Galda čats</span>
+      <button id="multiChatCloseBtn" class="chat-close" type="button" aria-label="Aizvērt čatu">✕</button>
+    </div>
+    <div id="multiChatMessages" class="chat-messages" aria-live="polite"></div>
+    <div class="chat-input-row">
+      <input id="multiChatInput" type="text" placeholder="Uzraksti ziņu…" maxlength="300" aria-label="Ziņa" />
+      <button id="multiChatSendBtn" class="btn btn-primary" type="button">Sūtīt</button>
+    </div>
+  </div>
+
   <div id="multiJoinPasswordModal" class="modal hidden">
     <div class="modal-card">
       <h2>🔒 Privāta istaba</h2>
       <p class="playing-as">Ievadi paroli, lai pievienotos</p>
+      <p id="multiJoinPasswordError" class="error hidden">Nepareiza parole — pamēģini vēlreiz</p>
       <label class="field">
         <span>Parole</span>
         <input id="multiJoinPasswordModalInput" type="text" maxlength="10" autocomplete="off" />
@@ -577,6 +614,7 @@
       <button id="multiDeclineBtn" class="btn btn-primary slot-off">Atteikties piemest</button>
       <button id="multiTransferBtn" class="btn btn-secondary slot-off">🔄 Padot</button>
       <button id="multiTakeBtn" class="btn btn-danger slot-off">Ņemt kārtis</button>
+      <button id="multiChatBtn" class="btn btn-secondary chat-toggle" type="button">💬 Čats</button>
     </div>
     <div class="game-prefs-row">
       <label class="sort-hand-row"><input type="checkbox" class="sort-hand-toggle" /> Kārtot kārtis augošā secībā</label>

@@ -872,7 +872,13 @@ html, body {
   padding: 8px 14px;
   font-size: 0.82rem;
 }
-#chatToggleBtn { position: relative; }
+#chatToggleBtn, .chat-toggle { position: relative; }
+/* the table link in the waiting box */
+.share-box { margin: 10px 0; }
+.share-box .share-link-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.share-box .share-link-row input { flex: 1 1 200px; min-width: 0; }
+.share-box .share-link-row .btn { width: auto; }
+#multiWaitingChatBtn { width: auto; margin-top: 6px; }
 .chat-badge {
   position: absolute;
   top: -6px;

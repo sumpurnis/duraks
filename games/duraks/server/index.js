@@ -17,6 +17,7 @@ const gamesRegistry = require('./games/registry');
 const users = require('../../../platform/users');
 const auth = require('../../../platform/auth');
 const world = require('../../../platform/world');
+const profanity = require('../../../platform/profanity');
 const { chooseMove } = require('./ai');
 const tournaments = require('./tournament/store');
 const { generateBracket } = require('./tournament/bracket-generator');
@@ -716,6 +717,12 @@ const MAX_TOURNAMENT_PARTICIPANTS = 64;
       users,
       world,
       canCreateRoom: () => roomCreateLimiter.check(socketIp(socket)).allowed,
+      // table chat: rate limit per connection, 300 characters, rude words masked; null = drop it
+      cleanChat: (text) => {
+        if (!chatLimiter.check(socket.id).allowed) return null;
+        const clean = String(text || '').trim().slice(0, 300);
+        return clean ? profanity.maskText(clean) : null;
+      },
     });
 
     // One 1-on-1 room per connection: creating a new one first closes the old one, unless a game
@@ -1277,12 +1284,14 @@ const MAX_TOURNAMENT_PARTICIPANTS = 64;
       endByForfeit(room, playerId, 'surrender');
     });
 
+    // Chat in a 1-on-1 room (tournament matches): guests too; rude words masked.
     socket.on('chatMessage', ({ text }) => {
-      if (!joinedCode || !username) return;
+      const from = username || playerId;
+      if (!joinedCode || !from) return;
       if (!chatLimiter.check(socket.id).allowed) return;
       const clean = String(text || '').trim().slice(0, 300);
       if (!clean) return;
-      io.to(joinedCode).emit('chatMessage', { from: username, text: clean, ts: Date.now() });
+      io.to(joinedCode).emit('chatMessage', { from, text: profanity.maskText(clean), ts: Date.now() });
     });
 
     socket.on('rematchVote', ({ vote }) => {

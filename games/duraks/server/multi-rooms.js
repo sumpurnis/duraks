@@ -145,7 +145,7 @@ function makeRoomPassword() {
   return Array.from({ length: 6 }, () => GUEST_CHARS[Math.floor(Math.random() * GUEST_CHARS.length)]).join('');
 }
 
-module.exports = function registerMultiHandlers(io, socket, { getUsername, users, world, canCreateRoom }) {
+module.exports = function registerMultiHandlers(io, socket, { getUsername, users, world, canCreateRoom, cleanChat }) {
   let multiJoinedCode = null;
   let multiGuestUsername = null;
 
@@ -434,7 +434,20 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     multiJoinedCode = room.code;
     socket.join(room.code);
     socket.leave(MULTI_LOBBY_ROOM);
+    // someone joining later sees what was said at the table so far
+    if (room.chatLog && room.chatLog.length) socket.emit('multiChatHistory', room.chatLog);
   }
+
+  // Table chat: everyone at the table (guests too), while waiting, playing and after the game.
+  socket.on('multiChat', ({ text } = {}) => {
+    const room = currentRoom();
+    if (!room) return;
+    const clean = cleanChat ? cleanChat(text) : String(text || '').trim().slice(0, 300);
+    if (!clean) return;
+    const msg = { from: effectiveUsername(), text: clean, ts: Date.now() };
+    room.chatLog = (room.chatLog || []).concat(msg).slice(-50);
+    io.to(room.code).emit('multiChat', msg);
+  });
 
   function broadcastWaitingRoom(room) {
     for (const h of room.humans) {
@@ -544,7 +557,8 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
       return sendMultiError('Tev jau ir aktīva istaba — vispirms to pamet vai atcel');
     }
     if (room.isPrivate && String(password || '').trim().toUpperCase() !== room.password) {
-      return sendMultiError('Nepareiza parole');
+      // the page asks for the password (a table link never carries it); `wrong` = one was given
+      return socket.emit('multiNeedPassword', { code: room.code, wrong: !!String(password || '').trim() });
     }
     if (room.ranked && !getUsername()) {
       return sendMultiError('Ranked istabām var pievienoties tikai reģistrēti lietotāji');

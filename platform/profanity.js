@@ -21,7 +21,7 @@ const ANYWHERE = [
   // Latvian
   'pimpis', 'pimpja', 'pimpim', 'pimpi', 'pizd', 'pizģ', 'pizg', 'dirsa', 'dirsā', 'dirst', 'mauka', 'maukas',
   'maukai', 'maukot', 'pederast', 'pēderast', 'pidar', 'pidor', 'nēģer', 'negeris', 'sūdabrāl', 'sudabral',
-  'mīzal', 'jobans', 'jobaņ', 'jebat', 'jeban', 'jebal', 'hujņ', 'hujn', 'pautu', 'pauti', 'loceklis', 'sperm',
+  'mīzal', 'jobans', 'jobaņ', 'jebat', 'jeban', 'jebal', 'hujņ', 'hujn', 'pautu', 'pauti', 'sperm',
   'ejakul', 'izdrāz', 'izdraz', 'drāzt', 'drazt',
   // Russian slang
   'blyat', 'bljat', 'bljad', 'blyad', 'pizdec', 'nahuj', 'nahui', 'nahuy', 'mudak', 'gandon', 'zalupa', 'shluh',
@@ -99,4 +99,17 @@ function isOffensive(name) {
   return false;
 }
 
-module.exports = { isOffensive };
+/**
+ * Chat text with rude words masked: each offending word keeps its first letter, the rest becomes
+ * asterisks ("pimpis" -> "p*****"). Word by word, so ordinary words next to it stay readable.
+ */
+function maskText(text) {
+  return String(text || '').replace(/[\p{L}\p{N}@$!|€]+(?:[._-][\p{L}\p{N}@$!|€]+)*/gu, (word) => {
+    // a trailing "!" or "|" is punctuation, not part of the word
+    const [, core, tail] = word.match(/^(.*?)([!|]*)$/u);
+    if (!core || !isOffensive(core)) return word;
+    return core[0] + '*'.repeat(Math.max(2, core.length - 1)) + tail;
+  });
+}
+
+module.exports = { isOffensive, maskText };
