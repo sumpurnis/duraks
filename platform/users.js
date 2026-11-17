@@ -126,6 +126,12 @@ function resolveName(username) {
   return getRecord(name) ? name : aliasMap().get(name) || name;
 }
 
+/** The account's current name (follows a rename and letter case), or null when there is no such account. */
+function canonicalName(username) {
+  const name = resolveName(username);
+  return getRecord(name) ? name : null;
+}
+
 /** Accounts whose current name is offensive. */
 function offensiveAccounts() {
   return Object.keys(store.users).filter((n) => profanity.isOffensive(n));
@@ -899,6 +905,7 @@ function buildLeaderLists() {
 
 module.exports = {
   usernameExists,
+  canonicalName,
   offensiveAccounts,
   freeReplacementName,
   renameAccount,

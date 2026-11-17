@@ -656,6 +656,28 @@ function apply(data) {
 }
 
 let loading = false, again = null;
+// Every check-in also tells the server "this tab still has the front page open", so a visitor shows
+// online without opening a game (the page keeps no permanent connection). The id is per browser tab
+// (kept over a reload); a logged-in visitor adds the saved login, which the server checks read-only.
+const store = (area, k, v) => { try { if (v === undefined) return window[area].getItem(k); window[area].setItem(k, v); } catch (e) { /* blocked */ } return null; };
+const VISIT_ID = (() => {
+  let id = store('sessionStorage', 'uzs_visit');
+  if (!/^[A-Za-z0-9]{8,40}$/.test(id || '')) {
+    const a = new Uint8Array(12);
+    (window.crypto || {}).getRandomValues ? crypto.getRandomValues(a) : a.forEach((_, i) => { a[i] = Math.random() * 256; });
+    id = Array.from(a, (b) => 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 56]).join('');
+    store('sessionStorage', 'uzs_visit', id);
+  }
+  return id;
+})();
+function visitHeaders() {
+  const h = { 'X-Uzs-Visit': VISIT_ID };
+  const u = store('localStorage', 'duraks_username');
+  const tk = store('localStorage', 'duraks_token');
+  if (u && tk) { h['X-Uzs-User'] = encodeURIComponent(u); h['X-Uzs-Token'] = tk; }
+  if (document.hidden) h['X-Uzs-Hidden'] = '1';
+  return h;
+}
 function load(at) {
   if (loading) { again = at || reqCenter || true; return; }
   loading = true;
@@ -663,7 +685,7 @@ function load(at) {
   const qs = [];
   if (who) qs.push('me=' + encodeURIComponent(who));
   if (at && at !== true) qs.push('q=' + at.q, 'r=' + at.r);
-  fetch(API + (qs.length ? '?' + qs.join('&') : ''), { cache: 'no-store' })
+  fetch(API + (qs.length ? '?' + qs.join('&') : ''), { cache: 'no-store', headers: visitHeaders() })
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => { if (d) apply(d); })
     .catch(() => { /* offline for a moment: keep the last picture */ })
@@ -992,7 +1014,13 @@ sizeCanvases();
 let lastWho = JSON.stringify(site());
 if (window.UzsSite) window.UzsSite.onChange(() => { const who = JSON.stringify(site()); if (who === lastWho) return; lastWho = who; fitted = false; townsBy.clear(); pairsBy.clear(); baseSig = ''; reqCenter = null; load(); });
 load();
-setInterval(() => { if (!document.hidden && !gesture) load(reqCenter); }, POLL_MS);
+// visible: every 10 s; a background tab only checks in every 50 s (enough to stay shown online)
+let ticks = 0;
+setInterval(() => {
+  ticks += 1;
+  if (gesture) return;
+  if (!document.hidden || ticks % 5 === 0) load(reqCenter);
+}, POLL_MS);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(reqCenter); });
 requestAnimationFrame(frame);
 

@@ -164,8 +164,43 @@ function seen(name, connId) {
 function gone(connId) {
   presence.delete(connId);
 }
+// The front page has no permanent connection: its map check-ins (GET /api/world) say "this visitor
+// still has the page open" for a short while. key = one browser tab; name = the account or null (guest).
+const visits = new Map(); // key -> { name, ip, until }
+const VISITS_MAX = 5000;
+const GUEST_TABS_PER_IP = 3; // one address can't pump up the "online" number
+function pruneVisits(now) {
+  for (const [k, v] of visits) if (v.until <= now) visits.delete(k);
+}
+/** A front-page check-in. Returns true when this changed who is shown online. */
+function touch(key, name, ip, ttlMs) {
+  const now = Date.now();
+  pruneVisits(now);
+  const real = name && users.usernameExists(name) ? name : null;
+  const had = visits.get(key);
+  if (!had) {
+    if (visits.size >= VISITS_MAX) return false;
+    if (!real && [...visits.values()].filter((v) => !v.name && v.ip === ip).length >= GUEST_TABS_PER_IP) return false;
+  }
+  const wasOnline = real ? onlineNames().has(real) : true;
+  visits.set(key, { name: real, ip, until: now + ttlMs });
+  if (!had || (had.name !== real) || !wasOnline) {
+    snapCache.clear(); // show the newcomer at once, not after the 2 s cache
+    return true;
+  }
+  return false;
+}
 function onlineNames() {
-  return new Set(presence.values());
+  const now = Date.now();
+  const out = new Set(presence.values());
+  for (const v of visits.values()) if (v.name && v.until > now) out.add(v.name);
+  return out;
+}
+function guestVisitors() {
+  const now = Date.now();
+  let n = 0;
+  for (const v of visits.values()) if (!v.name && v.until > now) n += 1;
+  return n;
 }
 
 // ------------------------------------------------------------------ live games
@@ -285,7 +320,8 @@ function buildSnapshot(me, at) {
     pairs,
     matches,
     solo,
-    counts: { playing, online: online.size + guestsPlaying, tables },
+    // online: accounts (in a game or on the front page) + guests at tables + guests with the front page open
+    counts: { playing, online: online.size + guestsPlaying + guestVisitors(), tables },
     // only recent news: the ticker must not keep showing a game that started an hour ago
     events: events.filter((e) => Date.now() - e.t < EVENT_MAX_AGE_MS).slice(-12),
   };
@@ -314,4 +350,4 @@ function playerInfo(name) {
   return { level: levelOf(name), games: { d: g.d, m: g.m }, online: onlineNames().has(name), playing: live.some((x) => x.real.includes(name)) };
 }
 
-module.exports = { renameName, playerInfo, recordGame, seen, gone, provide, provideTournamentHosts, seedGames, snapshot, levelOf, _slotToHex: slotToHex };
+module.exports = { renameName, playerInfo, recordGame, seen, gone, touch, provide, provideTournamentHosts, seedGames, snapshot, levelOf, _slotToHex: slotToHex };

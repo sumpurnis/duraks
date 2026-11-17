@@ -176,9 +176,25 @@ for (const oldName of users.offensiveAccounts()) {
 }
 
 // GET /api/world?me=<name> — what the map draws. `me` only chooses where the view is centred.
+// The map's regular check-in also keeps the visitor shown online while the front page is open (the page
+// holds no permanent connection): header X-Uzs-Visit = a random id per browser tab, plus
+// X-Uzs-User / X-Uzs-Token for a logged-in player (checked read-only), X-Uzs-Hidden: 1 for a background tab.
 const worldLimiter = createRateLimiter({ max: 120, windowMs: 60 * 1000, blockMs: 60 * 1000 });
+const VISIT_TTL_MS = 30 * 1000; // the map checks in every 10 s while visible
+const VISIT_TTL_HIDDEN_MS = 75 * 1000; // and every 50 s in a background tab
+function noteVisit(req) {
+  const visit = String(req.get('x-uzs-visit') || '');
+  if (!/^[A-Za-z0-9]{8,40}$/.test(visit)) return;
+  let user = '';
+  try { user = decodeURIComponent(String(req.get('x-uzs-user') || '')).slice(0, 20); } catch { user = ''; }
+  const token = String(req.get('x-uzs-token') || '').slice(0, 200);
+  const name = user && token && users.checkSessionToken(user, token) ? users.canonicalName(user) : null;
+  const ttl = req.get('x-uzs-hidden') === '1' ? VISIT_TTL_HIDDEN_MS : VISIT_TTL_MS;
+  world.touch(visit, name, req.ip || 'x', ttl); // one entry per tab: logging in or out just changes it
+}
 app.get('/api/world', (req, res) => {
   if (!worldLimiter.check(req.ip || 'x').allowed) return res.status(429).json({ error: 'slow down' });
+  noteVisit(req);
   const me = typeof req.query.me === 'string' ? req.query.me.slice(0, 20) : null;
   const q = Number(req.query.q), r = Number(req.query.r);
   const at = Number.isInteger(q) && Number.isInteger(r) && Math.abs(q) < 1000 && Math.abs(r) < 1000 && req.query.q !== undefined ? { q, r } : null;
