@@ -5,28 +5,33 @@
   const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
   const SUIT_NAME = { '♠': 'pīķi', '♥': 'sirdis', '♦': 'kāro', '♣': 'kreiči' };
   const SUIT_CLASS = { '♠': 'spades', '♥': 'hearts', '♦': 'diamonds', '♣': 'clubs' };
-  const MODE_NAME = { suit: 'Masts', 'suit-rank': 'Masts + vērtība' };
+  const DECK_NAME = { half: '24 kārtis', full: '52 kārtis' };
   const kartis = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'kārti' : 'kārtis');
+  const speletaji = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'spēlētāju' : 'spēlētājiem');
 
   // Messages that come from the server (English there) are shown in Latvian.
   const SERVER_MSG = [
     [/^That card is not in your hand/, 'Šīs kārts tev nav rokā.'],
     [/^The game is over/, 'Spēle ir beigusies.'],
     [/^There is nothing to challenge/, 'Vēl nav ko apsūdzēt.'],
+    [/^You cannot challenge your own card/, 'Savu kārti apsūdzēt nevar.'],
+    [/^You are out of this game/, 'Tu jau esi izstājies no šīs spēles.'],
     [/^Announce a (valid )?suit/, 'Paziņo mastu.'],
     [/^The suit is locked to (\S+)/, (m) => `Masts ir nofiksēts: ${m[1]}.`],
     [/^It is not your turn/, 'Tagad nav tava kārta.'],
     [/^You are not in a game/, 'Tu neesi spēlē.'],
-    [/^You are already in a game/, 'Tu jau esi spēlē. Vispirms izej no tās.'],
+    [/^You are already in a game/, 'Tu jau esi pie galda. Vispirms izej no tā.'],
     [/^The server is full/, 'Serveris ir pilns. Mēģini vēlāk.'],
-    [/^That game is no longer open/, 'Šī spēle vairs nav atvērta.'],
-    [/^The host is reconnecting/, 'Spēles autors atjauno savienojumu. Mēģini pēc brīža.'],
+    [/^That game is no longer open/, 'Šis galds vairs nav atvērts.'],
+    [/^That game is full/, 'Pie šī galda vairs nav brīvu vietu.'],
+    [/^The game has already started/, 'Spēle jau ir sākusies.'],
+    [/^The host is reconnecting/, 'Galda autors atjauno savienojumu. Mēģini pēc brīža.'],
     [/^Wrong password/, 'Nepareiza parole.'],
-    [/^This game is private/, 'Šī spēle ir privāta. Ievadi paroli.'],
+    [/^This game is private/, 'Šis galds ir privāts. Ievadi paroli.'],
     [/^Malformed move/, 'Nederīgs gājiens.'],
     [/^No game in progress/, 'Spēle nenotiek.'],
     [/^The game is not finished/, 'Spēle vēl nav beigusies.'],
-    [/^Your opponent has left/, 'Pretinieks ir izgājis no spēles.'],
+    [/^Your opponent has left/, 'Pārējie ir izgājuši no galda.'],
     [/^The computer hit an internal error/, 'Datoram radās kļūda. Sāc jaunu spēli.'],
     [/^Server error/, 'Servera kļūda.'],
   ];
@@ -38,7 +43,7 @@
     return msg;
   }
   const SESSION_KEY = 'meli.session';
-  const SETTINGS_KEY = 'meli.settings';
+  const SETTINGS_KEY = 'meli.settings2';
 
   const $ = (id) => document.getElementById(id);
   // Meļi lives in its own Socket.io namespace of the Uzspēlēsim.lv server and plays under the shared
@@ -65,10 +70,19 @@
   });
   renderAccount();
 
+  // the visible-viewport height for the table's size (same helper as Duraks)
+  function updateAppViewportHeight() {
+    const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    document.documentElement.style.setProperty('--app-vh', h * 0.01 + 'px');
+  }
+  updateAppViewportHeight();
+  (window.visualViewport || window).addEventListener('resize', updateAppViewportHeight);
+
   // ---- state -------------------------------------------------------------
   let view = null; // latest server state (the only source of truth for the table)
-  let session = null; // { code, token, seat, vsAI, password } of the room we are in
-  let screen = 'lobby'; // lobby | waiting | game
+  let wait = null; // latest waiting-room state
+  let session = null; // { code, token, seat, solo } of the room we are in
+  let screen = 'lobby'; // lobby | game
   let selectedId = null;
   let claim = null; // { forId, rank, suit }
   let activeSuit = null;
@@ -76,21 +90,26 @@
   let revealTimer = null;
   let overTimer = null;
   let overShown = false;
+  let outShown = false;
   let noticeText = '';
   let noticeTimer = null;
   let toastTimer = null;
   let lastRound = null;
-  let turnTotal = 60000; // length of a full move, for the timer bar
-  let deadline = null; // Date.now() value at which our/their turn timer runs out
+  let turnTotal = 60000; // length of a full move, for the timer bars
+  let deadline = null; // Date.now() value at which the current move's timer runs out
   let pendingJoin = null; // { code } while the password popup is open
-  let invite = null; // { code, pw } from ?room=
+  let invite = null; // { code, pw } from ?table= (or the old ?room=)
+  let myTableName = '';
   // Only the suit-only version is switched on for now. The suit + rank version still exists in the engine
-  // (server/engine.js) and is re-enabled by listing 'suit-rank' in ANNOUNCE_ENABLED (server/rooms.js) and
-  // adding the switch back to the setup pop-up.
-  let settings = { announce: 'suit', size: '12', private: 'off' };
+  // (server/engine.js) and is re-enabled by listing 'suit-rank' in ANNOUNCE_ENABLED (server/rooms.js).
+  let settings = { total: 2, deck: 'half', ai: 0, private: false, announce: 'suit' };
   try {
     const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
-    if (saved && (saved.size === '12' || saved.size === '26')) settings.size = saved.size;
+    if (saved) {
+      if (saved.total >= 2 && saved.total <= 6) settings.total = saved.total;
+      if (saved.deck === 'half' || saved.deck === 'full') settings.deck = saved.deck;
+      if (saved.ai >= 0 && saved.ai < settings.total) settings.ai = saved.ai;
+    }
   } catch { /* ignore */ }
 
   // ---- storage (can throw in private windows) -------------------------------
@@ -127,8 +146,16 @@
   const face = (c) => (c.rank === null ? c.suit : c.rank + c.suit);
   const selectable = () => !!view && view.canPlay && !busy;
   const selectedCard = () => (view && selectedId ? view.hand.find((c) => c.id === selectedId) : null);
-  const oppName = () => (view && view.room && view.room.opp ? view.room.opp.name : 'Pretinieks');
-  const vsAI = () => !!(view && view.room && view.room.vsAI);
+  const seatOf = (i) => (view && view.room.seats[i]) || { name: '?' };
+  const nameOf = (i) => (view && i === view.you ? 'Tu' : seatOf(i).name);
+  const nextOf = (i) => {
+    if (!view) return i;
+    for (let j = 1; j <= view.players; j++) {
+      const q = (i + j) % view.players;
+      if (!view.out[q]) return q;
+    }
+    return i;
+  };
 
   function defaultClaim(card) {
     return { forId: card.id, rank: suitOnly() ? null : card.rank, suit: view.lockedSuit || card.suit };
@@ -137,8 +164,8 @@
   function show(name) {
     screen = name;
     $('lobby').classList.toggle('hidden', name !== 'lobby');
-    $('meliStage').classList.toggle('hidden', name === 'lobby');
-    for (const s of ['waiting', 'game']) $(s).classList.toggle('hidden', s !== name);
+    $('meliStage').classList.toggle('hidden', name !== 'game');
+    if (name === 'game') requestAnimationFrame(placeDirs);
   }
 
   function toast(msg) {
@@ -162,8 +189,8 @@
     clearTimeout(overTimer);
     $('reveal').classList.add('hidden');
     closeModal('over');
-    closeModal('leaveModal');
     overShown = false;
+    outShown = false;
     view = null;
     selectedId = null;
     claim = null;
@@ -174,11 +201,20 @@
     busy = false;
   }
 
+  function hideWaiting() {
+    wait = null;
+    $('waitBox').classList.add('hidden');
+    lobbyChatShow(false);
+  }
+
   function toLobby() {
     resetTable();
+    hideWaiting();
+    chatReset();
     session = null;
     saveSession();
     show('lobby');
+    socket.emit('rooms:refresh');
   }
 
   // ---- lobby -------------------------------------------------------------
@@ -189,54 +225,83 @@
   }
 
   function saveSettings() {
-    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ announce: settings.announce, size: settings.size })); } catch { /* ignore */ }
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ total: settings.total, deck: settings.deck, ai: settings.ai })); } catch { /* ignore */ }
   }
 
-  function syncSetup() {
-    document.querySelectorAll('.seg').forEach((seg) => {
-      const key = seg.dataset.key;
-      seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === settings[key])));
-    });
-    $('createSubmit').textContent = settings.private === 'on' ? '🔒 Izveidot privātu istabu' : 'Izveidot istabu';
+  function setActive(group, value) {
+    Array.from($(group).children).forEach((b) => b.classList.toggle('active', b.dataset.value === String(value)));
   }
 
-  document.querySelectorAll('.seg').forEach((seg) => {
-    seg.addEventListener('click', (e) => {
-      const b = e.target.closest('button');
-      if (!b) return;
-      settings[seg.dataset.key] = b.dataset.value;
-      syncSetup();
-    });
+  // Same create pop-up as Duraks: players 2–6, deck, how many of them are the computer, private.
+  function refreshSetup() {
+    if (settings.ai > settings.total - 1) settings.ai = settings.total - 1;
+    setActive('setupTotal', settings.total);
+    setActive('setupDeck', settings.deck);
+    const aiGroup = $('setupAi');
+    aiGroup.replaceChildren();
+    for (let i = 0; i < settings.total; i++) {
+      const b = el('button', 'btn-option', String(i));
+      b.type = 'button';
+      b.dataset.value = String(i);
+      aiGroup.append(b);
+    }
+    setActive('setupAi', settings.ai);
+    $('setupPrivate').checked = settings.private;
+    $('setupPrivate').disabled = settings.ai === settings.total - 1; // nobody to keep out of a computer game
+  }
+  $('setupTotal').addEventListener('click', (e) => {
+    const b = e.target.closest('.btn-option');
+    if (!b) return;
+    settings.total = Number(b.dataset.value);
+    refreshSetup();
   });
+  $('setupDeck').addEventListener('click', (e) => {
+    const b = e.target.closest('.btn-option');
+    if (!b) return;
+    settings.deck = b.dataset.value;
+    refreshSetup();
+  });
+  $('setupAi').addEventListener('click', (e) => {
+    const b = e.target.closest('.btn-option');
+    if (!b) return;
+    settings.ai = Number(b.dataset.value);
+    refreshSetup();
+  });
+  $('setupPrivate').addEventListener('change', () => { settings.private = $('setupPrivate').checked; });
 
-  function createRoom({ vsAI, size, isPrivate }) {
+  function createRoom({ total, ai, deck, isPrivate }) {
     resetTable();
+    chatReset();
     socket.emit('room:create', {
       name: myName(),
-      vsAI,
+      totalPlayers: total,
+      aiCount: ai,
+      deck,
       announce: settings.announce,
-      handSize: Number(size || settings.size),
       private: !!isPrivate,
     });
   }
 
-  function openSetup() {
-    settings.private = 'off';
-    syncSetup();
+  function openSetup(preset) {
+    if (preset) Object.assign(settings, preset);
+    settings.private = false;
+    refreshSetup();
     openModal('setupModal');
   }
 
-  // Same buttons as the Duraks lobby: computer game, room with options, quick rooms.
-  ['playGuestBtn', 'playAIBtn'].forEach((id) => $(id).addEventListener('click', () => createRoom({ vsAI: true })));
-  ['createRoomGuestBtn', 'createBtn'].forEach((id) => $(id).addEventListener('click', openSetup));
+  // Same buttons as the Duraks lobby: computer game, room with options, quick rooms (pre-filled pop-up).
+  ['playGuestBtn', 'playAIBtn'].forEach((id) => $(id).addEventListener('click', () => createRoom({ total: 2, ai: 1, deck: settings.deck })));
+  ['createRoomGuestBtn', 'createBtn'].forEach((id) => $(id).addEventListener('click', () => openSetup()));
   document.querySelectorAll('[data-preset]').forEach((b) => {
-    b.addEventListener('click', () => createRoom({ vsAI: false, size: b.dataset.preset }));
+    b.addEventListener('click', () => {
+      const [n, deck] = b.dataset.preset.split('-');
+      openSetup({ total: Number(n), deck, ai: 0 });
+    });
   });
-  $('setupForm').addEventListener('submit', (e) => {
-    e.preventDefault();
+  $('createSubmit').addEventListener('click', () => {
     saveSettings();
     closeModal('setupModal');
-    createRoom({ vsAI: false, isPrivate: settings.private === 'on' });
+    createRoom({ total: settings.total, ai: settings.ai, deck: settings.deck, isPrivate: settings.private && settings.ai < settings.total - 1 });
   });
   $('setupCancel').addEventListener('click', () => closeModal('setupModal'));
   $('switchUserLink').addEventListener('click', (e) => {
@@ -244,20 +309,33 @@
     if (window.meliLobby && window.meliLobby.logout) window.meliLobby.logout();
   });
 
+  function silhouettes(box, seats) {
+    box.replaceChildren();
+    for (const s of seats) {
+      const i = el('span', 'multi-silhouette' + (s ? '' : ' multi-silhouette-empty'), s && s.ai ? '🤖' : '👤');
+      if (s && s.ready && !s.ai) i.classList.add('is-ready');
+      if (s) i.title = s.name;
+      box.append(i);
+    }
+  }
+
   function renderRooms(list) {
     const box = $('roomList');
     box.replaceChildren();
-    if (!list.length) {
+    const rows = (list || []).filter((r) => !session || r.code !== session.code);
+    if (!rows.length) {
       box.append(el('p', 'muted small', 'Nav atvērtu spēļu…'));
       return;
     }
-    for (const r of list) {
+    for (const r of rows) {
       const row = el('div', 'open-room-row');
       const info = el('div', 'open-room-info');
-      info.append(
-        el('span', 'host-name', (r.private ? '🔒 ' : '') + r.host),
-        el('p', 'muted small', `${MODE_NAME[r.announce]} · ${r.handSize * 2} kārtis`)
-      );
+      info.append(el('span', 'host-name', `${r.private ? '🔒 ' : ''}${r.host} · ${r.filled}/${r.total} spēlētāji`));
+      const sil = el('div', 'multi-silhouette-row');
+      const seats = [];
+      for (let i = 0; i < r.total; i++) seats.push(i < r.people ? { name: '' } : i < r.people + r.aiCount ? { ai: true, name: 'Dators' } : null);
+      silhouettes(sil, seats);
+      info.append(sil, el('p', 'muted small', DECK_NAME[r.deck] || ''));
       const btn = el('button', 'btn btn-secondary', 'Pievienoties');
       btn.type = 'button';
       btn.addEventListener('click', () => joinRoom(r.code, r.private));
@@ -272,12 +350,13 @@
       return;
     }
     resetTable();
+    chatReset();
     socket.emit('room:join', { code, name: myName(), password });
   }
 
   function openPassword(code, wrong) {
     pendingJoin = { code };
-    $('pwText').textContent = wrong ? 'Nepareiza parole. Mēģini vēlreiz.' : 'Jautā paroli spēles autoram.';
+    $('pwText').textContent = wrong ? 'Nepareiza parole. Mēģini vēlreiz.' : 'Jautā paroli galda autoram.';
     $('pwInput').value = '';
     openModal('pwModal');
     $('pwInput').focus();
@@ -333,10 +412,10 @@
     });
   });
 
-  // invite links
+  // ---- table links: /meli/?table=CODE (the old ?room=CODE&pw=… links still work) ----------
   function readInvite() {
     const p = new URLSearchParams(location.search);
-    const code = (p.get('room') || '').trim().toUpperCase();
+    const code = (p.get('table') || p.get('room') || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
     if (!code) return;
     invite = { code, pw: (p.get('pw') || '').trim().toUpperCase() };
     $('inviteCode').textContent = code;
@@ -353,112 +432,302 @@
     clearInvite();
     // We do not know whether it is private; the server answers with room:password if so.
     resetTable();
+    chatReset();
     socket.emit('room:join', { code, name: myName(), password: pw || undefined });
   });
   $('inviteDismiss').addEventListener('click', clearInvite);
 
-  // ---- waiting room ----------------------------------------------------------
-  function showWaiting(s) {
-    $('waitCode').textContent = s.code;
-    $('waitInfo').textContent = `${MODE_NAME[s.announce]} · ${s.handSize * 2} kārtis. Nosūti kodu vai uzaicinājuma saiti.`;
-    $('waitPassRow').classList.toggle('hidden', !s.password);
-    $('waitPass').textContent = s.password || '';
-    show('waiting');
+  const tableLink = (code) => `${location.origin}${location.pathname}?table=${encodeURIComponent(code)}`;
+
+  // ---- waiting for players (inside the lobby card, like Duraks) ------------------------
+  function renderWaiting(w) {
+    wait = w;
+    myTableName = w.seats[w.you] ? w.seats[w.you].name : myTableName;
+    show('lobby');
+    $('waitBox').classList.remove('hidden');
+    lobbyChatShow(true);
+    silhouettes($('waitSeats'), w.seats);
+    $('waitInfo').textContent = `${w.filled}/${w.total} spēlētāji pievienojušies · ${DECK_NAME[w.deck] || ''}`;
+    const names = $('waitNames');
+    names.replaceChildren();
+    w.seats.forEach((s, i) => {
+      if (!s) return;
+      const li = el('li', s.ready && !s.ai ? 'is-ready' : '');
+      li.append(el('span', 'nm', (s.ai ? '🤖 ' : '') + s.name + (i === w.you ? ' (tu)' : '')));
+      if (!s.ai) li.append(el('span', 'tick', s.ready ? '✓ gatavs' : s.connected ? '' : 'atslēdzies'));
+      names.append(li);
+    });
+    $('waitCode').textContent = w.code;
+    $('waitPassRow').classList.toggle('hidden', !w.password);
+    $('waitPass').textContent = w.password || '';
+    $('shareLink').value = tableLink(w.code);
+    $('sharePrivateNote').classList.toggle('hidden', !w.private);
+    $('shareBtn').classList.toggle('hidden', !navigator.share);
+    $('cancelWaitBtn').classList.toggle('hidden', !w.isHost);
+    $('leaveWaitBtn').classList.toggle('hidden', w.isHost);
+
+    // Early start: everybody at the table ticks "ready" and the game starts with whoever is seated.
+    const box = $('readyBox');
+    box.classList.toggle('hidden', !w.canStartEarly);
+    if (w.canStartEarly) {
+      const me = w.seats[w.you];
+      const btn = $('readyBtn');
+      const mine = !!(me && me.ready);
+      btn.textContent = mine ? `✓ Gatavs sākt ar ${w.filled} — atsaukt` : `Sākt tagad ar ${w.filled} ${speletaji(w.filled)}`;
+      btn.classList.toggle('btn-primary', !mine);
+      btn.classList.toggle('btn-secondary', mine);
+      btn.setAttribute('aria-pressed', String(mine));
+      $('readyInfo').textContent = `Gatavi: ${w.ready}/${w.people}. Spēle sāksies, kad visi pie galda būs gatavi vai kad galds būs pilns.`;
+    }
   }
 
+  $('readyBtn').addEventListener('click', () => {
+    if (!wait) return;
+    const me = wait.seats[wait.you];
+    socket.emit('room:ready', { ready: !(me && me.ready) });
+  });
   $('copyLinkBtn').addEventListener('click', async () => {
-    if (!session) return;
-    let url = `${location.origin}${location.pathname}?room=${session.code}`;
-    if (session.password) url += `&pw=${session.password}`;
+    if (!wait) return;
+    const url = tableLink(wait.code);
     try {
       await navigator.clipboard.writeText(url);
       toast('Saite nokopēta');
     } catch {
-      window.prompt('Nokopē uzaicinājuma saiti:', url);
+      $('shareLink').select();
+      window.prompt('Nokopē saiti uz galdu:', url);
     }
   });
+  $('shareBtn').addEventListener('click', () => {
+    if (!wait || !navigator.share) return;
+    navigator.share({ title: 'Meļi — Uzspēlēsim.lv', text: 'Nāc uzspēlēt Meļus!', url: tableLink(wait.code) }).catch(() => {});
+  });
   $('cancelWaitBtn').addEventListener('click', () => socket.emit('room:leave'));
+  $('leaveWaitBtn').addEventListener('click', () => socket.emit('room:leave'));
 
-  // ---- table rendering -----------------------------------------------------------
-  function render() {
+  // ---- table chat (lobby block while waiting, 💬 panel in the game) ------------------------
+  let chatOpen = false;
+  let chatUnread = 0;
+  const lobbyChatVisible = () => !$('lobbyChatPanel').classList.contains('hidden') && screen === 'lobby';
+  function lobbyChatShow(on) {
+    $('lobbyChatPanel').classList.toggle('hidden', !on);
+  }
+  function chatBadge() {
+    const btn = $('chatBtn');
+    let badge = btn.querySelector('.chat-badge');
+    if (chatUnread > 0) {
+      if (!badge) {
+        badge = el('span', 'chat-badge');
+        btn.append(badge);
+      }
+      badge.textContent = chatUnread > 9 ? '9+' : String(chatUnread);
+    } else if (badge) {
+      badge.remove();
+    }
+  }
+  function chatSetOpen(open) {
+    chatOpen = open;
+    $('chatPanel').classList.toggle('hidden', !open);
+    if (open) {
+      chatUnread = 0;
+      chatBadge();
+      $('chatInput').focus();
+    }
+  }
+  function chatReset() {
+    $('chatMessages').replaceChildren();
+    $('lobbyChatMessages').replaceChildren(el('p', 'muted small lobby-chat-empty', 'Uzraksti kaut ko, kamēr gaidi spēlētājus.'));
+    chatUnread = 0;
+    chatBadge();
+    chatSetOpen(false);
+  }
+  function chatAdd(msg) {
+    const mine = msg.from === myTableName;
+    for (const id of ['chatMessages', 'lobbyChatMessages']) {
+      const wrap = $(id);
+      const empty = wrap.querySelector('.lobby-chat-empty');
+      if (empty) empty.remove();
+      const row = el('div', 'chat-msg' + (mine ? ' own' : ''));
+      row.append(el('span', 'who', msg.from + ':'), document.createTextNode(' ' + msg.text));
+      wrap.append(row);
+      wrap.scrollTop = wrap.scrollHeight;
+    }
+    return mine;
+  }
+  function chatSend(input) {
+    const text = input.value.trim();
+    if (!text) return;
+    socket.emit('chat', { text });
+    input.value = '';
+  }
+  $('chatBtn').addEventListener('click', () => chatSetOpen(!chatOpen));
+  $('chatCloseBtn').addEventListener('click', () => chatSetOpen(false));
+  $('chatSendBtn').addEventListener('click', () => chatSend($('chatInput')));
+  $('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') chatSend($('chatInput')); });
+  $('lobbyChatSendBtn').addEventListener('click', () => chatSend($('lobbyChatInput')));
+  $('lobbyChatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') chatSend($('lobbyChatInput')); });
+  socket.on('chat', (msg) => {
+    const mine = chatAdd(msg);
+    if (!chatOpen && !mine && !lobbyChatVisible()) {
+      chatUnread += 1;
+      chatBadge();
+    }
+  });
+  socket.on('chat:history', (list) => {
+    $('chatMessages').replaceChildren();
+    $('lobbyChatMessages').replaceChildren();
+    if (!list || !list.length) $('lobbyChatMessages').append(el('p', 'muted small lobby-chat-empty', 'Uzraksti kaut ko, kamēr gaidi spēlētājus.'));
+    (list || []).forEach(chatAdd);
+  });
+
+  // ---- the round table -------------------------------------------------------------
+  // Seats by player count, indexed by clockwise distance from me (me = 0, always at the bottom;
+  // 1 = my left-hand neighbour, who plays after me). The classes are placed in /multi.css.
+  const SEAT_CLASSES = {
+    2: [null, 'seat-top'],
+    3: [null, 'seat-tl', 'seat-tr'],
+    4: [null, 'seat-left', 'seat-top', 'seat-right'],
+    // 5–6 players: Meļi's own spots (meli.css), wider apart than the Duraks ones
+    5: [null, 'seat-l6', 'seat-tl6', 'seat-tr6', 'seat-r6'],
+    6: [null, 'seat-l6', 'seat-tl6', 'seat-top', 'seat-tr6', 'seat-r6'],
+  };
+  const DIR_ANGLES = { 2: [90, 270], 3: [90, 210, 330], 4: [90, 180, 270, 360], 5: [90, 160, 235, 305, 380], 6: [90, 160, 225, 270, 315, 380] };
+
+  function placeDirs() {
     if (!view) return;
-    const opp = view.room.opp;
-    $('oppName').textContent = oppName();
-    $('oppAvatar').textContent = vsAI() ? '🤖' : '👤';
-    const dot = $('oppDot');
-    dot.classList.toggle('off', !!opp && !opp.ai && !opp.connected);
-    dot.classList.toggle('hidden', vsAI());
-    dot.title = opp && !opp.connected ? 'Savienojums pārtrūcis' : 'Savienots';
-    $('oppCount').textContent = view.oppCount;
-    $('myCount').textContent = view.hand.length;
-    $('meName').textContent = view.room.myName;
+    const layer = $('dirs');
+    const table = document.querySelector('#multiGame .multi-round-table');
+    const wood = $('wood');
+    if (!table || !wood.clientWidth) return;
+    const wr = wood.getBoundingClientRect();
+    const tr = table.getBoundingClientRect();
+    const cx = tr.left - wr.left + tr.width / 2;
+    const cy = tr.top - wr.top + tr.height / 2;
+    const rx = (tr.width / 2) * 1.14;
+    const ry = (tr.height / 2) * 1.24;
+    const angles = DIR_ANGLES[view.players] || DIR_ANGLES[4];
+    layer.replaceChildren();
+    for (let k = 0; k < angles.length; k++) {
+      const a0 = angles[k];
+      const a1 = k === angles.length - 1 ? angles[0] + 360 : angles[k + 1];
+      const th = (((a0 + a1) / 2) * Math.PI) / 180;
+      const x = cx + rx * Math.cos(th);
+      const y = cy + ry * Math.sin(th);
+      const ang = (Math.atan2(ry * Math.cos(th), -rx * Math.sin(th)) * 180) / Math.PI;
+      const d = el('span', 'multi-dir');
+      d.style.left = x + 'px';
+      d.style.top = y + 'px';
+      d.style.transform = `translate(-50%,-50%) rotate(${ang}deg)`;
+      layer.append(d);
+    }
+  }
+  window.addEventListener('resize', () => {
+    placeDirs();
+    if (view) renderHand();
+  });
 
-    const lock = $('lock');
-    lock.textContent = view.lockedSuit ? `Masts: ${view.lockedSuit}` : 'Masts brīvs';
-    lock.classList.toggle('on', !!view.lockedSuit);
-
-    renderPile();
-    renderStatus();
-    renderHand();
-    renderAct();
-    renderHint();
-    renderButtons();
-    renderTimer();
+  function roleOf(i) {
+    const s = seatOf(i);
+    if (view.out[i]) return s.left ? 'Izgāja' : 'Izstājies';
+    if (!s.ai && !s.connected) return 'Atslēdzies';
+    if (view.phase !== 'play') return view.winner === i ? 'Uzvarētājs' : '';
+    if (view.turn === i) return s.ai ? 'Domā' : 'Gājiens';
+    if (view.pile.top === i) return 'Nolika';
+    return '';
   }
 
-  function renderTimer() {
-    const t = $('timer');
-    if (!view || view.phase !== 'play' || deadline === null) {
-      t.classList.add('hidden');
-      $('tbar').classList.add('hidden');
+  function seatTimer(i) {
+    const t = el('div', 'turn-timer-h');
+    t.append(el('div', 'turn-timer-fill'));
+    if (!(view.phase === 'play' && deadline !== null && view.turn === i)) t.classList.add('idle');
+    return t;
+  }
+
+  function renderSeats() {
+    const box = $('seats');
+    box.replaceChildren();
+    const n = view.players;
+    const classes = SEAT_CLASSES[n] || SEAT_CLASSES[6];
+    for (let k = 1; k < n; k++) {
+      const i = (view.you + k) % n;
+      const s = seatOf(i);
+      const seat = el('div', 'multi-seat ' + (classes[k] || 'seat-top'));
+      if (view.out[i]) seat.classList.add('multi-safe');
+      if (view.phase === 'play' && view.turn === i) seat.classList.add('multi-now');
+      seat.append(el('span', 'multi-seat-name', s.name + (s.ai ? ' 🤖' : '')), seatTimer(i));
+      const role = roleOf(i);
+      seat.append(el('span', 'multi-seat-role' + (role ? '' : ' empty'), role || '-'));
+      const cards = el('div', 'multi-seat-cards');
+      const count = view.counts[i] || 0;
+      for (let c = 0; c < Math.min(count, n > 4 ? 5 : 8); c++) cards.append(el('div', 'card-back-mini'));
+      seat.append(cards, el('span', 'multi-seat-count', `${count} ${kartis(count)}`));
+      box.append(seat);
+    }
+    const me = $('mePill');
+    me.className = 'multi-seat multi-seat-me' + (view.phase === 'play' && view.turn === view.you ? ' multi-now' : '');
+    me.replaceChildren();
+    const myRole = roleOf(view.you);
+    me.append(
+      el('span', 'multi-seat-name', `${view.room.myName} (tu)`),
+      el('span', 'multi-seat-role' + (myRole ? '' : ' empty'), myRole || '-')
+    );
+  }
+
+  function renderTurnBar() {
+    const bar = $('turnBar');
+    bar.replaceChildren();
+    const chip = (cls, small, text) => {
+      const c = el('span', 'multi-chip ' + cls);
+      c.append(el('small', null, small), document.createTextNode(' ' + text));
+      bar.append(c);
+    };
+    if (view.phase !== 'play') {
+      chip('multi-chip-now', 'Beigas', view.winner === view.you ? 'Tu uzvarēji' : `${nameOf(view.winner)} uzvar`);
       return;
     }
-    const s = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-    t.classList.remove('hidden');
-    t.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-    t.classList.toggle('mine', view.canPlay);
-    t.classList.toggle('low', s <= 10);
-    const bar = $('tbar');
-    const frac = Math.max(0, Math.min(1, (deadline - Date.now()) / turnTotal));
-    bar.classList.remove('hidden');
-    bar.firstElementChild.style.width = (frac * 100) + '%';
-    bar.firstElementChild.style.backgroundColor = 'hsl(' + (120 * Math.min(1, frac / 0.7)).toFixed(0) + ', 72%, 46%)';
-    bar.classList.toggle('low', frac <= 0.15);
+    const t = view.turn;
+    chip('multi-chip-now', 'Tagad', t === view.you ? 'Tavs gājiens' : nameOf(t));
+    if (view.players > 2) {
+      bar.append(el('span', 'multi-chip-arrow', '→'));
+      const nx = nextOf(t);
+      chip('', 'Nākamais', nx === view.you ? 'Tu' : nameOf(nx));
+    }
   }
-  setInterval(renderTimer, 250);
+
+  // The claimed suit of the round: the same dashed card as an empty Duraks deck shows for the trump.
+  function renderClaim() {
+    const pile = $('claimPile');
+    const card = $('claimCard');
+    const s = view.lockedSuit;
+    pile.classList.toggle('hidden', !s);
+    pile.classList.toggle('last', !!s);
+    card.replaceChildren();
+    if (!s) return;
+    const g = el('span', 'trump-ghost ' + (s === '♥' || s === '♦' ? 'red' : 'black'));
+    g.append(el('span', 'sym', s), el('span', 'lbl', 'apgalvots'));
+    card.append(g);
+    card.title = `Šajā aplī apgalvotais masts: ${SUIT_NAME[s]}`;
+    card.setAttribute('aria-label', card.title);
+  }
 
   function renderPile() {
     const pile = $('pile');
-    const claims = $('claims');
     pile.replaceChildren();
-    pile.classList.remove('has-claim');
-    claims.replaceChildren();
     const n = view.pile.count;
-
     if (!n) {
-      pile.append(el('div', 'empty', 'Galds ir tukšs'));
+      pile.append(el('div', 'm-pile-empty', 'Galds ir tukšs'));
       return;
     }
-    const shown = Math.min(n, 7);
+    const shown = Math.min(n, 6);
     for (let i = 0; i < shown; i++) {
       const b = el('div', 'back');
-      b.style.left = `${i * 3}px`;
-      b.style.top = `${-i * 2}px`;
-      b.style.transform = `rotate(${(i % 2 ? 1 : -1) * i * 0.9}deg)`;
+      b.style.transform = `translate(${i * 2}px, ${-i * 2}px) rotate(${(i % 2 ? 1 : -1) * (i * 3 + 2)}deg)`;
       pile.append(b);
     }
+    pile.append(el('div', 'pile-count', String(n)));
     const last = view.pile.claims[n - 1];
-    const badge = el('div', 'badge');
-    const sym = el('span', 'sym', face(last));
-    sym.dataset.suit = last.suit;
-    badge.append(el('small', null, last.by === 'you' ? 'Tu apgalvo' : `${oppName()} apgalvo`), sym);
-    pile.classList.add('has-claim');
-    pile.append(badge, el('div', 'pile-count', String(n)));
-
-    if (suitOnly()) return;
-    for (const c of view.pile.claims) {
-      claims.append(el('span', `chip ${c.by}`, `${c.by === 'you' ? 'Tu' : oppName()}: ${face(c)}`));
-    }
+    const cap = el('div', 'm-pile-cap');
+    cap.append(document.createTextNode('pēdējo nolika '), el('b', null, last.by === 'you' ? 'tu' : nameOf(last.player)));
+    pile.append(cap);
   }
 
   function setStatusText(t) {
@@ -468,17 +737,16 @@
   function renderStatus() {
     if (noticeText) return setStatusText(noticeText);
     if (view.phase === 'over') return setStatusText('Spēle beigusies.');
-    const opp = view.room.opp;
-    if (opp && !opp.ai && !opp.connected) return setStatusText(`${opp.name} zaudēja savienojumu. Gaidām atgriežamies…`);
+    if (view.out[view.you]) return setStatusText('Tu esi izstājies. Pārējie spēlē tālāk.');
+    const t = view.turn;
+    const ts = seatOf(t);
     if (!view.canPlay) {
-      if (vsAI()) return setStatusText(`${oppName()} domā…`);
-      return setStatusText(
-        view.pile.count > 0 && view.canChallenge === false && view.pile.claims[view.pile.count - 1].by === 'you'
-          ? `Tu nolikai kārti. Gaidām ${oppName()}…`
-          : `Gaidām ${oppName()}…`
-      );
+      if (!ts.ai && !ts.connected) return setStatusText(`${ts.name} zaudēja savienojumu. Gaidām atgriežamies…`);
+      const n = view.pile.count;
+      const lastMine = n > 0 && view.pile.claims[n - 1].by === 'you';
+      if (ts.ai) return setStatusText(`${ts.name} domā…`);
+      return setStatusText(lastMine ? `Tu noliki kārti. Gaidām ${ts.name}…` : `Gaidām ${ts.name}…`);
     }
-
     const n = view.pile.count;
     if (n === 0) {
       return setStatusText(
@@ -488,13 +756,54 @@
       );
     }
     const last = view.pile.claims[n - 1];
+    const who = nameOf(last.player);
     const hasLegit = view.hand.some((c) => c.suit === view.lockedSuit);
-    let t = suitOnly()
-      ? `${oppName()} apgalvo ${last.suit}. Liec savu kārti vai spied «Meli!».`
-      : `${oppName()} paziņoja ${face(last)}. Liec savu kārti vai spied «Meli!».`;
-    if (!hasLegit) t += ` Tev nav mastas ${view.lockedSuit}, tāpēc būs jāmelo.`;
-    setStatusText(t);
+    let txt = view.canChallenge
+      ? `${who} apgalvo ${suitOnly() ? last.suit : face(last)}. Liec savu kārti vai spied «Neticu!».`
+      : `Liec savu kārti (${view.lockedSuit}).`;
+    if (!hasLegit) txt += ` Tev nav masta ${view.lockedSuit}, tāpēc būs jāmelo.`;
+    setStatusText(txt);
   }
+
+  function render() {
+    if (!view) return;
+    renderSeats();
+    renderTurnBar();
+    renderClaim();
+    renderPile();
+    renderStatus();
+    renderHand();
+    renderAct();
+    renderHint();
+    renderButtons();
+    paintTimers();
+  }
+
+  // ---- move timers: the vertical bar is mine, the short ones under names are the others' ----
+  function paintBar(bar, frac, vertical) {
+    const f = bar.querySelector('.turn-timer-fill');
+    if (!f) return;
+    if (vertical) f.style.height = frac * 100 + '%';
+    else f.style.width = frac * 100 + '%';
+    f.style.backgroundColor = 'hsl(' + (120 * Math.min(1, frac / 0.7)).toFixed(0) + ', 72%, 46%)';
+    bar.classList.toggle('tt-warn', frac <= 0.3 && frac > 0.12);
+    bar.classList.toggle('tt-crit', frac <= 0.12);
+  }
+  function paintTimers() {
+    const root = $('turnTimer');
+    const live = !!(view && view.phase === 'play' && deadline !== null);
+    const mine = live && view.turn === view.you;
+    root.classList.toggle('hidden-timer', !mine);
+    if (!live) return;
+    const left = deadline - Date.now();
+    const frac = Math.max(0, Math.min(1, left / turnTotal));
+    if (mine) {
+      paintBar(root, frac, true);
+      root.querySelector('.turn-timer-secs').textContent = String(Math.max(0, Math.ceil(left / 1000)));
+    }
+    document.querySelectorAll('#seats .turn-timer-h').forEach((b) => paintBar(b, frac, false));
+  }
+  setInterval(paintTimers, 200);
 
   function ensureActiveSuit() {
     const has = (s) => view.hand.some((c) => c.suit === s);
@@ -507,13 +816,21 @@
   // big hand only one suit is spread out and the others sit in small stacks
   // with a count; tapping a stack spreads that suit. Tap a card to lift it
   // (a bubble says what it will announce and whether that's true), tap it
-  // again to place it. At the start of a round the bar above the hand also
+  // again to place it. At the start of a round the bar under the table also
   // offers the four suits to announce something else.
-  // How many cards fit in one row with at least ~24 px of each card showing.
+  function cardWidth() {
+    const probe = el('div', 'm-card');
+    probe.style.visibility = 'hidden';
+    probe.style.position = 'absolute';
+    $('fan').append(probe);
+    const w = probe.getBoundingClientRect().width || 72.5;
+    probe.remove();
+    return w;
+  }
+  // How many cards fit in one row with at least ~22 px of each card showing.
   function fitCount() {
     const fan = $('fan');
-    const cardW = parseFloat(getComputedStyle(fan).getPropertyValue('--card-w')) || 72.5;
-    return Math.max(6, Math.floor((fan.clientWidth - 16 - cardW) / 24) + 1);
+    return Math.max(6, Math.floor((fan.clientWidth - 16 - cardWidth()) / 22) + 1);
   }
   const byRank = (a, b) => (view.ranks || RANKS).indexOf(a.rank) - (view.ranks || RANKS).indexOf(b.rank);
 
@@ -539,7 +856,7 @@
     const fan = $('fan');
     fan.replaceChildren();
     if (!view.hand.length) {
-      fan.append(el('div', 'm-hint', 'Tava roka ir tukša'));
+      fan.append(el('div', 'm-hint', view.out[view.you] ? '' : 'Tava roka ir tukša'));
       return;
     }
     const ok = selectable();
@@ -584,15 +901,15 @@
     fitHand(row);
   }
 
-  // squeeze the overlap so the row fits the screen
+  // squeeze the overlap so the row fits the table
   function fitHand(row) {
-    const cards = [...row.querySelectorAll('.m-card.m-playable, .fan-row > .m-card')];
+    const cards = [...row.querySelectorAll('.fan-row > .m-card')];
     if (cards.length < 2) return;
     const cardW = cards[0].getBoundingClientRect().width;
     const stacks = [...row.querySelectorAll('.m-stack')].reduce((w, x) => w + x.getBoundingClientRect().width + 10, 0);
     const groups = row.querySelectorAll('.m-card.m-group').length;
     const avail = $('fan').clientWidth - 16 - stacks - (groups - 1) * 10;
-    const step = Math.max(18, Math.min(cardW * 0.62, (avail - cardW) / (cards.length - 1)));
+    const step = Math.max(16, Math.min(cardW * 0.62, (avail - cardW) / (cards.length - 1)));
     cards.forEach((d, i) => {
       if (i === 0) return;
       d.style.marginLeft = (d.classList.contains('m-group') ? step - cardW + 10 : step - cardW) + 'px';
@@ -619,14 +936,13 @@
     renderHint();
   }
 
-  // The one bar between the table and the hand: "Meli!" when it can be
-  // pressed, and/or what to announce for the lifted card.
+  // The bar under the table: "Neticu!" when it can be pressed, and/or what to announce for the lifted card.
   function renderAct() {
     const bar = $('actBar');
     bar.replaceChildren();
     if (!view) return;
     if (view.canChallenge && !busy) {
-      const m = el('button', 'm-meli', 'Meli!');
+      const m = el('button', 'm-meli', 'Neticu!');
       m.type = 'button';
       m.addEventListener('click', () => {
         if (busy || !view || !view.canChallenge) return;
@@ -679,7 +995,7 @@
     if (!view || !view.canPlay || busy || view.phase !== 'play') { h.textContent = ''; return; }
     const card = selectedCard();
     if (!card) {
-      h.textContent = 'Pieskaries kārtij.' + (view.canChallenge ? ' Netici? Spied «Meli!».' : '');
+      h.textContent = 'Pieskaries kārtij.' + (view.canChallenge ? ' Netici? Spied «Neticu!».' : '');
       return;
     }
     if (!suitOnly()) {
@@ -694,8 +1010,11 @@
   }
 
   function renderButtons() {
-    const canSurrender = !!(view && view.phase === 'play');
+    const canSurrender = !!(view && view.phase === 'play' && !view.out[view.you]);
     $('menuBtn').classList.toggle('hidden', !canSurrender);
+    $('surrenderText').textContent = view && view.players > 2
+      ? 'Tu izstāsies no spēles, pārējie spēlēs tālāk. Turi nospiestu 1,5 sekundes.'
+      : 'Pretinieks tiks pasludināts par uzvarētāju. Turi nospiestu 1,5 sekundes.';
     if (!canSurrender) closeMenu();
   }
 
@@ -707,46 +1026,47 @@
 
   function showReveal(r) {
     const me = view ? view.you : 0;
-    const opp = oppName();
     const box = $('reveal');
     box.replaceChildren();
+    const who = (i) => (i === me ? 'Tu' : nameOf(i));
+    const whose = (i) => (i === me ? 'tavu' : `${nameOf(i)}`);
 
-    const accusedMe = r.accused === me;
     const title = r.final
-      ? `${accusedMe ? 'Tava pēdējā kārts' : `${opp} pēdējā kārts`} tika pārbaudīta`
+      ? `${r.accused === me ? 'Tava pēdējā kārts' : `${nameOf(r.accused)} pēdējā kārts`} tika pārbaudīta`
       : r.challenger === me
-        ? `Tu apsūdzēji melos ${opp} kārti`
-        : `${opp} apsūdzēja melos tavu kārti`;
+        ? `Tu neticēji ${nameOf(r.accused)} kārtij`
+        : r.accused === me
+          ? `${nameOf(r.challenger)} neticēja tavai kārtij`
+          : `${nameOf(r.challenger)} neticēja ${whose(r.accused)} kārtij`;
     box.append(el('div', 'sub', title));
 
     const pair = el('div', 'pair');
     const a = el('div');
-    a.append(el('div', 'lab', 'Paziņots'), cardEl(r.claim, { big: true }));
+    a.append(el('div', 'lab', 'Apgalvots'), cardEl(r.claim, { big: true }));
     const b = el('div', 'actual');
     b.append(el('div', 'lab', 'Patiesībā'), cardEl(r.actual, { big: true }));
     pair.append(a, b);
     box.append(pair);
 
-    const youLose = r.loser === me;
     const n = `${r.taken} ${kartis(r.taken)}`;
-    const picks = youLose ? 'Tu paņem' : `${opp} paņem`;
+    const picks = r.loser === me ? 'Tu paņem' : `${nameOf(r.loser)} paņem`;
     let verdict;
     let good;
     if (r.final && !r.lie) {
-      good = accusedMe;
-      verdict = accusedMe ? 'Pēdējā kārts godīga. Tu uzvari!' : `Pēdējā kārts godīga. ${opp} uzvar.`;
+      good = r.accused === me;
+      verdict = good ? 'Pēdējā kārts godīga. Tu uzvari!' : `Pēdējā kārts godīga. ${nameOf(r.accused)} uzvar.`;
     } else if (r.lie) {
-      good = !accusedMe;
-      verdict = `${accusedMe ? 'Pieķerts melos!' : `${opp} melo!`} ${picks} ${n}.`;
+      good = r.accused !== me;
+      verdict = `${r.accused === me ? 'Pieķerts melos!' : `${nameOf(r.accused)} meloja!`} ${picks} ${n}.`;
     } else {
-      good = !youLose;
+      good = r.loser !== me;
       verdict = `Tā bija taisnība. ${picks} ${n}.`;
     }
     box.append(el('div', `verdict ${good ? 'good' : 'bad'}`, verdict));
 
     if (!(r.final && !r.lie)) {
-      const nextYou = (r.lie ? r.challenger : r.accused) === me;
-      box.append(el('div', 'sub', nextYou ? 'Nākamo raundu sāc tu.' : `${opp} sāk nākamo raundu.`));
+      const starter = r.lie ? r.challenger : r.accused;
+      box.append(el('div', 'sub', starter === me ? 'Nākamo apli sāc tu.' : `${who(starter)} sāk nākamo apli.`));
     }
     box.onclick = hideReveal; // a tap closes it early; otherwise it goes away by itself
     box.classList.remove('hidden');
@@ -766,44 +1086,61 @@
     setStatusText(msg);
   }
 
-  // ---- game over modal ---------------------------------------------------------
+  // ---- game over / out of the game -----------------------------------------------
+  const OUT_TEXT = { left: 'izgāja no spēles', disconnect: 'atslēdzās', timeout: 'pietrūka laika', surrender: 'padevās' };
+
   function showOver(v) {
     overShown = true;
     const win = v.winner === v.you;
-    const opp = v.room.opp ? v.room.opp.name : 'Pretinieks';
+    const winner = v.room.seats[v.winner] ? v.room.seats[v.winner].name : '?';
     const d = v.room.endDetail;
+    const others = v.room.seats.map((s, i) => [s, i]).filter(([, i]) => i !== v.winner && i !== v.you);
     let title;
     let text;
     if (win) {
       title = 'Tu uzvari! 🎉';
-      text =
-        d === 'left' ? `${opp} izgāja no spēles.`
-        : d === 'disconnect' ? `${opp} atslēdzās.`
-        : d === 'timeout' ? `${opp} pietrūka laika.`
-        : d === 'surrender' ? `${opp} padevās.`
-        : 'Tu pirmais atbrīvojies no kārtīm.';
+      if (d === 'empty-hand') text = 'Tu pirmais atbrīvojies no kārtīm.';
+      else if (others.length === 1) text = `${others[0][0].name} ${OUT_TEXT[d] || 'izstājās'}.`;
+      else text = 'Visi pārējie izstājās no spēles.';
     } else {
-      title = `${opp} uzvar`;
-      text = d === 'timeout' ? 'Tev pietrūka laika.' : d === 'surrender' ? 'Tu padevies.' : `${opp} pirmais atbrīvojās no kārtīm.`;
+      title = `${winner} uzvar`;
+      const myOut = v.room.seats[v.you].outDetail;
+      text = myOut === 'timeout' ? 'Tev pietrūka laika.'
+        : myOut === 'surrender' ? 'Tu padevies.'
+        : d === 'empty-hand' ? `${winner} pirmais atbrīvojās no kārtīm.`
+        : 'Pārējie izstājās no spēles.';
     }
     $('overTitle').textContent = title;
     $('overText').textContent = text;
 
-    const oppGone = !!(v.room.opp && !v.room.opp.ai && v.room.opp.left);
+    const rm = v.room.rematch;
     const again = $('againBtn');
     const note = $('rematchNote');
-    again.classList.toggle('hidden', oppGone);
-    again.textContent = v.room.vsAI ? 'Spēlēt vēlreiz' : 'Atkārtot';
-    again.disabled = v.room.rematch.you;
-    note.textContent = oppGone
-      ? `${opp} ir izgājis. Atgriezies vestibilā, lai sāktu jaunu spēli.`
-      : v.room.rematch.you
-        ? `Gaidām, kad ${opp} piekritīs atkārtot…`
-        : v.room.rematch.opp
-          ? `${opp} vēlas atkārtot!`
+    again.classList.toggle('hidden', !rm.possible);
+    again.textContent = v.room.solo ? 'Spēlēt vēlreiz' : 'Atkārtot';
+    again.disabled = rm.you;
+    $('watchBtn').classList.add('hidden');
+    note.textContent = !rm.possible
+      ? 'Pārējie ir izgājuši. Atgriezies vestibilā, lai sāktu jaunu spēli.'
+      : rm.you && rm.waiting.length
+        ? `Gaidām, kad atkārtot piekritīs: ${rm.waiting.join(', ')}…`
+        : !rm.you && rm.agreed.length
+          ? `Atkārtot vēlas: ${rm.agreed.join(', ')}!`
           : '';
     openModal('over');
-    if (!again.disabled && !oppGone) again.focus();
+    if (!again.disabled && rm.possible) again.focus();
+  }
+
+  // I am out but the others play on: offer to watch or to go back to the lobby.
+  function showOut(v) {
+    outShown = true;
+    const d = v.room.seats[v.you].outDetail;
+    $('overTitle').textContent = 'Tu izstājies';
+    $('overText').textContent = (d === 'timeout' ? 'Tev pietrūka laika. ' : d === 'surrender' ? 'Tu padevies. ' : '') + 'Pārējie spēlē tālāk.';
+    $('rematchNote').textContent = '';
+    $('againBtn').classList.add('hidden');
+    $('watchBtn').classList.remove('hidden');
+    openModal('over');
   }
 
   // ---- socket events ---------------------------------------------------
@@ -824,20 +1161,32 @@
     }
   });
 
-  socket.on('rooms', renderRooms);
+  let lastRooms = [];
+  socket.on('rooms', (list) => {
+    lastRooms = list || [];
+    renderRooms(lastRooms);
+  });
 
   socket.on('room:joined', (s) => {
     session = s;
     saveSession();
     if (invite) clearInvite();
-    if (s.status === 'waiting') showWaiting(s);
-    // otherwise the 'state' event follows and shows the table
+    renderRooms(lastRooms);
+    // the waiting state or the table follows
   });
+
+  socket.on('room:waiting', renderWaiting);
+  socket.on('room:started', () => hideWaiting());
 
   socket.on('room:left', toLobby);
 
+  socket.on('room:cancelled', () => {
+    toLobby();
+    toast('Galda autors atcēla istabu.');
+  });
+
   socket.on('room:gone', () => {
-    const had = screen !== 'lobby';
+    const had = screen !== 'lobby' || !!wait;
     toLobby();
     if (had) toast('Šī spēle vairs nav pieejama.');
   });
@@ -848,11 +1197,14 @@
 
   socket.on('state', (v) => {
     const wasMyTurn = !!(view && view.canPlay);
+    const firstState = !view;
     busy = false;
     view = v;
+    myTableName = v.room.myName;
     deadline = v.room.turnMs !== null && v.room.turnMs !== undefined ? Date.now() + v.room.turnMs : null;
     if (deadline !== null) turnTotal = Math.max(60000, v.room.turnMs);
 
+    if (wait) hideWaiting();
     if (v.pile.count > 0) hideReveal();
     if (!v.canPlay || v.round !== lastRound || !v.hand.some((c) => c.id === selectedId)) {
       selectedId = null;
@@ -865,6 +1217,7 @@
 
     show('game');
     render();
+    if (firstState) requestAnimationFrame(placeDirs);
 
     clearTimeout(overTimer);
     if (v.phase === 'over') {
@@ -872,7 +1225,12 @@
       else overTimer = setTimeout(() => showOver(v), v.room.endDetail === 'empty-hand' ? 2400 : 300);
     } else {
       overShown = false;
-      closeModal('over');
+      if (v.out[v.you]) {
+        if (!outShown) showOut(v);
+      } else {
+        outShown = false;
+        closeModal('over');
+      }
     }
   });
 
@@ -895,12 +1253,8 @@
     $('againBtn').disabled = true;
   });
   $('lobbyBtn').addEventListener('click', () => socket.emit('room:leave'));
+  $('watchBtn').addEventListener('click', () => closeModal('over'));
 
-  $('leaveBtn').addEventListener('click', () => {
-    if (!view || view.phase === 'over') return socket.emit('room:leave');
-    $('leaveText').textContent = vsAI() ? 'Spēle tiks zaudēta.' : `Iziešana ir padošanās. ${oppName()} uzvar.`;
-    openModal('leaveModal');
-  });
   // "Padoties" lives in the corner menu and needs a 1.5 s press-and-hold,
   // the same as in Duraks, so it can't be hit by accident.
   let holdRaf = null;
@@ -922,7 +1276,7 @@
     fill.style.transition = 'none';
     holdRaf = requestAnimationFrame(function tick(t) {
       const p = Math.min((t - t0) / 1500, 1);
-      fill.style.width = (p * 100) + '%';
+      fill.style.width = p * 100 + '%';
       if (p >= 1) {
         holdRaf = null;
         closeMenu();
@@ -945,18 +1299,13 @@
     if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); startHold(); }
   });
   $('surrenderHold').addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') stopHold(); });
-  $('leaveNo').addEventListener('click', () => closeModal('leaveModal'));
-  $('leaveYes').addEventListener('click', () => {
-    closeModal('leaveModal');
-    socket.emit('room:leave');
-  });
 
   // ---- card design (shared with Duraks: same browser setting) ------------
   const CARD_DECK_KEY = 'duraks_card_deck';
   function applyCardDeck() {
     let v = null;
     try { v = localStorage.getItem(CARD_DECK_KEY); } catch (e) { /* storage blocked */ }
-    let deck = (v === 'png' || v === 'classic') ? v : 'svg';
+    let deck = v === 'png' || v === 'classic' ? v : 'svg';
     if (deck === 'svg') {
       if (window.DuraksSvgCards) window.DuraksSvgCards.install();
       else deck = 'png';
@@ -972,6 +1321,6 @@
 
   // ---- init ---------------------------------------------------------------
   applyCardDeck();
-  syncSetup();
+  refreshSetup();
   readInvite();
 })();

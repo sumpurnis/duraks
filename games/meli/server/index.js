@@ -53,7 +53,7 @@ function staticHandler(req, res) {
  * told via the `account` event. Without it, or without valid credentials, names stay free-text
  * guest names exactly as before.
  */
-function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null, canCreate = null, nameFilter = null } = {}) {
+function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null, canCreate = null, nameFilter = null, cleanChat = null } = {}) {
   const stats = new MeliStats(statsFile);
   // Optional outside listener for finished games (the site's front-page map). Never breaks the game.
   if (onResult) {
@@ -63,7 +63,7 @@ function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult 
       try { onResult(r); } catch (err) { console.error('Meļi onResult failed:', err); }
     };
   }
-  const manager = new RoomManager(target, { ...cfg, stats });
+  const manager = new RoomManager(target, { ...cfg, stats, ...(cleanChat ? { cleanChat } : {}) });
 
   target.on('connection', (socket) => {
     socket.join('lobby');
@@ -113,6 +113,8 @@ function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult 
     socket.on('room:join', guard((m) => manager.join(socket, named(m))));
     socket.on('room:leave', guard(() => manager.leave(socket)));
     socket.on('room:resume', guard((m) => manager.resume(socket, m || {})));
+    socket.on('room:ready', guard((m) => manager.ready(socket, m || {})));
+    socket.on('chat', guard((m) => manager.chat(socket, m || {})));
     socket.on('rematch', guard(() => manager.rematch(socket)));
     socket.on('rooms:refresh', () => {
       socket.emit('rooms', manager.listOpen());
@@ -132,9 +134,9 @@ function wireMeli(target, { cfg = {}, verifyAccount, statsFile = null, onResult 
 }
 
 /** Mounted mode: attach Meļi to a namespace (default `/meli`) of an existing Socket.io server. */
-function attachMeli(io, { namespace = '/meli', cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null, canCreate = null, nameFilter = null } = {}) {
+function attachMeli(io, { namespace = '/meli', cfg = {}, verifyAccount, statsFile = null, onResult = null, onPresence = null, canCreate = null, nameFilter = null, cleanChat = null } = {}) {
   const nsp = io.of(namespace);
-  const manager = wireMeli(nsp, { cfg, verifyAccount, statsFile, onResult, onPresence, canCreate, nameFilter });
+  const manager = wireMeli(nsp, { cfg, verifyAccount, statsFile, onResult, onPresence, canCreate, nameFilter, cleanChat });
   return { nsp, manager, dispose: () => manager.dispose() };
 }
 

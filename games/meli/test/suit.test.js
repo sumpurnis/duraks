@@ -23,7 +23,7 @@ test('suit-only: starter chooses the suit, it locks, and claims carry no rank', 
   assert.equal(g.lockedSuit, otherSuit(c.suit));
   const v = g.view(1);
   assert.equal(v.announce, 'suit');
-  assert.deepEqual(v.pile.claims, [{ by: 'opp', rank: null, suit: otherSuit(c.suit) }]);
+  assert.deepEqual(v.pile.claims, [{ by: 'opp', player: 0, rank: null, suit: otherSuit(c.suit) }]);
 });
 
 test('suit-only: later cards are implicitly announced as the locked suit; other suits are rejected', () => {

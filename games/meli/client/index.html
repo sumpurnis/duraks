@@ -21,7 +21,7 @@
   <div class="lobby-layout">
     <div class="lobby-card">
       <h1 class="wordmark">Meļ<span class="accent">i</span></h1>
-      <p class="tagline">2 spēlētāju kāršu spēle</p>
+      <p class="tagline">2–6 spēlētāju kāršu spēle</p>
       <p class="playing-as"><a href="/board.html">💬 Atsauksmes un ieteikumi</a></p>
 
       <div id="inviteBar" class="invite-bar hidden">
@@ -64,8 +64,8 @@
         <div class="quick-presets">
           <p class="quick-presets-title">Ātrā istabas izveide</p>
           <div class="quick-presets-row">
-            <button class="btn btn-quick" type="button" data-preset="12">⚡ 24 kārtis</button>
-            <button class="btn btn-quick" type="button" data-preset="26">⚡ 52 kārtis</button>
+            <button class="btn btn-quick" type="button" data-preset="2-half">⚡ 2 spēlētāji · 24 kārtis</button>
+            <button class="btn btn-quick" type="button" data-preset="4-full">⚡ 3–6 spēlētāji · 52 kārtis</button>
           </div>
         </div>
       </div>
@@ -81,10 +81,34 @@
         <div class="quick-presets">
           <p class="quick-presets-title">Ātrā istabas izveide</p>
           <div class="quick-presets-row">
-            <button class="btn btn-quick" type="button" data-preset="12">⚡ 24 kārtis</button>
-            <button class="btn btn-quick" type="button" data-preset="26">⚡ 52 kārtis</button>
+            <button class="btn btn-quick" type="button" data-preset="2-half">⚡ 2 spēlētāji · 24 kārtis</button>
+            <button class="btn btn-quick" type="button" data-preset="4-full">⚡ 3–6 spēlētāji · 52 kārtis</button>
           </div>
         </div>
+      </div>
+
+      <!-- Waiting for players (same box as the Duraks lobby), plus the early-start "ready" check -->
+      <div id="waitBox" class="waiting hidden">
+        <p>Gaida spēlētājus…</p>
+        <div id="waitSeats" class="multi-silhouette-row"></div>
+        <p id="waitInfo" class="muted"></p>
+        <ul id="waitNames" class="wait-names"></ul>
+        <p class="muted small">Istabas kods: <strong id="waitCode"></strong></p>
+        <p id="waitPassRow" class="muted small hidden">Parole: <strong id="waitPass"></strong></p>
+        <div class="share-box">
+          <div class="share-link-row">
+            <input id="shareLink" type="text" readonly aria-label="Saite uz galdu" />
+            <button id="copyLinkBtn" class="btn btn-secondary" type="button">Kopēt</button>
+            <button id="shareBtn" class="btn btn-secondary hidden" type="button">Dalīties</button>
+          </div>
+          <p id="sharePrivateNote" class="muted small hidden">🔒 Parole saitē nav iekļauta — nosūti to atsevišķi tam, ar ko gribi spēlēt.</p>
+        </div>
+        <div id="readyBox" class="ready-box hidden">
+          <button id="readyBtn" class="btn btn-secondary ready-btn" type="button" aria-pressed="false"></button>
+          <p id="readyInfo" class="muted small"></p>
+        </div>
+        <button id="cancelWaitBtn" class="btn btn-danger hidden" type="button">Atcelt istabu</button>
+        <button id="leaveWaitBtn" class="btn btn-secondary hidden" type="button">Pamest istabu</button>
       </div>
 
       <p id="lobbyError" class="error hidden"></p>
@@ -146,12 +170,26 @@
       </div>
     </div>
 
+    <div class="lobby-col">
     <div id="boardPreviewPanel" class="stats-panel board-preview-panel">
       <h2 class="stats-title">Atsauksmes</h2>
       <div id="boardPreviewList" class="board-preview-list">
         <p class="muted small">Ielādē…</p>
       </div>
       <a href="/board.html" class="board-preview-link">Skatīt visus / pievienot ierakstu →</a>
+    </div>
+
+    <!-- The table's chat while waiting for players (in the game it is the 💬 panel) -->
+    <section id="lobbyChatPanel" class="stats-panel lobby-chat-panel hidden" aria-label="Galda čats">
+      <h2 class="stats-title">Galda čats</h2>
+      <div id="lobbyChatMessages" class="lobby-chat-messages" aria-live="polite">
+        <p class="muted small lobby-chat-empty">Uzraksti kaut ko, kamēr gaidi spēlētājus.</p>
+      </div>
+      <div class="lobby-chat-input">
+        <input id="lobbyChatInput" type="text" placeholder="Uzraksti ziņu…" maxlength="300" aria-label="Ziņa" />
+        <button id="lobbyChatSendBtn" class="btn btn-primary" type="button">Sūtīt</button>
+      </div>
+    </section>
     </div>
   </div>
 
@@ -173,6 +211,43 @@
     <button id="recoveryCloseBtn" class="btn btn-secondary">Aizvērt</button>
   </div>
 </div>
+<div id="setupModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>Izveidot istabu</h2>
+    <div class="field">
+      <span>Kopējais spēlētāju skaits</span>
+      <div id="setupTotal" class="btn-group" role="group">
+        <button type="button" class="btn-option" data-value="2">2</button>
+        <button type="button" class="btn-option" data-value="3">3</button>
+        <button type="button" class="btn-option" data-value="4">4</button>
+        <button type="button" class="btn-option" data-value="5">5</button>
+        <button type="button" class="btn-option" data-value="6">6</button>
+      </div>
+    </div>
+    <div class="field">
+      <span>Kāršu kava</span>
+      <div id="setupDeck" class="btn-group" role="group">
+        <button type="button" class="btn-option" data-value="half">24 kārtis</button>
+        <button type="button" class="btn-option" data-value="full">52 kārtis</button>
+      </div>
+    </div>
+    <div class="field">
+      <span>Datora pretinieku skaits</span>
+      <div id="setupAi" class="btn-group" role="group"></div>
+    </div>
+    <div class="checkbox-field-row">
+      <label class="checkbox-field" title="Padarīt istabu privātu (pievienoties var tikai ar paroli)">
+        <input id="setupPrivate" type="checkbox" />
+        <span>🔒 Privāti</span>
+      </label>
+    </div>
+    <div class="rematch-choice-row">
+      <button id="createSubmit" class="btn btn-primary" type="button">Izveidot</button>
+      <button id="setupCancel" class="btn btn-secondary" type="button">Atcelt</button>
+    </div>
+  </div>
+</div>
+
 <div id="oauthChooseUsernameModal" class="modal hidden">
   <div class="modal-card">
     <h2>Vēl viens solis</h2>
@@ -185,102 +260,79 @@
   </div>
 </div>
 
-<!-- ============ Meļi's own screens: waiting room and table ============ -->
-<div id="meliStage" class="meli meli-stage">
-<!-- ============ Waiting room ============ -->
-<main id="waiting" class="m-screen hidden">
-  <div class="panel m-waiting">
-    <h2>Gaida pretinieku…</h2>
-    <p class="m-hint center" id="waitInfo"></p>
-    <div class="code-box" aria-label="Spēles kods"><span id="waitCode"></span></div>
-    <div id="waitPassRow" class="hidden">
-      <p class="m-hint center">Parole</p>
-      <div class="code-box m-small"><span id="waitPass"></span></div>
+<!-- ============ The table: the same round table as Duraks (styles from /multi.css) ============ -->
+<div id="meliStage" class="meli meli-stage hidden">
+<main id="multiGame" class="m-game">
+  <div class="multi-topline">
+    <div class="multi-turnwrap">
+      <div id="turnBar" class="multi-turnbar" aria-live="polite"></div>
+      <div id="status" class="multi-event" role="status" aria-live="polite"></div>
     </div>
-    <div class="row-btns">
-      <button type="button" id="copyLinkBtn" class="gold">Kopēt uzaicinājuma saiti</button>
-      <button type="button" id="cancelWaitBtn" class="ghost">Atcelt</button>
-    </div>
-    <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+    <button type="button" id="menuBtn" class="multi-menu-btn hidden" aria-label="Izvēlne" aria-expanded="false">⋯</button>
   </div>
-</main>
-
-<!-- ============ Table ============ -->
-<main id="game" class="m-screen hidden">
-  <header class="topbar">
-    <div class="opp">
-      <span class="avatar" id="oppAvatar" aria-hidden="true">🤖</span>
-      <span id="oppName">Pretinieks</span>
-      <span id="oppDot" class="dot" title="Savienots"></span>
-      <span class="count">Kārtis: <b id="oppCount">0</b></span>
-    </div>
-    <div class="roundinfo">
-      <span id="timer" class="timer hidden" title="Atlikušais laiks gājienam"></span>
-      <span id="lock" class="lock"></span>
-      <button type="button" id="leaveBtn" class="ghost m-small">Iziet</button>
-      <button type="button" id="menuBtn" class="multi-menu-btn hidden" aria-label="Izvēlne" aria-expanded="false">⋯</button>
-    </div>
-  </header>
-  <div id="tbar" class="m-tbar hidden" aria-hidden="true"><i></i></div>
   <div id="menuSheet" class="multi-sheet hidden">
     <strong>Padoties?</strong>
-    <span class="muted">Pretinieks tiks pasludināts par uzvarētāju. Turi nospiestu 1,5 sekundes.</span>
+    <span class="muted" id="surrenderText">Tu izstāsies no spēles. Turi nospiestu 1,5 sekundes.</span>
     <button type="button" id="surrenderHold" class="ghost-danger multi-hold"><span class="multi-hold-fill"></span><span>Turi, lai padotos</span></button>
     <button type="button" id="menuCancel" class="ghost">Atcelt</button>
   </div>
 
-  <section class="table" aria-label="Galds">
-    <div id="pile" class="pile"></div>
-    <div id="claims" class="claims" aria-label="Šī raunda paziņojumi"></div>
-    <div id="reveal" class="reveal hidden" role="status"></div>
-  </section>
+  <div id="multiTableFelt" class="table-felt">
+    <div class="table-wood" id="wood">
+      <div class="multi-round-table"></div>
+      <div id="turnTimer" class="turn-timer hidden-timer" aria-hidden="true"><div class="turn-timer-track"><div class="turn-timer-fill"></div></div><span class="turn-timer-secs"></span></div>
+      <div id="dirs" class="multi-dirs"></div>
+      <!-- the claimed suit of this round, in the Duraks deck corner (same card as an empty deck's trump) -->
+      <div id="claimPile" class="deck-pile empty m-claim hidden">
+        <span id="claimCard" class="deck-trump-card"></span>
+        <span class="deck-last-chip">masts šim aplim</span>
+      </div>
+      <div id="seats" class="multi-seats"></div>
+      <div id="mePill" class="multi-seat multi-seat-me"></div>
+      <div class="table-safezone"><div id="pile" class="m-pile" aria-label="Kaudze"></div></div>
+      <div id="fan" class="fan m-fan-onboard" aria-label="Tava roka"></div>
+      <div id="reveal" class="reveal hidden" role="status"></div>
+    </div>
+  </div>
 
-  <p id="status" class="status" role="status" aria-live="polite"></p>
-
-  <section class="me" aria-label="Tava roka">
+  <div class="action-row m-action-row">
     <div id="actBar" class="m-actbar"></div>
-    <div id="fan" class="fan"></div>
-    <p id="handHint" class="m-handhint" aria-live="polite"></p>
-    <div class="me-label"><span id="meName">Tu</span> · kārtis: <b id="myCount">0</b></div>
-    <label class="deck-pick">Kārtis
+    <button id="chatBtn" class="btn btn-secondary chat-toggle" type="button">💬 Čats</button>
+  </div>
+  <p id="handHint" class="m-handhint" aria-live="polite"></p>
+  <div class="game-prefs-row">
+    <label class="sort-hand-row">Kārtis
       <select id="cardDeckSelect" class="card-deck-select" aria-label="Kāršu dizains">
         <option value="svg">Jaunās</option>
         <option value="png">Klasiskās</option>
       </select>
     </label>
-  </section>
+  </div>
 </main>
+</div>
+
+<!-- Table chat while playing (the same panel as Duraks) -->
+<div id="chatPanel" class="chat-panel hidden" role="dialog" aria-label="Galda čats">
+  <div class="chat-header">
+    <span>Galda čats</span>
+    <button id="chatCloseBtn" class="chat-close" type="button" aria-label="Aizvērt čatu">✕</button>
+  </div>
+  <div id="chatMessages" class="chat-messages" aria-live="polite"></div>
+  <div class="chat-input-row">
+    <input id="chatInput" type="text" placeholder="Uzraksti ziņu…" maxlength="300" aria-label="Ziņa" />
+    <button id="chatSendBtn" class="btn btn-primary" type="button">Sūtīt</button>
+  </div>
 </div>
 
 <!-- ============ Meļi pop-ups ============ -->
 <div class="meli">
-<div id="setupModal" class="m-modal hidden" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
-  <form id="setupForm" class="panel setup">
-    <h2 id="setupTitle">Jauna istaba</h2>
-
-    <div class="m-field">Kāršu skaits</div>
-    <div class="seg" data-key="size" role="radiogroup" aria-label="Kāršu skaits">
-      <button type="button" role="radio" data-value="12" aria-checked="true">24 kārtis</button>
-      <button type="button" role="radio" data-value="26" aria-checked="false">52 kārtis</button>
-    </div>
-
-    <div class="m-field">Privāta spēle</div>
-    <div class="seg" data-key="private" role="radiogroup" aria-label="Privāta spēle">
-      <button type="button" role="radio" data-value="off" aria-checked="true">Izsl.</button>
-      <button type="button" role="radio" data-value="on" aria-checked="false">🔒 Iesl.</button>
-    </div>
-
-    <button type="submit" id="createSubmit" class="gold">Izveidot istabu</button>
-    <button type="button" id="setupCancel" class="ghost">Atcelt</button>
-  </form>
-</div>
-
 <div id="over" class="m-modal hidden" role="dialog" aria-modal="true" aria-labelledby="overTitle">
   <div class="panel">
     <h2 id="overTitle"></h2>
     <p id="overText"></p>
     <p id="rematchNote" class="m-hint center"></p>
     <button id="againBtn" class="gold">Atkārtot</button>
+    <button id="watchBtn" class="ghost hidden">Skatīties tālāk</button>
     <button id="lobbyBtn" class="ghost">Atpakaļ uz vestibilu</button>
   </div>
 </div>
@@ -293,15 +345,6 @@
     <button type="submit" class="gold">Pievienoties</button>
     <button type="button" id="pwCancel" class="ghost">Atcelt</button>
   </form>
-</div>
-
-<div id="leaveModal" class="m-modal hidden" role="dialog" aria-modal="true" aria-labelledby="leaveTitle">
-  <div class="panel">
-    <h2 id="leaveTitle">Iziet no spēles?</h2>
-    <p id="leaveText" class="m-hint center"></p>
-    <button id="leaveYes" class="danger">Iziet</button>
-    <button id="leaveNo" class="ghost">Palikt</button>
-  </div>
 </div>
 
 <div id="toast" class="m-toast hidden" role="status"></div>

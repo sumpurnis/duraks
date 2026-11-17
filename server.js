@@ -124,13 +124,14 @@ const meliCreateLimiter = createRateLimiter({ max: 20, windowMs: 10 * 60 * 1000,
 const meli = attachMeli(io, {
   statsFile: path.join(DATA_DIR, 'meli-stats.json'),
   // The front page's map: finished games wear roads and grow villages; connected players smoke.
-  onResult: ({ winner, loser, vsAI }) => {
-    const names = [winner, loser].filter((s) => s && !s.ai && s.account).map((s) => s.name);
+  onResult: ({ winner, loser, losers, vsAI }) => {
+    const names = [winner, ...(losers || [loser])].filter((s) => s && !s.ai && s.account).map((s) => s.name);
     world.recordGame('meli', names, { vsBot: !!vsAI });
   },
   onPresence: (name, id, on) => (on ? world.seen(name, 'meli:' + id) : world.gone('meli:' + id)),
   canCreate: (socket) => meliCreateLimiter.check(socketIp(socket)).allowed,
   nameFilter: profanity.isOffensive,
+  cleanChat: profanity.maskText,
   verifyAccount: (name, token, socket) => {
     if (!meliAuthLimiter.check(socketIp(socket)).allowed) return null;
     const rec = users.verifySessionToken(name, token);

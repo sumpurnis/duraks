@@ -341,3 +341,102 @@
 .meli .fan-row > .m-card:first-child .m-bubble::after { left: 24px; }
 .meli .fan-row > .m-card:last-child .m-bubble { left: auto; right: 0; transform: none; }
 .meli .fan-row > .m-card:last-child .m-bubble::after { left: auto; right: 18px; transform: none; }
+
+/* ---------- 2–6 players: Duraks round table (Nov 2026) ----------
+   The table itself comes from /multi.css (#multiGame, #multiTableFelt, .multi-seat…); these are the
+   Meļi-only pieces: the pile in the middle, the claimed-suit card, the hand on the table. */
+.meli #multiGame {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: calc(var(--app-vh, 1vh) * 100);
+  display: flex;
+  flex-direction: column;
+}
+.meli #multiTableFelt .table-wood {
+  width: min(100%, 1280px, calc((var(--app-vh, 1vh) * 100 - 205px) * 1.5));
+}
+.meli .multi-topline { padding: 8px 12px 0; }
+.meli .multi-sheet button { width: 100%; }
+
+/* the pile: face down, only the count shows */
+.meli .m-pile { position: relative; width: 8.4cqw; aspect-ratio: 84 / 122; }
+.meli .m-pile .back { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 6px; }
+.meli .m-pile .pile-count { top: -1cqw; right: -1.4cqw; min-width: 2.6cqw; height: 2.6cqw; font-size: clamp(11px, 1.4cqw, 16px); }
+.meli .m-pile-empty {
+  position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+  border: 2px dashed rgba(250, 246, 236, 0.25); border-radius: 8px; color: #cfe0e8; font-size: clamp(10px, 1.2cqw, 13px);
+}
+.meli .m-pile-cap {
+  position: absolute; left: 50%; top: calc(100% + 1cqw); transform: translateX(-50%); white-space: nowrap;
+  font-size: clamp(10px, 1.25cqw, 14px); color: #e8f1f5;
+}
+.meli .m-pile-cap b { color: var(--gold); }
+
+/* the claimed suit: the Duraks empty-deck trump card, labelled "apgalvots" */
+.meli .m-claim .deck-last-chip { display: block; }
+
+/* my hand lies on the table, under my name (like the Duraks hand) */
+.meli .m-fan-onboard {
+  --card-w: 9.2cqw;
+  --card-h: calc(var(--card-w) * 1.4);
+  position: absolute;
+  left: 17%;
+  right: 17%;
+  bottom: 1.2%;
+  z-index: 4;
+  min-height: 0;
+  padding-top: 0;
+  align-items: flex-end;
+}
+.meli .m-fan-onboard .m-hint { color: #cfe0e8; }
+.meli .m-fan-onboard .m-card { border-radius: 6px; }
+
+/* the reveal sits over the middle of the table */
+.meli #multiGame .reveal { inset: 8% 14% 6%; }
+
+/* under the table: "Neticu!", the suits to announce, the chat */
+.meli .m-action-row { align-items: center; flex-wrap: wrap; gap: 10px; padding: 6px 12px 4px; }
+.meli .m-action-row .m-actbar { flex-direction: row; flex-wrap: wrap; min-height: 46px; }
+.meli .m-action-row .chat-toggle { flex: 0 0 auto; width: auto; max-width: 180px; padding: 10px 18px; font-weight: 600; font-size: .95rem; }
+.meli .m-handhint { padding: 0 12px; }
+.meli .game-prefs-row { padding-bottom: 8px; font-size: .8rem; color: var(--muted); }
+.meli .game-prefs-row label { display: flex; align-items: center; gap: 8px; }
+
+@media (max-width: 700px), (max-aspect-ratio: 1/1) {
+  .meli #multiTableFelt .table-wood { width: min(100%, calc((var(--app-vh, 1vh) * 100 - 215px) / 1.35)); }
+  .meli .m-fan-onboard { --card-w: 14.5cqw; left: 2%; right: 2%; }
+  .meli .m-pile { width: 14cqw; }
+  .meli .m-pile .pile-count { min-width: 5cqw; height: 5cqw; font-size: 3cqw; }
+  .meli .m-pile-cap { font-size: 2.9cqw; }
+  .meli .m-pile-empty { font-size: 2.8cqw; }
+  .meli #multiGame .reveal { inset: 6% 3% 4%; }
+}
+
+/* ---------- lobby: waiting box with the early-start "ready" check ---------- */
+.wait-names { list-style: none; margin: 6px auto 8px; padding: 0; display: grid; gap: 4px; max-width: 300px; text-align: left; }
+.wait-names li { display: flex; justify-content: space-between; gap: 10px; font-size: .85rem; padding: 4px 10px; border-radius: 8px; background: rgba(255, 255, 255, .05); }
+.wait-names li .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wait-names li .tick { color: #93c4d9; font-size: .8rem; white-space: nowrap; }
+.wait-names li.is-ready { background: rgba(63, 166, 107, .16); }
+.wait-names li.is-ready .tick { color: #86e3ae; font-weight: 700; }
+.multi-silhouette.is-ready { position: relative; }
+.multi-silhouette.is-ready::after {
+  content: '✓'; position: absolute; right: -4px; bottom: -2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #2e8b57; color: #fff; font-size: 10px; line-height: 14px; text-align: center; font-weight: 900;
+}
+.ready-box { margin: 10px 0; display: grid; gap: 6px; }
+.ready-box .ready-btn { margin: 0; }
+#waitBox .btn { margin-top: 8px; }
+
+/* 5–6 players: two seats on each side, spread wider than the Duraks 3–4 player spots */
+.meli .multi-seat.seat-l6  { left: 8%;  top: 55%; }
+.meli .multi-seat.seat-r6  { left: 92%; top: 55%; }
+.meli .multi-seat.seat-tl6 { left: 22%; top: 15%; }
+.meli .multi-seat.seat-tr6 { left: 78%; top: 15%; }
+@media (max-width: 700px), (max-aspect-ratio: 1/1) {
+  .meli .multi-seat.seat-l6  { left: 14%; top: 47%; }
+  .meli .multi-seat.seat-r6  { left: 86%; top: 47%; }
+  .meli .multi-seat.seat-tl6 { left: 17%; top: 23%; }
+  .meli .multi-seat.seat-tr6 { left: 83%; top: 23%; }
+}

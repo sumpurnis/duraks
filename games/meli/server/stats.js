@@ -1,8 +1,8 @@
 'use strict';
 // Meļi statistics for the lobby's "Statistika" column. Same shape as Duraks' leaderboards
 // (games, gamesVsBot, topWinRate, longestStreak, mostPlayed) so the two lobbies look alike.
-// Only games between two signed-in accounts count towards the rankings; games against the computer
-// and guest games only count in the totals.
+// Only games without the computer count towards the rankings, and only for signed-in accounts (the
+// winner gets a win, everyone else at the table a loss); games against the computer only count in the totals.
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -35,8 +35,9 @@ class MeliStats {
     return p;
   }
 
-  /** winner/loser: { name, account } seat info; vsAI: whether the loser or winner was the computer. */
-  record({ winner, loser, vsAI }) {
+  /** winner and losers (or one loser): { name, account } seat info; vsAI: whether a computer played. */
+  record({ winner, loser, losers, vsAI }) {
+    const beaten = losers || (loser ? [loser] : []);
     const g = this.data.global;
     g.allTime += 1;
     this.daily(g, 'daily').played += 1;
@@ -44,7 +45,7 @@ class MeliStats {
       g.vsBotAllTime += 1;
       this.daily(g, 'vsBotDaily').played += 1;
     } else {
-      for (const [seat, won] of [[winner, true], [loser, false]]) {
+      for (const [seat, won] of [[winner, true], ...beaten.map((s) => [s, false])]) {
         if (!seat || !seat.account) continue;
         const p = this.player(seat.name);
         for (const s of [p, p.daily]) {

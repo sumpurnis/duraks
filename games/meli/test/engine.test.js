@@ -65,7 +65,7 @@ test('view hides the opponent hand and the identity of pile cards', () => {
   const v = g.view(1);
   assert.equal(v.oppCount, 25);
   assert.equal(v.hand.length, 26);
-  assert.deepEqual(Object.keys(v.pile.claims[0]).sort(), ['by', 'rank', 'suit']);
+  assert.deepEqual(Object.keys(v.pile.claims[0]).sort(), ['by', 'player', 'rank', 'suit']);
   assert.equal(JSON.stringify(v).includes(c.id) && c.id !== 'K' + c.suit, g.hands[1].some((x) => x.id === c.id));
 });
 
@@ -197,6 +197,88 @@ test('half deck AI-vs-AI games finish in both modes', () => {
         if (m.action === 'challenge') g.challenge(g.turn); else g.play(g.turn, m.cardId, m.claim);
         if (++steps > 20000) assert.fail(`did not finish (${announce}, seed ${seed})`);
       }
+    }
+  }
+});
+
+// ----------------------------------------------------------------------------- 3 to 6 players
+
+test('2–6 players: the whole deck is dealt round-robin; other counts are rejected', () => {
+  for (let n = 2; n <= 6; n++) {
+    const g = new MeliGame({ rng: mulberry32(n), players: n });
+    const sizes = g.hands.map((h) => h.length);
+    assert.equal(sizes.reduce((a, b) => a + b, 0), 52);
+    assert.ok(Math.max(...sizes) - Math.min(...sizes) <= 1);
+    assert.equal(new Set(g.hands.flat().map((c) => c.id)).size, 52);
+  }
+  assert.throws(() => new MeliGame({ players: 1 }), RangeError);
+  assert.throws(() => new MeliGame({ players: 7 }), RangeError);
+  const half = new MeliGame({ rng: mulberry32(3), players: 5, deck: 'half' });
+  assert.equal(half.hands.flat().length, 24);
+});
+
+test('turns go round the table; only the next player may call bluff (by default)', () => {
+  const g = new MeliGame({ rng: mulberry32(31), players: 4, announce: 'suit' });
+  const c0 = g.hands[0][0];
+  g.play(0, c0.id, { suit: c0.suit });
+  assert.equal(g.turn, 1);
+  assert.equal(g.canChallenge(1), true);
+  assert.equal(g.canChallenge(2), false);
+  assert.equal(g.canChallenge(0), false, 'never your own card');
+  assert.throws(() => g.challenge(2), /not your turn/);
+  const c1 = g.hands[1][0];
+  g.play(1, c1.id, {});
+  assert.equal(g.turn, 2);
+  const v = g.view(3);
+  assert.deepEqual(v.counts, g.hands.map((h) => h.length));
+  assert.equal(v.pile.top, 1);
+  assert.equal(v.canChallenge, false);
+});
+
+test('challenge mode "any": anyone but the card owner may call it, out of turn too', () => {
+  const g = new MeliGame({ rng: mulberry32(32), players: 3, announce: 'suit', challenge: 'any' });
+  const c = g.hands[0].find((x) => x.suit !== g.hands[0][0].suit) || g.hands[0][1];
+  g.play(0, c.id, { suit: SUITS.find((s) => s !== c.suit) }); // a lie
+  assert.equal(g.canChallenge(2), true);
+  assert.throws(() => g.challenge(0), /own card/);
+  const r = g.challenge(2);
+  assert.equal(r.reveal.lie, true);
+  assert.equal(r.reveal.loser, 0);
+  assert.equal(g.turn, 2, 'the caller who was right starts');
+});
+
+test('a forfeiting player is out: cards leave the game, the others play on, the last one wins', () => {
+  const g = new MeliGame({ rng: mulberry32(33), players: 3, announce: 'suit' });
+  const r = g.forfeit(0);
+  assert.equal(r.over, false);
+  assert.equal(g.turn, 1, 'the turn passes on');
+  assert.equal(g.hands[0].length, 0);
+  assert.equal(g.hands[1].length + g.hands[2].length + g.removed.length, 52);
+  const c = g.hands[1][0];
+  g.play(1, c.id, { suit: c.suit });
+  assert.equal(g.turn, 2, 'seat 0 is skipped');
+  g.play(2, g.hands[2][0].id, {});
+  assert.equal(g.turn, 1);
+  const end = g.forfeit(2);
+  assert.equal(end.over, true);
+  assert.equal(g.winner, 1);
+});
+
+test('AI-vs-AI with 3 to 6 players: games finish, cards are conserved, the winner has none left', () => {
+  for (let n = 3; n <= 6; n++) {
+    for (let seed = 1; seed <= 25; seed++) {
+      const rng = mulberry32(seed * 10 + n);
+      const g = new MeliGame({ rng, players: n, announce: 'suit', deck: seed % 2 ? 'half' : 'full' });
+      const deck = g.hands.flat().length;
+      let steps = 0;
+      while (g.phase === 'play') {
+        const me = g.turn;
+        const m = ai.decide(g, me, rng);
+        if (m.action === 'challenge') g.challenge(me); else g.play(me, m.cardId, m.claim);
+        assert.equal(g.hands.flat().length + g.pile.length, deck);
+        if (++steps > 40000) assert.fail(`did not finish (${n} players, seed ${seed})`);
+      }
+      assert.equal(g.hands[g.winner].length, 0);
     }
   }
 });

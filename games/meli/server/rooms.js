@@ -1,23 +1,30 @@
 'use strict';
 /**
- * Rooms for Meļi: a room is either a human-vs-computer game (starts at once) or a human-vs-human
- * game (waits for a second player). Seat index == engine player index.
+ * Rooms for Meļi: 2 to 6 seats, any of them (but the host's) may be the computer.
  *
- *  - Server is authoritative; each human only ever receives their own view.
+ *  - A room where every other seat is the computer ("solo") starts at once and is never listed.
+ *  - Otherwise it waits for people. It starts when every seat is taken, or earlier when at least two
+ *    seats are taken and everybody sitting there has ticked "ready" (the early start).
+ *  - Seat index == engine player index == turn order. An early start drops the empty seats.
+ *  - Server is authoritative; each person only ever receives their own view.
  *  - Reconnect: every seat has a secret token; a dropped player has `graceMs` to come back.
- *  - Human-vs-human games have a per-turn timer; running out of time forfeits.
- *  - Rematch needs both players to agree (computer games restart at once).
+ *  - Games with more than one person have a per-turn timer. Running out of time, leaving or staying
+ *    disconnected forfeits: that player is out and the others play on (the last one left wins).
+ *  - Rematch needs every remaining person to agree (the computer always agrees).
+ *  - Table chat for everyone at the table, guests too (the host site masks rude words).
  */
 const crypto = require('node:crypto');
-const { MeliGame, RuleError } = require('./engine');
+const { MeliGame, RuleError, MIN_PLAYERS, MAX_PLAYERS } = require('./engine');
 const ai = require('./ai');
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 const randomString = (n) => Array.from(crypto.randomBytes(n), (b) => ALPHABET[b % ALPHABET.length]).join('');
 // Announcement versions players may pick. 'suit-rank' is implemented but switched off for now.
 const ANNOUNCE_ENABLED = ['suit'];
-const HAND_SIZES = new Set([12, 26]); // cards each: 24-card game (9 to Ace) or 52-card game (whole deck);
-const AI_SEAT = 1;
+const DECKS = new Set(['half', 'full']); // 24 cards (9 to Ace) or the whole 52-card deck
+const CHAT_LOG = 50;
+const CHAT_MAX = 300;
+const CHAT_GAP_MS = 400;
 
 class RoomError extends RuleError {
   constructor(message, code, roomCode) {
@@ -30,11 +37,18 @@ class RoomError extends RuleError {
 const DEFAULT_CFG = {
   aiDelay: 1100, // ms the computer "thinks"
   revealPause: 2600, // ms the computer waits after a reveal before moving
-  turnMs: 60000, // human-vs-human move limit
+  turnMs: 60000, // move limit in games with more than one person
   graceMs: 30000, // time a dropped player has to reconnect
   finishedTtlMs: 10 * 60000, // how long a finished room stays for rematch
   maxRooms: 500,
+  challenge: 'next', // who may call bluff: 'next' (the player whose turn it is) or 'any'
+  cleanChat: (s) => s, // the host site passes its rude-word masking here
   rng: Math.random,
+};
+
+const clampInt = (v, lo, hi, dflt) => {
+  const n = Number(v);
+  return Number.isInteger(n) ? Math.min(hi, Math.max(lo, n)) : dflt;
 };
 
 class RoomManager {
@@ -61,8 +75,14 @@ class RoomManager {
       socketId: socket.id,
       connected: true,
       left: false,
+      ready: false,
       dropTimer: null,
+      lastChat: 0,
     };
+  }
+
+  aiSeat(name) {
+    return { ai: true, account: false, name, token: null, socketId: null, connected: true, left: false, ready: true, dropTimer: null };
   }
 
   lookup(socket) {
@@ -84,6 +104,14 @@ class RoomManager {
     else this.bySocket.delete(socket.id);
   }
 
+  humans(room) {
+    return room.seats.filter((s) => s && !s.ai);
+  }
+
+  filled(room) {
+    return room.seats.filter(Boolean).length;
+  }
+
   emitSeat(room, idx, event, payload) {
     const s = room.seats[idx];
     if (s && !s.ai && s.connected && s.socketId) this.io.to(s.socketId).emit(event, payload);
@@ -99,31 +127,72 @@ class RoomManager {
       token: room.seats[idx].token,
       seat: idx,
       status: room.status,
+      solo: room.solo,
       vsAI: room.vsAI,
-      password: idx === 0 ? room.password : null,
       announce: room.announce,
-      handSize: room.handSize,
+      deck: room.deck,
     };
+  }
+
+  /** The waiting room as one seated person sees it. */
+  waitingFor(room, idx) {
+    const filled = this.filled(room);
+    const people = this.humans(room);
+    return {
+      code: room.code,
+      total: room.seats.length,
+      filled,
+      aiCount: room.seats.filter((s) => s && s.ai).length,
+      deck: room.deck,
+      announce: room.announce,
+      private: !!room.password,
+      password: room.password, // only ever sent to people already at the table
+      isHost: idx === room.host,
+      you: idx,
+      seats: room.seats.map((s, i) => (s ? { name: s.name, ai: !!s.ai, ready: !!s.ready, host: i === room.host, connected: !!s.connected } : null)),
+      ready: people.filter((s) => s.ready).length,
+      people: people.length,
+      canStartEarly: filled >= MIN_PLAYERS && filled < room.seats.length,
+    };
+  }
+
+  broadcastWaiting(room) {
+    room.seats.forEach((s, i) => {
+      if (s && !s.ai) this.emitSeat(room, i, 'room:waiting', this.waitingFor(room, i));
+    });
   }
 
   viewFor(room, idx) {
     const g = room.game;
     const me = room.seats[idx];
-    const opp = room.seats[1 - idx];
     const turnMs = room.turnDeadline ? Math.max(0, room.turnDeadline - Date.now()) : null;
+    const people = room.seats.filter((s) => !s.ai && !s.left);
     return {
       ...g.view(idx),
       room: {
         code: room.code,
         status: room.status,
+        solo: room.solo,
         vsAI: room.vsAI,
         private: !!room.password,
-        handSize: room.handSize,
+        deck: room.deck,
         myName: me.name,
-        opp: opp ? { name: opp.name, ai: !!opp.ai, connected: !!opp.connected, left: !!opp.left } : null,
+        seats: room.seats.map((s, i) => ({
+          name: s.name,
+          ai: !!s.ai,
+          connected: !!s.connected,
+          left: !!s.left,
+          out: !!g.out[i],
+          outDetail: room.outDetail[i] || null,
+        })),
         turnMs,
         endDetail: room.endDetail,
-        rematch: { you: !!room.rematch[idx], opp: !!room.rematch[1 - idx] },
+        rematch: {
+          you: room.rematch.has(idx),
+          agreed: people.filter((s) => room.rematch.has(room.seats.indexOf(s))).map((s) => s.name),
+          waiting: people.filter((s) => !room.rematch.has(room.seats.indexOf(s))).map((s) => s.name),
+          possible: room.seats.filter((s) => s.ai || !s.left).length >= MIN_PLAYERS,
+        },
       },
     };
   }
@@ -139,12 +208,18 @@ class RoomManager {
   listOpen() {
     const out = [];
     for (const room of this.rooms.values()) {
-      if (room.status !== 'waiting' || room.vsAI || !room.seats[0].connected) continue;
+      if (room.status !== 'waiting' || room.solo) continue;
+      const host = room.seats[room.host];
+      if (!host || !host.connected || this.filled(room) >= room.seats.length) continue;
       out.push({
         code: room.code,
-        host: room.seats[0].name,
+        host: host.name,
+        total: room.seats.length,
+        filled: this.filled(room),
+        people: this.humans(room).length,
+        aiCount: room.seats.filter((s) => s && s.ai).length,
         announce: room.announce,
-        handSize: room.handSize,
+        deck: room.deck,
         private: !!room.password,
       });
     }
@@ -161,25 +236,35 @@ class RoomManager {
     this.assertFree(socket);
     if (this.rooms.size >= this.cfg.maxRooms) throw new RoomError('The server is full. Try again later.', 'full');
 
-    const vsAI = !!msg.vsAI;
-    const code = (() => {
-      let c;
-      do c = randomString(5);
-      while (this.rooms.has(c));
-      return c;
-    })();
+    // Old clients sent { vsAI, handSize: 12|26 }; new ones { totalPlayers, aiCount, deck }.
+    const total = clampInt(msg.totalPlayers, MIN_PLAYERS, MAX_PLAYERS, MIN_PLAYERS);
+    const aiCount = msg.vsAI && msg.aiCount === undefined ? total - 1 : clampInt(msg.aiCount, 0, total - 1, 0);
+    const deck = DECKS.has(msg.deck) ? msg.deck : Number(msg.handSize) === 26 ? 'full' : 'half';
+    const solo = aiCount === total - 1;
+
+    let code;
+    do code = randomString(5);
+    while (this.rooms.has(code));
+
+    const seats = Array(total).fill(null);
+    seats[0] = this.makeSeat(socket, msg.name, msg.account);
+    for (let i = 1; i <= aiCount; i++) seats[i] = this.aiSeat(aiCount === 1 ? 'Dators' : `Dators ${i}`);
 
     const room = {
       code,
-      vsAI,
+      solo,
+      vsAI: aiCount > 0,
       announce: ANNOUNCE_ENABLED.includes(msg.announce) ? msg.announce : 'suit',
-      handSize: HAND_SIZES.has(Number(msg.handSize)) ? Number(msg.handSize) : 12,
-      password: !vsAI && msg.private ? randomString(6) : null,
-      seats: [this.makeSeat(socket, msg.name, msg.account), null],
+      deck,
+      password: !solo && msg.private ? randomString(6) : null,
+      seats,
+      host: 0,
       game: null,
       status: 'waiting',
       endDetail: null,
-      rematch: [false, false],
+      outDetail: {},
+      rematch: new Set(),
+      chatLog: [],
       turnDeadline: null,
       turnTimer: null,
       aiTimer: null,
@@ -189,19 +274,21 @@ class RoomManager {
     this.bySocket.set(socket.id, { code, seat: 0 });
     socket.emit('room:joined', this.joinedPayload(room, 0));
 
-    if (vsAI) {
-      room.seats[1] = { ai: true, name: 'Dators', token: null, socketId: null, connected: true, left: false, dropTimer: null };
-      this.startGame(room);
-    }
+    if (solo) this.startGame(room);
+    else this.broadcastWaiting(room);
     this.publishLobby();
   }
 
   join(socket, msg = {}) {
     const code = String(msg.code || '').trim().toUpperCase().slice(0, 8);
     const room = this.rooms.get(code);
-    if (!room || room.status !== 'waiting' || room.vsAI) throw new RoomError('That game is no longer open.', 'gone');
+    if (!room || room.status !== 'waiting' || room.solo) throw new RoomError('That game is no longer open.', 'gone');
+    const mine = this.bySocket.get(socket.id);
+    if (mine && mine.code === code) return; // already sitting here
     this.assertFree(socket);
-    if (!room.seats[0].connected) throw new RoomError('The host is reconnecting. Try again in a moment.', 'busy');
+    const free = room.seats.indexOf(null);
+    if (free < 0) throw new RoomError('That game is full.', 'gone');
+    if (!room.seats[room.host] || !room.seats[room.host].connected) throw new RoomError('The host is reconnecting. Try again in a moment.', 'busy');
 
     if (room.password) {
       if (msg.password === undefined || msg.password === null || msg.password === '') {
@@ -212,41 +299,77 @@ class RoomManager {
       }
     }
 
-    room.seats[1] = this.makeSeat(socket, msg.name, msg.account);
-    this.bySocket.set(socket.id, { code, seat: 1 });
-    socket.emit('room:joined', this.joinedPayload(room, 1));
-    this.startGame(room);
+    room.seats[free] = this.makeSeat(socket, msg.name, msg.account);
+    this.bySocket.set(socket.id, { code, seat: free });
+    this.resetReady(room); // the table changed: everybody agrees again
+    socket.emit('room:joined', this.joinedPayload(room, free));
+    socket.emit('chat:history', room.chatLog);
+    if (this.filled(room) === room.seats.length) this.startGame(room);
+    else this.broadcastWaiting(room);
     this.publishLobby();
   }
 
-  /** Voluntary leave. Mid-game this is a forfeit. */
+  resetReady(room) {
+    room.seats.forEach((s) => { if (s && !s.ai) s.ready = false; });
+  }
+
+  /** "Ready": start now with the players already seated, once every one of them agrees. */
+  ready(socket, msg = {}) {
+    const { room, idx } = this.lookup(socket);
+    if (room.status !== 'waiting') throw new RoomError('The game has already started.', 'bad');
+    room.seats[idx].ready = !!(msg && msg.ready);
+    const people = this.humans(room);
+    if (this.filled(room) >= MIN_PLAYERS && people.every((s) => s.ready && s.connected)) {
+      this.startGame(room);
+      this.publishLobby();
+    } else {
+      this.broadcastWaiting(room);
+    }
+  }
+
+  /** Voluntary leave. In a waiting room the host's leave cancels the room; mid-game it is a forfeit. */
   leave(socket, silent = false) {
     const { room, idx } = this.lookup(socket);
     const seat = room.seats[idx];
+    this.bySocket.delete(socket.id);
 
-    if (room.status === 'playing') {
-      if (room.vsAI) {
-        this.destroy(room);
+    if (room.status === 'waiting') {
+      clearTimeout(seat.dropTimer);
+      if (idx === room.host) {
+        this.cancel(room, socket.id);
       } else {
-        this.forfeit(room, idx, 'left');
+        room.seats[idx] = null;
+        this.resetReady(room);
+        this.broadcastWaiting(room);
       }
-    }
-    if (this.rooms.has(room.code)) {
-      if (room.status === 'waiting') {
-        this.destroy(room);
-      } else {
+    } else {
+      if (room.status === 'playing') {
+        if (room.solo) {
+          this.destroy(room);
+        } else {
+          this.forfeit(room, idx, 'left');
+        }
+      }
+      if (this.rooms.has(room.code)) {
         seat.left = true;
         clearTimeout(seat.dropTimer);
-        this.bySocket.delete(socket.id);
         seat.socketId = null;
         seat.connected = false;
-        if (room.seats.every((s) => !s || s.ai || s.left)) this.destroy(room);
-        else this.broadcast(room);
+        room.rematch.delete(idx);
+        if (room.seats.every((s) => s.ai || s.left)) this.destroy(room);
+        else if (!this.maybeRematch(room)) this.broadcast(room);
       }
     }
-    this.bySocket.delete(socket.id);
     if (!silent) socket.emit('room:left');
     this.publishLobby();
+  }
+
+  /** The host closed a waiting room: everyone else is told. */
+  cancel(room, exceptSocketId) {
+    room.seats.forEach((s, i) => {
+      if (s && !s.ai && s.socketId && s.socketId !== exceptSocketId) this.emitSeat(room, i, 'room:cancelled', { code: room.code });
+    });
+    this.destroy(room);
   }
 
   disconnect(socket) {
@@ -261,23 +384,36 @@ class RoomManager {
     seat.connected = false;
     seat.socketId = null;
     clearTimeout(seat.dropTimer);
-    seat.dropTimer = setTimeout(() => this.dropExpired(room, ref.seat), this.cfg.graceMs);
-    this.broadcast(room);
+    seat.dropTimer = setTimeout(() => this.dropExpired(room, seat), this.cfg.graceMs);
+    if (room.status === 'waiting') {
+      seat.ready = false;
+      this.broadcastWaiting(room);
+    } else {
+      this.broadcast(room);
+    }
     this.publishLobby();
   }
 
-  dropExpired(room, idx) {
-    const seat = room.seats[idx];
-    if (!this.rooms.has(room.code) || !seat || seat.connected) return;
-    if (room.status === 'waiting' || (room.status === 'playing' && room.vsAI)) {
+  dropExpired(room, seat) {
+    if (!this.rooms.has(room.code) || seat.connected) return;
+    const idx = room.seats.indexOf(seat);
+    if (idx < 0) return;
+    if (room.status === 'waiting') {
+      if (idx === room.host) this.cancel(room);
+      else {
+        room.seats[idx] = null;
+        this.resetReady(room);
+        this.broadcastWaiting(room);
+      }
+    } else if (room.status === 'playing' && room.solo) {
       this.destroy(room);
-    } else if (room.status === 'playing') {
-      this.forfeit(room, idx, 'disconnect');
-      seat.left = true;
     } else {
+      if (room.status === 'playing') this.forfeit(room, idx, 'disconnect');
       seat.left = true;
-      if (room.seats.every((s) => !s || s.ai || s.left)) this.destroy(room);
-      else this.broadcast(room);
+      room.rematch.delete(idx);
+      if (!this.rooms.has(room.code)) return;
+      if (room.seats.every((s) => s.ai || s.left)) this.destroy(room);
+      else if (!this.maybeRematch(room)) this.broadcast(room);
     }
     this.publishLobby();
   }
@@ -296,24 +432,56 @@ class RoomManager {
     seat.connected = true;
     this.bySocket.set(socket.id, { code: room.code, seat: idx });
     socket.emit('room:joined', this.joinedPayload(room, idx));
-    if (room.game) this.broadcast(room);
+    socket.emit('chat:history', room.chatLog);
+    if (room.game && room.status !== 'waiting') this.broadcast(room);
+    else this.broadcastWaiting(room);
     this.publishLobby();
+  }
+
+  // ------------------------------------------------------------------ chat
+
+  chat(socket, msg = {}) {
+    const { room, idx } = this.lookup(socket);
+    const seat = room.seats[idx];
+    const raw = typeof msg.text === 'string' ? msg.text.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, CHAT_MAX) : '';
+    if (!raw) return;
+    const now = Date.now();
+    if (now - (seat.lastChat || 0) < CHAT_GAP_MS) return; // flood guard
+    seat.lastChat = now;
+    let text = raw;
+    try { text = this.cfg.cleanChat(raw); } catch { /* keep the raw text */ }
+    const entry = { from: seat.name, text, at: now };
+    room.chatLog.push(entry);
+    if (room.chatLog.length > CHAT_LOG) room.chatLog.shift();
+    this.emitHumans(room, 'chat', entry);
   }
 
   // ------------------------------------------------------------------ game flow
 
+  /** Start (or restart) with the seats that are taken; empty and departed seats are dropped. */
   startGame(room) {
+    const keep = room.seats.filter((s) => s && (s.ai || !s.left));
+    room.seats = keep;
+    room.seats.forEach((s, i) => {
+      s.ready = !!s.ai;
+      if (!s.ai && s.socketId) this.bySocket.set(s.socketId, { code: room.code, seat: i });
+    });
+    room.host = Math.max(0, room.seats.findIndex((s) => !s.ai));
+    room.vsAI = room.seats.some((s) => s.ai);
     room.game = new MeliGame({
+      players: room.seats.length,
       announce: room.announce,
-      handSize: room.handSize,
-      deck: room.handSize === 12 ? 'half' : 'full', // 24-card game = the 24 strongest cards (9 to Ace)
-      starter: this.cfg.rng() < 0.5 ? 0 : 1,
+      deck: room.deck,
+      challenge: this.cfg.challenge,
+      starter: Math.floor(this.cfg.rng() * room.seats.length),
     });
     room.status = 'playing';
     room.endDetail = null;
-    room.rematch = [false, false];
+    room.outDetail = {};
+    room.rematch = new Set();
     clearTimeout(room.cleanupTimer);
     this.armTurn(room);
+    this.emitHumans(room, 'room:started', { code: room.code });
     this.broadcast(room);
     this.scheduleAI(room, this.cfg.aiDelay);
   }
@@ -341,7 +509,7 @@ class RoomManager {
     room.turnDeadline = null;
     if (room.game.phase === 'over') {
       room.status = 'over';
-      room.endDetail = 'empty-hand';
+      room.endDetail = room.game.endReason === 'forfeit' ? room.endDetail || 'left' : 'empty-hand';
       this.finished(room);
       this.scheduleCleanup(room);
     } else {
@@ -358,12 +526,12 @@ class RoomManager {
     if (!stats || room.recordedGame === room.game) return;
     room.recordedGame = room.game;
     const w = room.game.winner;
-    if (w !== 0 && w !== 1) return;
-    stats.record({ winner: room.seats[w], loser: room.seats[1 - w], vsAI: room.vsAI });
+    if (!room.seats[w]) return;
+    stats.record({ winner: room.seats[w], losers: room.seats.filter((_, i) => i !== w), vsAI: room.vsAI });
     this.io.to('lobby').emit('stats', stats.snapshot());
   }
 
-  /** "Padoties": give up this game. The room stays open, so a rematch is possible. */
+  /** "Padoties": give up this game. You are out; the room stays, so a rematch is possible. */
   surrender(socket) {
     const { room, idx } = this.lookup(socket);
     if (room.status !== 'playing') throw new RoomError('No game in progress.', 'none');
@@ -373,34 +541,48 @@ class RoomManager {
   armTurn(room) {
     clearTimeout(room.turnTimer);
     room.turnDeadline = null;
-    if (room.vsAI || room.status !== 'playing' || room.game.phase !== 'play') return;
+    if (room.solo || room.status !== 'playing' || room.game.phase !== 'play') return;
     const idx = room.game.turn;
+    const seat = room.seats[idx];
+    if (!seat || seat.ai) return;
     room.turnDeadline = Date.now() + this.cfg.turnMs;
     room.turnTimer = setTimeout(() => this.forfeit(room, idx, 'timeout'), this.cfg.turnMs);
   }
 
   forfeit(room, idx, detail) {
-    if (room.status !== 'playing') return;
+    if (room.status !== 'playing' || room.game.out[idx]) return;
     clearTimeout(room.turnTimer);
     clearTimeout(room.aiTimer);
     room.turnDeadline = null;
-    room.game.forfeit(idx);
-    room.status = 'over';
-    room.endDetail = detail;
-    this.finished(room);
-    this.scheduleCleanup(room);
+    const r = room.game.forfeit(idx);
+    room.outDetail[idx] = detail;
+    if (r.over) {
+      room.status = 'over';
+      room.endDetail = detail;
+      this.finished(room);
+      this.scheduleCleanup(room);
+    } else if (room.seats.every((s, i) => s.ai || room.game.out[i])) {
+      // only computers are left playing: nobody to play for, end it here
+      this.destroy(room);
+      return;
+    } else {
+      this.armTurn(room);
+    }
     this.broadcast(room);
+    this.scheduleAI(room, this.cfg.aiDelay);
   }
 
   scheduleAI(room, delay) {
     clearTimeout(room.aiTimer);
     const g = room.game;
-    if (!room.vsAI || room.status !== 'playing' || g.turn !== AI_SEAT) return;
+    if (!g || room.status !== 'playing' || g.phase !== 'play') return;
+    const me = g.turn;
+    if (!room.seats[me] || !room.seats[me].ai) return;
     room.aiTimer = setTimeout(() => {
-      if (room.status !== 'playing' || g.turn !== AI_SEAT) return;
+      if (room.status !== 'playing' || g.turn !== me) return;
       try {
-        const m = ai.decide(g, AI_SEAT);
-        const result = m.action === 'challenge' ? g.challenge(AI_SEAT) : g.play(AI_SEAT, m.cardId, m.claim);
+        const m = ai.decide(g, me);
+        const result = m.action === 'challenge' ? g.challenge(me) : g.play(me, m.cardId, m.claim);
         this.afterMove(room, result);
       } catch (err) {
         console.error('AI move failed:', err);
@@ -412,12 +594,20 @@ class RoomManager {
   rematch(socket) {
     const { room, idx } = this.lookup(socket);
     if (room.status !== 'over') throw new RoomError('The game is not finished yet.', 'bad');
-    const other = room.seats[1 - idx];
-    if (!other.ai && other.left) throw new RoomError('Your opponent has left the game.', 'gone');
-    room.rematch[idx] = true;
-    if (other.ai) room.rematch[1 - idx] = true;
-    if (room.rematch[0] && room.rematch[1]) this.startGame(room);
-    else this.broadcast(room);
+    const stay = room.seats.filter((s) => s.ai || !s.left);
+    if (stay.length < MIN_PLAYERS) throw new RoomError('Your opponent has left the game.', 'gone');
+    room.rematch.add(idx);
+    if (!this.maybeRematch(room)) this.broadcast(room);
+  }
+
+  /** Start the rematch once every remaining person has agreed. True when it started. */
+  maybeRematch(room) {
+    if (room.status !== 'over' || !room.rematch.size) return false;
+    if (room.seats.filter((s) => s.ai || !s.left).length < MIN_PLAYERS) return false;
+    const people = room.seats.map((s, i) => [s, i]).filter(([s]) => !s.ai && !s.left);
+    if (!people.length || !people.every(([, i]) => room.rematch.has(i))) return false;
+    this.startGame(room);
+    return true;
   }
 
   // ------------------------------------------------------------------ cleanup
@@ -434,7 +624,7 @@ class RoomManager {
     for (const s of room.seats) {
       if (!s) continue;
       clearTimeout(s.dropTimer);
-      if (s.socketId) this.bySocket.delete(s.socketId);
+      if (s.socketId && this.bySocket.get(s.socketId) && this.bySocket.get(s.socketId).code === room.code) this.bySocket.delete(s.socketId);
     }
     this.rooms.delete(room.code);
     this.publishLobby();

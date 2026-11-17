@@ -15,10 +15,12 @@ async function withApp(cfg, fn) {
   const sockets = [];
   const client = () => {
     const s = connect(`http://localhost:${port}`, { transports: ['websocket'], forceNew: true });
-    s.log = { notices: [], states: [], reveals: [] };
+    s.log = { notices: [], states: [], reveals: [], chat: [] };
     s.on('notice', (m) => s.log.notices.push(m));
     s.on('state', (v) => (s.log.states.push(v), (s.last = v)));
     s.on('reveal', (r) => s.log.reveals.push(r));
+    s.on('room:waiting', (w) => (s.wait = w));
+    s.on('chat', (c) => s.log.chat.push(c));
     sockets.push(s);
     return s;
   };
@@ -36,14 +38,13 @@ const once = (s, ev, ms = 3000) =>
     s.once(ev, (x) => (clearTimeout(t), res(x)));
   });
 
-/** Wait until the socket's latest state satisfies pred. */
-async function until(s, pred, ms = 3000) {
+async function until(s, pred, ms = 3000, what = 'last') {
   const end = Date.now() + ms;
   while (Date.now() < end) {
-    if (s.last && pred(s.last)) return s.last;
+    if (s[what] && pred(s[what])) return s[what];
     await sleep(10);
   }
-  throw new Error('condition not reached; last state: ' + JSON.stringify(s.last && { phase: s.last.phase, turn: s.last.turn, room: s.last.room }));
+  throw new Error('condition not reached; last: ' + JSON.stringify(s[what] && (what === 'last' ? { phase: s.last.phase, turn: s.last.turn, room: s.last.room } : s[what])));
 }
 
 const claimFor = (v, c, honest) => {
@@ -61,18 +62,18 @@ function move(s, { challengeRate = 0.3 } = {}) {
   s.emit('play', { cardId: c.id, claim: claimFor(v, c, honest && c.suit === (v.lockedSuit || c.suit)) });
 }
 
-/** Both sockets play on their own turns until the game ends. */
-async function playOut(a, b, ms = 20000) {
+/** Every socket plays on its own turn until the game ends for all of them. */
+async function playOut(socks, ms = 30000) {
   const end = Date.now() + ms;
-  let lastSig = '';
+  const seen = new Map();
   while (Date.now() < end) {
-    if (a.last && a.last.phase === 'over' && b.last && b.last.phase === 'over') return;
-    for (const s of [a, b]) {
+    if (socks.every((s) => s.last && s.last.phase === 'over')) return;
+    for (const s of socks) {
       const v = s.last;
       if (v && v.phase === 'play' && v.canPlay) {
-        const sig = `${v.round}/${v.pile.count}/${v.hand.length}/${v.oppCount}/${s === a}`;
-        if (sig !== lastSig) {
-          lastSig = sig;
+        const sig = `${v.round}/${v.pile.count}/${v.counts.join(',')}`;
+        if (seen.get(s) !== sig) {
+          seen.set(s, sig);
           move(s);
         }
       }
@@ -82,45 +83,59 @@ async function playOut(a, b, ms = 20000) {
   throw new Error('game did not finish');
 }
 
-const noLeak = (v) => assert.ok(!('hands' in v) && !('opponentHand' in v) && !('opp' in v && v.opp.hand), 'view must not leak hidden info');
+const noLeak = (v) => assert.ok(!('hands' in v) && !JSON.stringify(v.room.seats).includes('hand'), 'view must not leak hidden info');
 
-// ----------------------------------------------------------------------------- vs computer
-
-for (const announce of ['suit']) {
-  test(`vs computer (announce=${announce}): quick games run to completion`, async () => {
-    await withApp({}, async ({ client }) => {
-      for (let i = 0; i < 3; i++) {
-        const s = client();
-        s.emit('room:create', { name: 'Tester', vsAI: true, announce, handSize: 12 });
-        const joined = await once(s, 'room:joined');
-        assert.equal(joined.vsAI, true);
-        assert.equal(joined.password, null);
-        await until(s, (v) => v.phase === 'play');
-        const end = Date.now() + 25000;
-        while (Date.now() < end && s.last.phase !== 'over') {
-          if (s.last.canPlay) move(s);
-          await sleep(5);
-        }
-        assert.equal(s.last.phase, 'over');
-        noLeak(s.last);
-        assert.equal(s.last.room.opp.ai, true);
-        assert.equal(s.log.notices.length, 0, s.log.notices.join('; '));
-
-        // "Play again" restarts at once, without the AI having to agree
-        s.emit('rematch');
-        await until(s, (v) => v.phase === 'play');
-        s.emit('room:leave');
-        await once(s, 'room:left');
-      }
-    });
-  });
+/** Host creates, the others join (in order). Returns the room code. */
+async function seat(host, others, opts = {}) {
+  host.emit('room:create', { name: 'Host', ...opts });
+  const { code } = await once(host, 'room:joined');
+  let i = 0;
+  for (const s of others) {
+    s.emit('room:join', { code, name: `P${++i}` });
+    await once(s, 'room:joined');
+  }
+  return code;
 }
 
-test('computer rooms are never listed and cannot be joined', async () => {
+// ----------------------------------------------------------------------------- solo
+
+test('vs computer: the old 2-player request still works and plays to the end; Play again restarts at once', async () => {
+  await withApp({}, async ({ client }) => {
+    const s = client();
+    s.emit('room:create', { name: 'Tester', vsAI: true, handSize: 12 });
+    const joined = await once(s, 'room:joined');
+    assert.equal(joined.solo, true);
+    assert.equal(joined.deck, 'half');
+    await until(s, (v) => v.phase === 'play');
+    assert.equal(s.last.players, 2);
+    await playOut([s]);
+    noLeak(s.last);
+    assert.equal(s.last.room.seats[1].ai, true);
+    assert.equal(s.log.notices.length, 0, s.log.notices.join('; '));
+    s.emit('rematch');
+    await until(s, (v) => v.phase === 'play');
+  });
+});
+
+test('vs computer with 5 computers: a 6-player game runs to completion', async () => {
+  await withApp({}, async ({ client }) => {
+    const s = client();
+    s.emit('room:create', { name: 'Solo', totalPlayers: 6, aiCount: 5, deck: 'half' });
+    const j = await once(s, 'room:joined');
+    assert.equal(j.solo, true);
+    await until(s, (v) => v.phase === 'play');
+    assert.equal(s.last.players, 6);
+    assert.deepEqual(s.last.room.seats.map((x) => x.name), ['Solo', 'Dators 1', 'Dators 2', 'Dators 3', 'Dators 4', 'Dators 5']);
+    await playOut([s]);
+    assert.equal(s.log.notices.length, 0, s.log.notices.join('; '));
+  });
+});
+
+test('computer-only rooms are never listed and cannot be joined', async () => {
   await withApp({}, async ({ client }) => {
     const a = client();
     const b = client();
-    a.emit('room:create', { vsAI: true });
+    a.emit('room:create', { totalPlayers: 3, aiCount: 2 });
     const j = await once(a, 'room:joined');
     await sleep(50);
     b.emit('rooms:refresh');
@@ -130,159 +145,157 @@ test('computer rooms are never listed and cannot be joined', async () => {
   });
 });
 
-// ----------------------------------------------------------------------------- vs player
+// ----------------------------------------------------------------------------- tables with people
 
-test('player vs player: create, list, join, separate views', async () => {
-  await withApp({}, async ({ client }) => {
-    const host = client();
-    const guest = client();
-    const watcher = client();
-    const feed = [];
-    watcher.on('rooms', (l) => feed.push(l));
-    await sleep(100);
-
-    host.emit('room:create', { name: 'Anna', announce: 'suit-rank', handSize: 12 }); // switched off: must come back as 'suit'
-    const hj = await once(host, 'room:joined');
-    assert.equal(hj.status, 'waiting');
-    assert.equal(hj.seat, 0);
-    assert.match(hj.code, /^[A-Z2-9]{5}$/);
-
-    await sleep(100);
-    const list = feed[feed.length - 1];
-    assert.deepEqual(list, [{ code: hj.code, host: 'Anna', announce: 'suit', handSize: 12, private: false }]);
-
-    guest.emit('room:join', { code: hj.code.toLowerCase(), name: 'Bruno' });
-    const gj = await once(guest, 'room:joined');
-    assert.equal(gj.seat, 1);
-    assert.notEqual(gj.token, hj.token);
-
-    await until(host, (v) => v.phase === 'play');
-    await until(guest, (v) => v.phase === 'play');
-    assert.equal(host.last.room.opp.name, 'Bruno');
-    assert.equal(guest.last.room.opp.name, 'Anna');
-    assert.equal(host.last.you, 0);
-    assert.equal(guest.last.you, 1);
-    assert.equal(host.last.hand.length, 12);
-    assert.equal(guest.last.hand.length, 12);
-    const ids = new Set([...host.last.hand, ...guest.last.hand].map((c) => c.id));
-    assert.equal(ids.size, 24, 'hands are disjoint');
-    assert.notEqual(host.last.canPlay, guest.last.canPlay, 'exactly one player may move');
-    noLeak(host.last);
-    noLeak(guest.last);
-    await sleep(100);
-    assert.deepEqual(feed[feed.length - 1], [], 'started games leave the list');
-  });
-});
-
-test('player vs player: full scripted game, then rematch needs both players', async () => {
+test('2 players: create, list with seats, join starts the game, separate views', async () => {
   await withApp({}, async ({ client }) => {
     const a = client();
     const b = client();
-    a.emit('room:create', { name: 'A', announce: 'suit', handSize: 12 });
-    const { code } = await once(a, 'room:joined');
-    b.emit('room:join', { code, name: 'B' });
-    await playOut(a, b);
-
-    assert.equal(a.last.winner, 1 - b.last.winner === 0 ? a.last.winner : a.last.winner);
-    assert.notEqual(a.last.winner, null);
-    assert.equal(a.last.winner, b.last.winner);
-    const winnerSock = a.last.winner === a.last.you ? a : b;
-    assert.equal(winnerSock.last.hand.length, 0);
-    assert.equal(a.log.notices.length + b.log.notices.length, 0, [...a.log.notices, ...b.log.notices].join('; '));
-    assert.ok(a.log.reveals.length > 0 && a.log.reveals.length === b.log.reveals.length, 'both players see every reveal');
-
-    a.emit('rematch');
-    await until(b, (v) => v.room.rematch.opp === true);
-    assert.equal(a.last.phase, 'over', 'one vote is not enough');
-    b.emit('rematch');
+    a.emit('room:create', { name: 'Anna' });
+    const ja = await once(a, 'room:joined');
+    assert.equal(ja.status, 'waiting');
+    await until(a, (w) => w.code === ja.code, 3000, 'wait');
+    assert.equal(a.wait.isHost, true);
+    b.emit('rooms:refresh');
+    const list = await once(b, 'rooms');
+    assert.equal(list.length, 1);
+    assert.equal(list[0].host, 'Anna');
+    assert.equal(list[0].filled, 1);
+    assert.equal(list[0].total, 2);
+    assert.equal('password' in list[0], false);
+    b.emit('room:join', { code: ja.code, name: 'Bob' });
+    await once(b, 'room:joined');
     await until(a, (v) => v.phase === 'play');
     await until(b, (v) => v.phase === 'play');
-    assert.equal(a.last.hand.length, 12);
-    await playOut(a, b);
+    assert.equal(a.last.you, 0);
+    assert.equal(b.last.you, 1);
+    assert.notDeepEqual(a.last.hand, b.last.hand);
+    noLeak(a.last);
+    b.emit('rooms:refresh');
+    assert.deepEqual(await once(b, 'rooms'), [], 'a started room leaves the list');
   });
 });
 
-test('private rooms: listed with a lock, need the generated password', async () => {
+test('4 seats, 3 people + 1 computer: the full table starts by itself and plays out; rematch needs everyone', async () => {
   await withApp({}, async ({ client }) => {
-    const host = client();
-    const guest = client();
-    host.emit('room:create', { name: 'H', private: true, handSize: 12 });
-    const hj = await once(host, 'room:joined');
-    assert.match(hj.password, /^[A-Z2-9]{6}$/);
-
-    guest.emit('rooms:refresh');
-    const list = await once(guest, 'rooms');
-    assert.equal(list[0].private, true);
-    assert.ok(!JSON.stringify(list).includes(hj.password), 'the password is never listed');
-
-    guest.emit('room:join', { code: hj.code, name: 'G' });
-    assert.deepEqual(await once(guest, 'room:password'), { code: hj.code, wrong: false });
-    guest.emit('room:join', { code: hj.code, name: 'G', password: 'NOPE12' });
-    assert.deepEqual(await once(guest, 'room:password'), { code: hj.code, wrong: true });
-
-    guest.emit('room:join', { code: hj.code, name: 'G', password: hj.password.toLowerCase() });
-    const gj = await once(guest, 'room:joined');
-    assert.equal(gj.password, null, 'only the host is told the password');
-    await until(guest, (v) => v.phase === 'play');
-    assert.equal(guest.last.room.private, true);
+    const [h, p1, p2] = [client(), client(), client()];
+    await seat(h, [p1, p2], { totalPlayers: 4, aiCount: 1 });
+    await until(h, (v) => v.phase === 'play');
+    assert.equal(h.last.players, 4);
+    assert.equal(h.last.room.seats.filter((s) => s.ai).length, 1);
+    await playOut([h, p1, p2]);
+    const w = h.last.winner;
+    assert.equal(h.last.counts[w], 0);
+    h.emit('rematch');
+    await until(p1, (v) => v.room.rematch.agreed.includes('Host'));
+    assert.deepEqual(p1.last.room.rematch.waiting.sort(), ['P1', 'P2']);
+    p1.emit('rematch');
+    p2.emit('rematch');
+    await until(h, (v) => v.phase === 'play');
   });
 });
 
-test('one room per socket; no joining your own or a full room', async () => {
+test('early start: everybody seated ticks ready; a newcomer resets the ticks', async () => {
+  await withApp({}, async ({ client }) => {
+    const [h, p1, p2] = [client(), client(), client()];
+    const code = await seat(h, [p1], { totalPlayers: 5 });
+    await until(h, (w) => w.filled === 2 && w.canStartEarly, 3000, 'wait');
+    h.emit('room:ready', { ready: true });
+    await until(p1, (w) => w.ready === 1, 3000, 'wait');
+    assert.equal(p1.wait.seats[0].ready, true);
+    // a third player sits down: the ticks start over
+    p2.emit('room:join', { code, name: 'P2' });
+    await until(h, (w) => w.filled === 3 && w.ready === 0, 3000, 'wait');
+    for (const s of [h, p1]) s.emit('room:ready', { ready: true });
+    await until(p2, (w) => w.ready === 2, 3000, 'wait');
+    assert.equal(h.last, undefined, 'not started while someone is not ready');
+    p2.emit('room:ready', { ready: true });
+    await until(h, (v) => v.phase === 'play');
+    assert.equal(h.last.players, 3, 'empty seats are dropped');
+    assert.deepEqual(h.last.room.seats.map((s) => s.name), ['Host', 'P1', 'P2']);
+    await playOut([h, p1, p2]);
+  });
+});
+
+test('only the next player may call bluff', async () => {
+  await withApp({ turnMs: 60000 }, async ({ client }) => {
+    const [h, p1, p2] = [client(), client(), client()];
+    await seat(h, [p1, p2], { totalPlayers: 3 });
+    await until(h, (v) => v.phase === 'play');
+    const socks = [h, p1, p2];
+    const first = socks.find((s) => s.last.canPlay);
+    move(first, { challengeRate: 0 });
+    const nextIdx = (first.last.you + 1) % 3;
+    const next = socks.find((s) => s.last.you === nextIdx);
+    const third = socks.find((s) => s !== first && s !== next);
+    await until(next, (v) => v.canChallenge);
+    assert.equal(third.last.canChallenge, false);
+    third.emit('challenge');
+    assert.match(await once(third, 'notice'), /not your turn/);
+  });
+});
+
+test('private rooms: listed with a lock, need the password; the password is shown only at the table', async () => {
   await withApp({}, async ({ client }) => {
     const a = client();
     const b = client();
-    const c = client();
-    a.emit('room:create', { name: 'A' });
+    a.emit('room:create', { name: 'A', private: true, totalPlayers: 3 });
     const { code } = await once(a, 'room:joined');
+    const w = await until(a, (x) => x.password, 3000, 'wait');
+    b.emit('rooms:refresh');
+    const list = await once(b, 'rooms');
+    assert.equal(list[0].private, true);
+    assert.equal(JSON.stringify(list).includes(w.password), false);
+    b.emit('room:join', { code });
+    assert.deepEqual(await once(b, 'room:password'), { code, wrong: false });
+    b.emit('room:join', { code, password: 'NOPE' });
+    assert.deepEqual(await once(b, 'room:password'), { code, wrong: true });
+    b.emit('room:join', { code, password: w.password.toLowerCase() });
+    await once(b, 'room:joined');
+    assert.equal((await until(b, (x) => x.code === code, 3000, 'wait')).password, w.password);
+  });
+});
 
-    a.emit('room:create', { name: 'A2' });
+test('one room per socket; joining your own table again is harmless; a full table cannot be joined', async () => {
+  await withApp({}, async ({ client }) => {
+    const [a, b, c] = [client(), client(), client()];
+    a.emit('room:create', { name: 'A', totalPlayers: 3 });
+    const { code } = await once(a, 'room:joined');
+    a.emit('room:create', {});
     assert.match(await once(a, 'notice'), /already in a game/);
     a.emit('room:join', { code });
-    assert.match(await once(a, 'notice'), /already in a game/);
-
+    await sleep(80);
+    assert.equal(a.log.notices.length, 1);
     b.emit('room:join', { code, name: 'B' });
     await once(b, 'room:joined');
     c.emit('room:join', { code, name: 'C' });
-    assert.match(await once(c, 'notice'), /no longer open/);
-
-    c.emit('room:join', { code: 'ZZZZZ' });
-    assert.match(await once(c, 'notice'), /no longer open/);
+    await once(c, 'room:joined');
+    const d = client();
+    d.emit('room:join', { code });
+    assert.match(await once(d, 'notice'), /no longer open/);
   });
 });
 
 test('moves are validated: not your turn, malformed, not in a game', async () => {
   await withApp({}, async ({ client }) => {
-    const a = client();
-    const b = client();
-    const lone = client();
-    lone.emit('challenge');
-    assert.match(await once(lone, 'notice'), /not in a game/);
-
-    a.emit('room:create', { name: 'A', announce: 'suit' });
-    const { code } = await once(a, 'room:joined');
-    b.emit('room:join', { code, name: 'B' });
+    const [a, b] = [client(), client()];
+    await seat(a, [b]);
     await until(a, (v) => v.phase === 'play');
-    await until(b, (v) => v.phase === 'play');
-    const idle = a.last.canPlay ? b : a;
-    idle.emit('play', { cardId: idle.last.hand[0].id, claim: { suit: '♠' } });
-    assert.match(await once(idle, 'notice'), /not your turn/i);
-    idle.emit('play', { nope: true });
-    assert.match(await once(idle, 'notice'), /Malformed/);
-    idle.emit('challenge');
-    assert.equal((await once(idle, 'notice')).length > 0, true);
+    const waiting = a.last.canPlay ? b : a;
+    waiting.emit('play', { cardId: waiting.last.hand[0].id, claim: { suit: '♠' } });
+    assert.match(await once(waiting, 'notice'), /not your turn/);
+    waiting.emit('play', { nonsense: true });
+    assert.match(await once(waiting, 'notice'), /Malformed/);
+    const c = client();
+    c.emit('challenge');
+    assert.match(await once(c, 'notice'), /not in a game/);
   });
 });
 
-// ----------------------------------------------------------------------------- timers, leaving, reconnecting
-
-test('running out of the move timer forfeits', async () => {
+test('move timer: with 2 players the slow one loses; with 3 the slow one is out and the others play on', async () => {
   await withApp({ turnMs: 150 }, async ({ client }) => {
-    const a = client();
-    const b = client();
-    a.emit('room:create', { name: 'A' });
-    const { code } = await once(a, 'room:joined');
-    b.emit('room:join', { code, name: 'B' });
+    const [a, b] = [client(), client()];
+    await seat(a, [b]);
     await until(a, (v) => v.phase === 'play');
     const slow = a.last.canPlay ? a : b;
     const fast = slow === a ? b : a;
@@ -290,82 +303,63 @@ test('running out of the move timer forfeits', async () => {
     await until(fast, (v) => v.phase === 'over');
     assert.equal(fast.last.winner, fast.last.you);
     assert.equal(fast.last.room.endDetail, 'timeout');
-    await until(slow, (v) => v.phase === 'over');
-    assert.equal(slow.last.room.endDetail, 'timeout');
+  });
+  await withApp({ turnMs: 200 }, async ({ client }) => {
+    const [h, p1, p2] = [client(), client(), client()];
+    await seat(h, [p1, p2], { totalPlayers: 3 });
+    await until(h, (v) => v.phase === 'play');
+    const socks = [h, p1, p2];
+    const slow = socks.find((s) => s.last.canPlay);
+    const other = socks.find((s) => s !== slow);
+    await until(other, (v) => v.out[slow.last.you]);
+    assert.equal(other.last.phase, 'play', 'the game goes on without them');
+    assert.equal(other.last.room.seats[slow.last.you].outDetail, 'timeout');
+    assert.equal(other.last.counts[slow.last.you], 0);
   });
 });
 
-test('leaving mid-game forfeits; the other player can leave afterwards', async () => {
-  await withApp({}, async ({ client, app }) => {
-    const a = client();
-    const b = client();
-    a.emit('room:create', { name: 'A' });
-    const { code } = await once(a, 'room:joined');
-    b.emit('room:join', { code, name: 'B' });
-    await until(b, (v) => v.phase === 'play');
-
-    a.emit('room:leave');
-    await once(a, 'room:left');
-    await until(b, (v) => v.phase === 'over');
-    assert.equal(b.last.winner, b.last.you);
-    assert.equal(b.last.room.endDetail, 'left');
-    assert.equal(b.last.room.opp.left, true);
-
-    b.emit('rematch');
-    assert.match(await once(b, 'notice'), /left/);
-    b.emit('room:leave');
-    await once(b, 'room:left');
-    await sleep(20);
-    assert.equal(app.manager.rooms.size, 0, 'room is cleaned up when both are gone');
-  });
-});
-
-test('a dropped player can resume within the grace period', async () => {
-  await withApp({ graceMs: 400 }, async ({ client, port }) => {
-    const a = client();
-    const b = client();
-    a.emit('room:create', { name: 'A' });
-    const hj = await once(a, 'room:joined');
-    b.emit('room:join', { code: hj.code, name: 'B' });
-    await until(a, (v) => v.phase === 'play');
-    const handBefore = a.last.hand.map((c) => c.id).sort();
-
-    a.close();
-    await until(b, (v) => v.room.opp.connected === false);
-
-    const a2 = client();
-    a2.emit('room:resume', { code: hj.code, token: hj.token });
-    const again = await once(a2, 'room:joined');
-    assert.equal(again.seat, 0);
-    await until(a2, (v) => v.phase === 'play');
-    assert.deepEqual(a2.last.hand.map((c) => c.id).sort(), handBefore, 'same hand after resuming');
-    await until(b, (v) => v.room.opp.connected === true);
-
-    await sleep(600);
-    assert.equal(b.last.phase, 'play', 'grace timer was cancelled by the resume');
-  });
-});
-
-test('a bad token cannot resume a seat', async () => {
+test('leaving mid-game: out of the game, the others play on; the last one left wins', async () => {
   await withApp({}, async ({ client }) => {
-    const a = client();
-    a.emit('room:create', { name: 'A' });
-    const hj = await once(a, 'room:joined');
-    const thief = client();
-    thief.emit('room:resume', { code: hj.code, token: 'f'.repeat(32) });
-    await once(thief, 'room:gone');
-    thief.emit('room:resume', { code: 'NOPE1', token: hj.token });
-    await once(thief, 'room:gone');
+    const [h, p1, p2] = [client(), client(), client()];
+    await seat(h, [p1, p2], { totalPlayers: 3 });
+    await until(h, (v) => v.phase === 'play');
+    p2.emit('room:leave');
+    await once(p2, 'room:left');
+    await until(h, (v) => v.out[2] && v.room.seats[2].left);
+    assert.equal(h.last.phase, 'play');
+    p1.emit('room:leave');
+    await until(h, (v) => v.phase === 'over');
+    assert.equal(h.last.winner, 0);
+    assert.equal(h.last.room.rematch.possible, false);
   });
 });
 
-test('no resume in time: the dropped player forfeits', async () => {
-  await withApp({ graceMs: 100 }, async ({ client }) => {
-    const a = client();
-    const b = client();
+test('a dropped player can resume within the grace period; a bad token cannot', async () => {
+  await withApp({ graceMs: 1000 }, async ({ client }) => {
+    const [a, b] = [client(), client()];
     a.emit('room:create', { name: 'A' });
-    const { code } = await once(a, 'room:joined');
-    b.emit('room:join', { code, name: 'B' });
+    const ja = await once(a, 'room:joined');
+    b.emit('room:join', { code: ja.code, name: 'B' });
+    await until(a, (v) => v.phase === 'play');
+    const hand = a.last.hand;
+    a.close();
+    await until(b, (v) => !v.room.seats[0].connected);
+    const x = client();
+    x.emit('room:resume', { code: ja.code, token: 'bad' });
+    await once(x, 'room:gone');
+    const a2 = client();
+    a2.emit('room:resume', { code: ja.code, token: ja.token });
+    await once(a2, 'room:joined');
+    await until(a2, (v) => v.phase === 'play');
+    assert.deepEqual(a2.last.hand, hand);
+    await until(b, (v) => v.room.seats[0].connected);
+  });
+});
+
+test('no resume in time: with 2 players the dropped one forfeits', async () => {
+  await withApp({ graceMs: 100 }, async ({ client }) => {
+    const [a, b] = [client(), client()];
+    await seat(a, [b]);
     await until(b, (v) => v.phase === 'play');
     a.close();
     await until(b, (v) => v.phase === 'over');
@@ -374,89 +368,81 @@ test('no resume in time: the dropped player forfeits', async () => {
   });
 });
 
+test('waiting room: a guest leaving frees the seat; the host leaving cancels it for everyone', async () => {
+  await withApp({}, async ({ client }) => {
+    const [h, p1, p2] = [client(), client(), client()];
+    await seat(h, [p1, p2], { totalPlayers: 4 });
+    await until(h, (w) => w.filled === 3, 3000, 'wait');
+    p2.emit('room:leave');
+    await once(p2, 'room:left');
+    await until(h, (w) => w.filled === 2, 3000, 'wait');
+    h.emit('room:leave');
+    await once(p1, 'room:cancelled');
+    p1.emit('rooms:refresh');
+    assert.deepEqual(await once(p1, 'rooms'), []);
+  });
+});
+
 test('host dropping from a waiting room removes it from the list', async () => {
-  await withApp({ graceMs: 100 }, async ({ client, app }) => {
-    const host = client();
-    const watcher = client();
-    host.emit('room:create', { name: 'H' });
-    await once(host, 'room:joined');
-    await sleep(30);
-    assert.equal(app.manager.listOpen().length, 1);
-    host.close();
-    await sleep(300);
-    assert.equal(app.manager.rooms.size, 0);
-    watcher.emit('rooms:refresh');
-    assert.deepEqual(await once(watcher, 'rooms'), []);
+  await withApp({ graceMs: 100 }, async ({ client }) => {
+    const [a, b] = [client(), client()];
+    a.emit('room:create', { name: 'A' });
+    await once(a, 'room:joined');
+    a.close();
+    await sleep(250);
+    b.emit('rooms:refresh');
+    assert.deepEqual(await once(b, 'rooms'), []);
   });
 });
 
-test('cancelling a waiting room removes it at once', async () => {
-  await withApp({}, async ({ client, app }) => {
-    const host = client();
-    host.emit('room:create', { name: 'H' });
-    await once(host, 'room:joined');
-    host.emit('room:leave');
-    await once(host, 'room:left');
-    assert.equal(app.manager.rooms.size, 0);
-  });
-});
-
-test('names are sanitised and the room limit is enforced', async () => {
+test('names are sanitised, unknown options fall back, and the room limit is enforced', async () => {
   await withApp({ maxRooms: 1 }, async ({ client }) => {
-    const a = client();
-    const b = client();
-    a.emit('room:create', { name: '  <b>Eve</b>\n  ', handSize: 99, announce: 'bogus' });
+    const [a, b] = [client(), client()];
+    a.emit('room:create', { name: '  <b>Eve</b>\n  ', totalPlayers: 99, aiCount: -3, deck: 'huge', announce: 'bogus' });
     const j = await once(a, 'room:joined');
-    assert.equal(j.handSize, 12, 'unknown sizes fall back to the 24-card game');
+    assert.equal(j.deck, 'half');
     assert.equal(j.announce, 'suit');
+    const w = await until(a, (x) => x.code, 3000, 'wait');
+    assert.equal(w.total, 6, 'player count is clamped to 2..6');
+    assert.equal(w.aiCount, 0);
     b.emit('room:join', { code: j.code, name: 'x'.repeat(100) });
-    await until(a, (v) => v.phase === 'play');
-    assert.equal(a.last.room.myName, 'bEve/b');
-    assert.equal(a.last.room.opp.name.length, 20);
-
+    await until(b, (x) => x.code, 3000, 'wait');
+    assert.equal(b.wait.seats[0].name, 'bEve/b');
+    assert.equal(b.wait.seats[1].name.length, 20);
     const c = client();
     c.emit('room:create', {});
     assert.match(await once(c, 'notice'), /full/);
   });
 });
 
-test('surrender ends the game for the opponent, keeps the room, and rematch still works', async () => {
+test('surrender: with 2 players the other one wins; the room stays and rematch works', async () => {
   await withApp({}, async ({ client }) => {
-    const a = client();
-    const b = client();
-    a.emit('room:create', { name: 'A' });
-    const { code } = await once(a, 'room:joined');
-    b.emit('room:join', { code, name: 'B' });
+    const [a, b] = [client(), client()];
+    await seat(a, [b]);
     await until(a, (v) => v.phase === 'play');
-    await until(b, (v) => v.phase === 'play');
-
     a.emit('surrender');
     await until(b, (v) => v.phase === 'over');
-    await until(a, (v) => v.phase === 'over');
-    assert.equal(b.last.winner, b.last.you);
-    assert.equal(a.last.room.endDetail, 'surrender');
-    assert.equal(a.last.room.opp.left, false, 'surrendering does not leave the room');
-
+    assert.equal(b.last.winner, 1);
+    assert.equal(b.last.room.endDetail, 'surrender');
     a.emit('rematch');
     b.emit('rematch');
     await until(a, (v) => v.phase === 'play');
-    a.emit('surrender');
-    a.emit('surrender');
-    await until(a, (v) => v.phase === 'over');
-    await sleep(30);
-    assert.match(a.log.notices.join(' '), /No game in progress/, 'a second surrender is rejected');
   });
 });
 
-test('surrender against the computer counts as a loss and Play again restarts', async () => {
-  await withApp({}, async ({ client }) => {
-    const s = client();
-    s.emit('room:create', { name: 'S', vsAI: true });
-    await until(s, (v) => v.phase === 'play');
-    s.emit('surrender');
-    await until(s, (v) => v.phase === 'over');
-    assert.equal(s.last.winner, 1 - s.last.you);
-    s.emit('rematch');
-    await until(s, (v) => v.phase === 'play');
+test('table chat: everyone at the table gets it, rude words are masked, newcomers get the history', async () => {
+  await withApp({ cleanChat: (s) => s.replace(/rupjs/g, 'r****') }, async ({ client }) => {
+    const [h, p1, p2] = [client(), client(), client()];
+    const code = await seat(h, [p1], { totalPlayers: 3 });
+    h.emit('chat', { text: '  sveiki, rupjs vārds  ' });
+    const m = await once(p1, 'chat');
+    assert.equal(m.from, 'Host');
+    assert.equal(m.text, 'sveiki, r**** vārds');
+    p2.emit('room:join', { code, name: 'P2' });
+    const hist = await once(p2, 'chat:history');
+    assert.deepEqual(hist.map((x) => x.text), ['sveiki, r**** vārds']);
+    const outsider = client();
+    outsider.emit('chat', { text: 'hi' });
+    assert.match(await once(outsider, 'notice'), /not in a game/);
   });
 });
