@@ -440,3 +440,7 @@
   .meli .multi-seat.seat-tl6 { left: 17%; top: 23%; }
   .meli .multi-seat.seat-tr6 { left: 83%; top: 23%; }
 }
+
+/* create pop-up: up to 6 player / computer buttons always on one row (the shared min-width wrapped the 6th) */
+#setupModal .btn-group { flex-wrap: nowrap; }
+#setupModal .btn-option { min-width: 0; padding-left: 4px; padding-right: 4px; }
