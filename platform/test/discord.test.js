@@ -171,7 +171,7 @@ test('server with Discord ON: only Discord pages may be framed by Discord', asyn
     assert.strictEqual(rs.headers.get('x-frame-options'), null);
     // API
     const cfg = await (await get(s.base + '/api/discord/config')).json();
-    assert.deepStrictEqual(Object.keys(cfg).sort(), ['clientId', 'enabled', 'publicOrigin']);
+    assert.deepStrictEqual(Object.keys(cfg).sort(), ['clientId', 'enabled', 'loginAvailable', 'publicOrigin']);
     const chk = await (await get(s.base + '/api/discord/check', signed(goodPayload()))).json();
     assert.strictEqual(chk.signatureValid, true);
     const tables = await (await get(s.base + '/api/discord/table?instance=i-1234-gc-5678')).json();
@@ -191,4 +191,11 @@ test('server with DISCORD_REQUIRE_SIGNATURE=1: launch parameters alone are not e
     const ok = await get(s.base + '/duraks?' + LAUNCH, signed(goodPayload()));
     assert.strictEqual(ok.headers.get('x-frame-options'), null);
   } finally { s.stop(); }
+});
+
+test('the switch tolerates quotes/spaces/true (Railway raw editor), and says so when it is not understood', async () => {
+  const on = await startServer({ DISCORD_ACTIVITY: ' "true" ' });
+  try { assert.strictEqual((await get(on.base + '/api/discord/config')).status, 200); } finally { on.stop(); }
+  const off = await startServer({ DISCORD_ACTIVITY: 'enabled' });
+  try { assert.strictEqual((await get(off.base + '/api/discord/config')).status, 404); } finally { off.stop(); }
 });

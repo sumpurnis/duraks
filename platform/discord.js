@@ -27,9 +27,13 @@
 
 const crypto = require('crypto');
 
-const ENABLED = process.env.DISCORD_ACTIVITY === '1';
-const CLIENT_ID = /^\d{5,30}$/.test(String(process.env.DISCORD_CLIENT_ID || '').trim()) ? String(process.env.DISCORD_CLIENT_ID).trim() : '';
-const REQUIRE_SIGNATURE = process.env.DISCORD_REQUIRE_SIGNATURE === '1';
+// Switches: "1" (also true/yes/on, any case, spaces or quotes around it are ignored — Railway's raw editor
+// can keep quotes) turns a setting on; anything else leaves it off.
+const flag = (v) => /^(1|true|yes|on)$/i.test(String(v || '').trim().replace(/^["']|["']$/g, '').trim());
+const ENABLED = flag(process.env.DISCORD_ACTIVITY);
+const clean = (v) => String(v || '').trim().replace(/^["']|["']$/g, '').trim();
+const CLIENT_ID = /^\d{5,30}$/.test(clean(process.env.DISCORD_CLIENT_ID)) ? clean(process.env.DISCORD_CLIENT_ID) : '';
+const REQUIRE_SIGNATURE = flag(process.env.DISCORD_REQUIRE_SIGNATURE);
 const PUBLIC_ORIGIN = (process.env.PUBLIC_URL || 'https://uzspelesim.lv').replace(/\/$/, '');
 // Who may show a Discord page in a frame: Discord itself (web, desktop, PTB/Canary) and the Activity's
 // own proxy domain (the Activity frame sits on <app id>.discordsays.com).
@@ -43,7 +47,7 @@ function loadPublicKey(hex) {
     return crypto.createPublicKey({ key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(h, 'hex')]), format: 'der', type: 'spki' });
   } catch { return null; }
 }
-let publicKey = loadPublicKey(process.env.DISCORD_PUBLIC_KEY);
+let publicKey = loadPublicKey(clean(process.env.DISCORD_PUBLIC_KEY));
 let clientId = CLIENT_ID;
 let enabled = ENABLED;
 let requireSignature = REQUIRE_SIGNATURE;
@@ -173,6 +177,11 @@ function _configure(o = {}) {
   if ('requireSignature' in o) requireSignature = !!o.requireSignature;
   verified.clear();
   tables.clear();
+}
+
+// Say so in the deploy log when the switch is set but not understood (e.g. DISCORD_ACTIVITY=enabled).
+if (!ENABLED && clean(process.env.DISCORD_ACTIVITY) && !/^(0|false|no|off)$/i.test(clean(process.env.DISCORD_ACTIVITY))) {
+  console.warn(`Discord Activity: OFF — DISCORD_ACTIVITY is set but not to 1 (it has ${String(process.env.DISCORD_ACTIVITY).length} characters)`);
 }
 
 module.exports = {
