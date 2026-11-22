@@ -12,6 +12,7 @@
  *    disconnected forfeits: that player is out and the others play on (the last one left wins).
  *  - Rematch needs every remaining person to agree (the computer always agrees).
  *  - Table chat for everyone at the table, guests too (the host site masks rude words).
+ *  - Ranked tables (ELO): signed-in players only, no computer seats. The host site rates the result.
  */
 const crypto = require('node:crypto');
 const { MeliGame, RuleError, MIN_PLAYERS, MAX_PLAYERS } = require('./engine');
@@ -131,6 +132,7 @@ class RoomManager {
       vsAI: room.vsAI,
       announce: room.announce,
       deck: room.deck,
+      ranked: room.ranked,
     };
   }
 
@@ -145,6 +147,7 @@ class RoomManager {
       aiCount: room.seats.filter((s) => s && s.ai).length,
       deck: room.deck,
       announce: room.announce,
+      ranked: room.ranked,
       private: !!room.password,
       password: room.password, // only ever sent to people already at the table
       isHost: idx === room.host,
@@ -175,6 +178,7 @@ class RoomManager {
         solo: room.solo,
         vsAI: room.vsAI,
         private: !!room.password,
+        ranked: room.ranked,
         deck: room.deck,
         myName: me.name,
         seats: room.seats.map((s, i) => ({
@@ -220,6 +224,7 @@ class RoomManager {
         aiCount: room.seats.filter((s) => s && s.ai).length,
         announce: room.announce,
         deck: room.deck,
+        ranked: room.ranked,
         private: !!room.password,
       });
     }
@@ -254,6 +259,8 @@ class RoomManager {
       code,
       solo,
       vsAI: aiCount > 0,
+      // ELO: only for signed-in hosts at a table without the computer (the server sets msg.account)
+      ranked: !!msg.ranked && !!msg.account && aiCount === 0,
       announce: ANNOUNCE_ENABLED.includes(msg.announce) ? msg.announce : 'suit',
       deck,
       password: !solo && msg.private ? randomString(6) : null,
@@ -289,6 +296,7 @@ class RoomManager {
     const free = room.seats.indexOf(null);
     if (free < 0) throw new RoomError('That game is full.', 'gone');
     if (!room.seats[room.host] || !room.seats[room.host].connected) throw new RoomError('The host is reconnecting. Try again in a moment.', 'busy');
+    if (room.ranked && !msg.account) throw new RoomError('This table is ranked: log in to join.', 'ranked');
 
     if (room.password) {
       if (msg.password === undefined || msg.password === null || msg.password === '') {
@@ -525,9 +533,28 @@ class RoomManager {
     const stats = this.cfg.stats;
     if (!stats || room.recordedGame === room.game) return;
     room.recordedGame = room.game;
-    const w = room.game.winner;
+    const g = room.game;
+    const w = g.winner;
     if (!room.seats[w]) return;
-    stats.record({ winner: room.seats[w], losers: room.seats.filter((_, i) => i !== w), vsAI: room.vsAI });
+    // Everything the host site needs to rate and log the game (players' stats, ELO, history, the map).
+    stats.record({
+      winner: room.seats[w],
+      losers: room.seats.filter((_, i) => i !== w),
+      vsAI: room.vsAI,
+      ranked: room.ranked && !room.vsAI,
+      players: room.seats.length,
+      deck: room.deck,
+      endDetail: room.endDetail,
+      seats: room.seats.map((s, i) => ({
+        name: s.name,
+        account: !!s.account && !s.ai,
+        ai: !!s.ai,
+        winner: i === w,
+        cards: g.hands[i].length,
+        out: !!g.out[i],
+        outDetail: room.outDetail[i] || null,
+      })),
+    });
     this.io.to('lobby').emit('stats', stats.snapshot());
   }
 

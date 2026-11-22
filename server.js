@@ -121,12 +121,66 @@ auth.registerHttpRoutes(app);
 const meliAuthLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000, blockMs: 60 * 1000 });
 // New Meļi tables per address, so one person with many tabs/scripts can't fill the server ("server full").
 const meliCreateLimiter = createRateLimiter({ max: 20, windowMs: 10 * 60 * 1000, blockMs: 10 * 60 * 1000 });
+// A finished Meļi game, in the players' own stats (the profile window's Meļi tab): wins/losses incl.
+// forfeits, streaks, today, the game log, and ELO for ranked tables. Same rules as Duraks: only
+// signed-in players are recorded; ELO only at ranked tables (all signed in, no computer).
+// Places: the winner is 1st; the others by cards left (fewer = better, equal = shared place); players
+// who left / ran out of time share the last place.
+function meliPlacements(seats) {
+  const place = new Map();
+  seats.forEach((s, i) => { if (s.winner) place.set(i, 1); });
+  const stayed = seats.map((s, i) => ({ s, i })).filter(({ s }) => !s.winner && !s.out).sort((a, b) => a.s.cards - b.s.cards);
+  let next = 2;
+  stayed.forEach(({ s, i }, k) => {
+    if (k > 0 && s.cards !== stayed[k - 1].s.cards) next = 2 + k;
+    place.set(i, next);
+  });
+  const last = 2 + stayed.length;
+  seats.forEach((s, i) => { if (!place.has(i)) place.set(i, last); });
+  return place;
+}
+function recordMeliResult(r) {
+  try {
+    const seats = Array.isArray(r.seats) ? r.seats : [];
+    if (seats.length < 2) return;
+    const place = meliPlacements(seats);
+    const pool = seats.length === 2 ? 'oneVOne' : 'multi';
+    const rated = r.ranked && !r.vsAI && seats.every((s) => s.account);
+    const elo = rated ? users.applyRankedGameResult(seats.map((s, i) => ({ username: s.name, placement: place.get(i) })), pool, 'meli') : null;
+    const byForfeit = r.endDetail && r.endDetail !== 'empty-hand';
+    seats.forEach((s, i) => {
+      if (!s.account) return;
+      const won = !!s.winner;
+      const forfeit = won ? !!byForfeit : !!s.outDetail;
+      users.recordResult(s.name, won, forfeit, 'meli');
+      const e = elo && elo[users.canonicalName(s.name)];
+      users.recordGameHistoryEntry(s.name, {
+        outcome: won ? 'won' : 'lost',
+        placement: seats.length > 2 ? place.get(i) : null,
+        ranked: !!e,
+        mode: seats.length === 2 ? '2p' : 'multi',
+        totalPlayers: seats.length,
+        deckSize: r.deck === 'half' ? 24 : 52,
+        vsBots: !!r.vsAI,
+        opponents: seats.filter((_, j) => j !== i).map((o) => o.name),
+        eloPool: e ? pool : null,
+        eloAfter: e ? e.after : null,
+        eloChange: e ? e.delta : null,
+        endReason: forfeit ? (won ? 'opponentLeft' : s.outDetail) : null,
+      }, 'meli');
+    });
+  } catch (err) {
+    console.error('Meļi result could not be recorded:', err);
+  }
+}
+
 const meli = attachMeli(io, {
   statsFile: path.join(DATA_DIR, 'meli-stats.json'),
   // The front page's map: finished games wear roads and grow villages; connected players smoke.
-  onResult: ({ winner, loser, losers, vsAI }) => {
-    const names = [winner, ...(losers || [loser])].filter((s) => s && !s.ai && s.account).map((s) => s.name);
-    world.recordGame('meli', names, { vsBot: !!vsAI });
+  onResult: (r) => {
+    const names = [r.winner, ...(r.losers || [r.loser])].filter((s) => s && !s.ai && s.account).map((s) => s.name);
+    world.recordGame('meli', names, { vsBot: !!r.vsAI });
+    recordMeliResult(r);
   },
   onPresence: (name, id, on) => (on ? world.seen(name, 'meli:' + id) : world.gone('meli:' + id)),
   canCreate: (socket) => meliCreateLimiter.check(socketIp(socket)).allowed,
@@ -226,6 +280,7 @@ app.post('/api/player/full', express.json({ limit: '2kb' }), (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json({
     username: name, since: profile.since, ...map, stats, history,
+    games: users.getProfileGames(name, 50),
     elo: profile.elo,
     meli: m ? { played: m.played || 0, won: m.won || 0, currentStreak: m.currentStreak || 0, longestStreak: m.longestStreak || 0,
       today: mToday ? { played: mToday.played, won: mToday.won } : { played: 0, won: 0 } } : { played: 0, won: 0, currentStreak: 0, longestStreak: 0, today: { played: 0, won: 0 } },

@@ -25,6 +25,7 @@
     [/^That game is no longer open/, 'Šis galds vairs nav atvērts.'],
     [/^That game is full/, 'Pie šī galda vairs nav brīvu vietu.'],
     [/^The game has already started/, 'Spēle jau ir sākusies.'],
+    [/^This table is ranked/, 'Šis ir ranked galds — pievienoties var tikai reģistrēti spēlētāji. Ielogojies!'],
     [/^The host is reconnecting/, 'Galda autors atjauno savienojumu. Mēģini pēc brīža.'],
     [/^Wrong password/, 'Nepareiza parole.'],
     [/^This game is private/, 'Šis galds ir privāts. Ievadi paroli.'],
@@ -102,13 +103,14 @@
   let myTableName = '';
   // Only the suit-only version is switched on for now. The suit + rank version still exists in the engine
   // (server/engine.js) and is re-enabled by listing 'suit-rank' in ANNOUNCE_ENABLED (server/rooms.js).
-  let settings = { total: 2, deck: 'half', ai: 0, private: false, announce: 'suit' };
+  let settings = { total: 2, deck: 'half', ai: 0, private: false, ranked: false, announce: 'suit' };
   try {
     const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
     if (saved) {
       if (saved.total >= 2 && saved.total <= 6) settings.total = saved.total;
       if (saved.deck === 'half' || saved.deck === 'full') settings.deck = saved.deck;
       if (saved.ai >= 0 && saved.ai < settings.total) settings.ai = saved.ai;
+      settings.ranked = !!saved.ranked;
     }
   } catch { /* ignore */ }
 
@@ -225,7 +227,7 @@
   }
 
   function saveSettings() {
-    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ total: settings.total, deck: settings.deck, ai: settings.ai })); } catch { /* ignore */ }
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ total: settings.total, deck: settings.deck, ai: settings.ai, ranked: settings.ranked })); } catch { /* ignore */ }
   }
 
   function setActive(group, value) {
@@ -233,7 +235,11 @@
   }
 
   // Same create pop-up as Duraks: players 2–6, deck, how many of them are the computer, private.
+  // Ranked (ELO) like Duraks: signed-in players only, and no computer at the table.
   function refreshSetup() {
+    const canRank = !!account;
+    if (!canRank) settings.ranked = false;
+    if (settings.ranked) settings.ai = 0;
     if (settings.ai > settings.total - 1) settings.ai = settings.total - 1;
     setActive('setupTotal', settings.total);
     setActive('setupDeck', settings.deck);
@@ -246,6 +252,10 @@
       aiGroup.append(b);
     }
     setActive('setupAi', settings.ai);
+    Array.from($('setupAi').children).forEach((b) => { b.disabled = settings.ranked && b.dataset.value !== '0'; });
+    $('setupRanked').checked = settings.ranked;
+    $('setupRanked').disabled = !canRank;
+    $('setupRankedField').title = canRank ? 'Ietekmē ELO reitingu — tikai reģistrētiem, bez datora pretiniekiem' : 'Ranked spēles ir tikai reģistrētiem spēlētājiem';
     $('setupPrivate').checked = settings.private;
     $('setupPrivate').disabled = settings.ai === settings.total - 1; // nobody to keep out of a computer game
   }
@@ -263,13 +273,14 @@
   });
   $('setupAi').addEventListener('click', (e) => {
     const b = e.target.closest('.btn-option');
-    if (!b) return;
+    if (!b || b.disabled) return;
     settings.ai = Number(b.dataset.value);
     refreshSetup();
   });
   $('setupPrivate').addEventListener('change', () => { settings.private = $('setupPrivate').checked; });
+  $('setupRanked').addEventListener('change', () => { settings.ranked = $('setupRanked').checked; refreshSetup(); });
 
-  function createRoom({ total, ai, deck, isPrivate }) {
+  function createRoom({ total, ai, deck, isPrivate, ranked }) {
     resetTable();
     chatReset();
     socket.emit('room:create', {
@@ -279,11 +290,12 @@
       deck,
       announce: settings.announce,
       private: !!isPrivate,
+      ranked: !!ranked,
     });
   }
 
   function openSetup(preset) {
-    if (preset) Object.assign(settings, preset);
+    if (preset) Object.assign(settings, preset, { ranked: settings.ranked });
     settings.private = false;
     refreshSetup();
     openModal('setupModal');
@@ -301,7 +313,7 @@
   $('createSubmit').addEventListener('click', () => {
     saveSettings();
     closeModal('setupModal');
-    createRoom({ total: settings.total, ai: settings.ai, deck: settings.deck, isPrivate: settings.private && settings.ai < settings.total - 1 });
+    createRoom({ total: settings.total, ai: settings.ai, deck: settings.deck, isPrivate: settings.private && settings.ai < settings.total - 1, ranked: settings.ranked && settings.ai === 0 });
   });
   $('setupCancel').addEventListener('click', () => closeModal('setupModal'));
   $('switchUserLink').addEventListener('click', (e) => {
@@ -330,7 +342,7 @@
     for (const r of rows) {
       const row = el('div', 'open-room-row');
       const info = el('div', 'open-room-info');
-      info.append(el('span', 'host-name', `${r.private ? '🔒 ' : ''}${r.host} · ${r.filled}/${r.total} spēlētāji`));
+      info.append(el('span', 'host-name', `${r.private ? '🔒 ' : ''}${r.ranked ? '🏅 ' : ''}${r.host} · ${r.filled}/${r.total} spēlētāji`));
       const sil = el('div', 'multi-silhouette-row');
       const seats = [];
       for (let i = 0; i < r.total; i++) seats.push(i < r.people ? { name: '' } : i < r.people + r.aiCount ? { ai: true, name: 'Dators' } : null);
@@ -447,7 +459,7 @@
     $('waitBox').classList.remove('hidden');
     lobbyChatShow(true);
     silhouettes($('waitSeats'), w.seats);
-    $('waitInfo').textContent = `${w.filled}/${w.total} spēlētāji pievienojušies · ${DECK_NAME[w.deck] || ''}`;
+    $('waitInfo').textContent = `${w.filled}/${w.total} spēlētāji pievienojušies · ${DECK_NAME[w.deck] || ''}${w.ranked ? ' · 🏅 Ranked' : ''}`;
     const names = $('waitNames');
     names.replaceChildren();
     w.seats.forEach((s, i) => {

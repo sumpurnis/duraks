@@ -1340,7 +1340,7 @@ const MAX_TOURNAMENT_PARTICIPANTS = 64;
       if (!stats) return sendError(socket, 'Profils nav atrasts');
       const history = users.getGameHistory(target, 50);
       const eloByPool = { oneVOne: users.getElo(target, 'oneVOne'), multi: users.getElo(target, 'multi') };
-      socket.emit('profileData', { username: target, stats, history, eloByPool });
+      socket.emit('profileData', { username: target, stats, history, eloByPool, games: users.getProfileGames(target, 50) });
     });
 
     // Logging out (the tab stays open) ends the front-page "online" status for this connection.

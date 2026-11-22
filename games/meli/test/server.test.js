@@ -446,3 +446,29 @@ test('table chat: everyone at the table gets it, rude words are masked, newcomer
     assert.match(await once(outsider, 'notice'), /not in a game/);
   });
 });
+
+test('ranked: guests cannot host it; the finished game reports seats, places data and forfeits', async () => {
+  await withApp({}, async ({ app, client }) => {
+    const results = [];
+    const rec = app.manager.stats.record.bind(app.manager.stats);
+    app.manager.stats.record = (r) => { results.push(r); rec(r); };
+    const [h, p1, p2] = [client(), client(), client()];
+    h.emit('room:create', { name: 'Host', totalPlayers: 3, ranked: true });
+    await once(h, 'room:joined');
+    const w = await until(h, (x) => x.code, 3000, 'wait');
+    assert.equal(w.ranked, false, 'no account: never ranked');
+    for (const [s, n] of [[p1, 'P1'], [p2, 'P2']]) { s.emit('room:join', { code: w.code, name: n }); await once(s, 'room:joined'); }
+    await until(h, (v) => v.phase === 'play');
+    p2.emit('room:leave');
+    await until(h, (v) => v.out[2]);
+    await playOut([h, p1]);
+    assert.equal(results.length, 1);
+    const r = results[0];
+    assert.equal(r.players, 3);
+    assert.equal(r.seats.length, 3);
+    assert.equal(r.seats.filter((s) => s.winner).length, 1);
+    assert.equal(r.seats[2].out, true);
+    assert.equal(r.seats[2].outDetail, 'left');
+    assert.equal(typeof r.seats[0].cards, 'number');
+  });
+});

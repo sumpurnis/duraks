@@ -249,14 +249,39 @@ async function verifyPassword(record, password) {
 // fresh (zeroed) one — without mutating storage. Used for read paths like
 // getStats() and the leaderboards, so stale numbers from a previous day never
 // leak into a live "today" view just because the player hasn't played yet.
-function effectiveDaily(record) {
-  const daily = (record && record.stats && record.stats.daily) || blankDaily();
+// ---------- per-game stats ----------
+// Every game keeps the same block: stats (played/won/lost/forfeits/streaks/today), eloByPool and
+// history. Duraks keeps its original fields on the account itself (record.stats, record.eloByPool,
+// record.history); every other game lives under record.games[<game>]. A new game only needs a name here.
+const GAMES = ['duraks', 'meli'];
+const DEFAULT_GAME = 'duraks';
+function gameOk(game) {
+  return GAMES.includes(game || DEFAULT_GAME);
+}
+/** The game's block on the account (created on first write). */
+function gameBox(record, game) {
+  if (!game || game === DEFAULT_GAME) return record;
+  if (!gameOk(game)) throw new Error(`unknown game '${game}'`);
+  if (!record.games || typeof record.games !== 'object') record.games = {};
+  if (!Object.prototype.hasOwnProperty.call(record.games, game)) record.games[game] = {};
+  return record.games[game];
+}
+/** Read-only: the game's block, or an empty one (never creates anything). */
+function peekBox(record, game) {
+  if (!game || game === DEFAULT_GAME) return record;
+  const g = record.games && Object.prototype.hasOwnProperty.call(record.games, game) ? record.games[game] : null;
+  return g || {};
+}
+
+function effectiveDaily(record, game) {
+  const box = record ? peekBox(record, game) : null;
+  const daily = (box && box.stats && box.stats.daily) || blankDaily();
   return daily.date === todayStr() ? daily : blankDaily();
 }
 
-function publicStats(record) {
-  const stats = { ...blankStats(), ...record.stats };
-  const daily = effectiveDaily(record);
+function publicStats(record, game) {
+  const stats = { ...blankStats(), ...peekBox(record, game).stats };
+  const daily = effectiveDaily(record, game);
   return {
     played: stats.played,
     won: stats.won,
@@ -550,11 +575,11 @@ async function createAccountFromOAuth(username, provider, providerId, email, ema
 // Bumped whenever a player's stats change, so the leaderboards are only rebuilt when needed.
 let statsVersion = 0;
 
-function recordResult(username, didWin, isForfeit) {
+function recordResult(username, didWin, isForfeit, game = DEFAULT_GAME) {
   const name = normalize(username);
-  if (!name || !getRecord(name)) return;
-  const record = getRecord(name);
-  const stats = { ...blankStats(), ...record.stats };
+  if (!name || !getRecord(name) || !gameOk(game)) return;
+  const box = gameBox(getRecord(name), game);
+  const stats = { ...blankStats(), ...box.stats };
 
   // All-time.
   stats.played += 1;
@@ -582,7 +607,7 @@ function recordResult(username, didWin, isForfeit) {
   }
   stats.daily = daily;
 
-  record.stats = stats;
+  box.stats = stats;
   statsVersion++;
   save();
 }
@@ -617,10 +642,26 @@ function listAccounts() {
   }));
 }
 
-function getStats(username) {
+function getStats(username, game = DEFAULT_GAME) {
   const name = normalize(username);
   const record = getRecord(name);
-  return record ? publicStats(record) : null;
+  return record && gameOk(game) ? publicStats(record, game) : null;
+}
+
+/** Everything the profile window shows, for every game: { duraks: { stats, eloByPool, history }, meli: … }. */
+function getProfileGames(username, historyLimit = 50) {
+  const name = normalize(username);
+  const record = getRecord(name);
+  if (!record) return null;
+  const out = {};
+  for (const game of GAMES) {
+    out[game] = {
+      stats: publicStats(record, game),
+      eloByPool: Object.fromEntries(ELO_POOLS.map((pool) => [pool, getElo(name, pool, game)])),
+      history: getGameHistory(name, historyLimit, game),
+    };
+  }
+  return out;
 }
 
 // Per-user game history: a capped, most-recent-first list of completed
@@ -634,22 +675,24 @@ function getStats(username) {
 // games simply aren't persisted anywhere.
 const HISTORY_LIMIT = 100;
 
-function recordGameHistoryEntry(username, entry) {
+function recordGameHistoryEntry(username, entry, game = DEFAULT_GAME) {
   const name = normalize(username);
-  if (!name || !getRecord(name)) return;
-  const record = getRecord(name);
-  const history = Array.isArray(record.history) ? record.history : [];
+  if (!name || !getRecord(name) || !gameOk(game)) return;
+  const box = gameBox(getRecord(name), game);
+  const history = Array.isArray(box.history) ? box.history : [];
   history.unshift({ ...entry, timestamp: entry.timestamp || Date.now() });
-  record.history = history.slice(0, HISTORY_LIMIT);
+  box.history = history.slice(0, HISTORY_LIMIT);
   save();
 }
 
-function getGameHistory(username, limit) {
+function getGameHistory(username, limit, game = DEFAULT_GAME) {
   const name = normalize(username);
   const record = getRecord(name);
-  if (!record || !Array.isArray(record.history)) return [];
+  if (!record || !gameOk(game)) return [];
+  const history = peekBox(record, game).history;
+  if (!Array.isArray(history)) return [];
   const n = Number.isInteger(limit) && limit > 0 ? limit : HISTORY_LIMIT;
-  return record.history.slice(0, n);
+  return history.slice(0, n);
 }
 
 // Tracks which IP addresses a registered account has connected from — one
@@ -732,11 +775,12 @@ const DEFAULT_ELO = 1000;
 const ELO_K = 32;
 const ELO_POOLS = ['oneVOne', 'multi'];
 
-function getElo(username, pool) {
+function getElo(username, pool, game = DEFAULT_GAME) {
   const name = normalize(username);
   const record = getRecord(name);
-  if (!record) return null;
-  const val = record.eloByPool && record.eloByPool[pool];
+  if (!record || !gameOk(game)) return null;
+  const box = peekBox(record, game);
+  const val = box.eloByPool && box.eloByPool[pool];
   return typeof val === 'number' ? val : DEFAULT_ELO;
 }
 
@@ -749,15 +793,16 @@ function getElo(username, pool) {
 // for each rated participant, or null if fewer than 2 were ratable.
 // Does NOT decide whether a game qualifies as ranked — that's the
 // caller's job (see multi-rooms.js's ranked-room restrictions).
-function applyRankedGameResult(placements, pool) {
+function applyRankedGameResult(placements, pool, game = DEFAULT_GAME) {
   if (!ELO_POOLS.includes(pool)) throw new Error(`applyRankedGameResult: unknown elo pool '${pool}'`);
+  if (!gameOk(game)) throw new Error(`applyRankedGameResult: unknown game '${game}'`);
   const eligible = (placements || [])
     .map((p) => ({ username: normalize(p.username), placement: p.placement }))
     .filter((p) => p.username && getRecord(p.username));
   if (eligible.length < 2) return null;
 
   const before = {};
-  for (const p of eligible) before[p.username] = getElo(p.username, pool);
+  for (const p of eligible) before[p.username] = getElo(p.username, pool, game);
 
   const deltaSum = {};
   for (const p of eligible) deltaSum[p.username] = 0;
@@ -776,9 +821,9 @@ function applyRankedGameResult(placements, pool) {
   for (const p of eligible) {
     const avgDelta = Math.round(deltaSum[p.username] / n);
     const newElo = before[p.username] + avgDelta;
-    const record = getRecord(p.username);
-    record.eloByPool = record.eloByPool || {};
-    record.eloByPool[pool] = newElo;
+    const box = gameBox(getRecord(p.username), game);
+    box.eloByPool = box.eloByPool || {};
+    box.eloByPool[pool] = newElo;
     result[p.username] = { before: before[p.username], after: newElo, delta: avgDelta };
   }
   save();
@@ -916,6 +961,8 @@ module.exports = {
   listAccounts,
   getPublicProfile,
   checkSessionToken,
+  getProfileGames,
+  GAMES,
   createAccount,
   verifyLogin,
   createSessionToken,
