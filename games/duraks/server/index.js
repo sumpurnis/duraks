@@ -1378,4 +1378,4 @@ function renameUser(oldName, newName) {
   tournaments.renameUser(oldName, newName);
 }
 
-module.exports = { mountRoutes, attach, renameUser, challenges, PUBLIC_DIR, roomStatus: registerMultiHandlers.roomStatus };
+module.exports = { mountRoutes, attach, renameUser, challenges, PUBLIC_DIR };

@@ -449,8 +449,7 @@
   });
   $('inviteDismiss').addEventListener('click', clearInvite);
 
-  // inside the Discord Activity the page runs on Discord's address: links point at the real site
-  const tableLink = (code) => `${window.UZS_SITE_ORIGIN || location.origin}${location.pathname}?table=${encodeURIComponent(code)}`;
+  const tableLink = (code) => `${location.origin}${location.pathname}?table=${encodeURIComponent(code)}`;
 
   // ---- waiting for players (inside the lobby card, like Duraks) ------------------------
   function renderWaiting(w) {
@@ -474,8 +473,6 @@
     $('waitPassRow').classList.toggle('hidden', !w.password);
     $('waitPass').textContent = w.password || '';
     $('shareLink').value = tableLink(w.code);
-    // for the Discord Activity helper (if loaded): this table belongs to the voice channel
-    document.dispatchEvent(new CustomEvent('uzs:table', { detail: { game: 'meli', code: w.code, creator: !!w.isHost } }));
     $('sharePrivateNote').classList.toggle('hidden', !w.private);
     $('shareBtn').classList.toggle('hidden', !navigator.share);
     $('cancelWaitBtn').classList.toggle('hidden', !w.isHost);
