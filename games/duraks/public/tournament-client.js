@@ -714,10 +714,11 @@ socket.on('state', (state) => {
   info.classList.remove('hidden');
 });
 
-socket.on('tournamentGameStarting', ({ code, vsBot }) => {
+socket.on('tournamentGameStarting', ({ code, vsBot, multi }) => {
   vsAI = !!vsBot;
   tCloseModal();
-  socket.emit('joinRoom', { code });
+  // tournament games are on the round table now (multi); 'joinRoom' only for an older server
+  socket.emit(multi ? 'joinMultiTournament' : 'joinRoom', { code });
 });
 
 socket.on('tournamentsData', (list) => {

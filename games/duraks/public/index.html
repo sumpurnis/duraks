@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="board.css" />
 <link rel="stylesheet" href="site-nav.css" />
 <link rel="stylesheet" href="/profile-window.css" />
+<link rel="stylesheet" href="challenges.css" />
 </head>
 <body>
 
@@ -56,6 +57,11 @@
         <div class="divider"><span>vai</span></div>
         <button id="playGuestBtn" class="btn btn-secondary">🤖 Spēlēt pret datoru (bez reģistrācijas)</button>
         <button id="createRoomGuestBtn" class="btn btn-secondary">👥 Izveidot istabu (bez reģistrācijas)</button>
+        <button id="challengeOpenGuestBtn" class="btn ch-open-btn" type="button" aria-haspopup="dialog">
+            <span class="ch-flag" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V4"></path><path d="M4 4h12l-2 4 2 4H4"></path></svg></span>
+            <span class="ch-text"><span>Izaicinājumi</span><small class="ch-sub">Dienas izaicinājums</small></span>
+            <span class="ch-badge hidden">1 jauns</span>
+          </button>
 
         <div class="quick-presets">
           <p class="quick-presets-title">Ātrā istabas izveide</p>
@@ -71,6 +77,11 @@
 
         <div class="lobby-actions">
           <button id="createBtn" class="btn btn-primary">Izveidot istabu</button>
+          <button id="challengeOpenBtn" class="btn ch-open-btn" type="button" aria-haspopup="dialog">
+            <span class="ch-flag" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V4"></path><path d="M4 4h12l-2 4 2 4H4"></path></svg></span>
+            <span class="ch-text"><span>Izaicinājumi</span><small class="ch-sub">Dienas izaicinājums</small></span>
+            <span class="ch-badge hidden">1 jauns</span>
+          </button>
           <button id="tournamentOpenBtn" class="btn btn-secondary">🏆 Turnīri</button>
         </div>
 
@@ -558,6 +569,7 @@
       <div class="multi-turnwrap">
         <div id="multiTurnBar" class="multi-turnbar" aria-live="polite"></div>
         <div id="multiEvent" class="multi-event"></div>
+        <div id="multiTournamentLine" class="multi-tournament-line hidden" aria-live="polite"></div>
       </div>
       <button id="multiMenuBtn" class="multi-menu-btn" type="button" aria-label="Izvēlne" aria-expanded="false">⋯</button>
     </div>
@@ -609,7 +621,18 @@
     <div class="modal-card">
       <h2 id="multiGameOverTitle">Spēle beigusies</h2>
       <p id="multiGameOverText"></p>
+      <p id="challengeOverNote" class="ch-over-note hidden"></p>
+      <p id="multiTournamentOverNote" class="muted small hidden"></p>
       <button id="multiGameOverCloseBtn" class="btn btn-primary">Atpakaļ uz sākumu</button>
+      <button id="multiLeaveTournamentBtn" class="btn btn-secondary hidden" type="button">Pamest turnīru</button>
+    </div>
+  </div>
+
+  <!-- Izaicinājumi: daily now, weekly and monthly later (drawn by challenges-client.js) -->
+  <div id="challengeModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="challengeTitle">
+    <div class="modal-card modal-card-scrollable ch-card">
+      <div id="challengeBody" class="modal-scroll-body"></div>
+      <button id="challengeCloseBtn" class="btn btn-secondary">Aizvērt</button>
     </div>
   </div>
 
@@ -632,6 +655,7 @@
   <script src="client.js"></script>
   <script src="tournament-client.js"></script>
   <script src="multi-client.js"></script>
+  <script src="challenges-client.js"></script>
   <script src="board-preview-client.js"></script>
   <script src="/guest-nudge.js" defer></script>
 </body>

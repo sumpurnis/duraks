@@ -353,10 +353,19 @@ el('multiRoomLeaveWaitingBtn').addEventListener('click', function () {
 
 const multiTurnTimer = createTurnTimer(el('multiTurnTimer'), el('multiOpponentsRow'));
 
+// A tournament game: "🏆 Name · 1. kārta · Anna 1–0 Bots-3 (līdz 2)" under the turn line.
+function multiRenderTournamentLine(info) {
+  const line = el('multiTournamentLine');
+  if (!info) { line.classList.add('hidden'); line.textContent = ''; return; }
+  line.textContent = '🏆 ' + info.tournamentName + ' · ' + info.roundLabel + ' · ' + info.player1 + ' ' + info.player1Wins + '–' + info.player2Wins + ' ' + info.player2 + ' (līdz ' + info.requiredWins + ')';
+  line.classList.remove('hidden');
+}
+
 socket.on('multiState', (state) => {
   multiLastState = state;
   multiMyId = state.you;
   multiRender(state);
+  multiRenderTournamentLine(state.tournamentInfo);
   multiTurnTimer.update(state.status === 'active' ? state.turnTimer : null, state.you);
   if (state.status === 'finished') {
     setTimeout(() => multiShowGameOver(state), 400);
@@ -731,6 +740,12 @@ function multiShowGameOver(state) {
     const durakName = state.durakId ? state.durakId : 'kāds no botiem';
     text.textContent = 'Tu izspēlēji visas savas kārtis. Duraks: ' + durakName + '.';
   }
+  // a tournament game: the series goes on by itself; leaving the tournament is one button
+  const info = state.tournamentInfo;
+  const tNote = el('multiTournamentOverNote');
+  el('multiLeaveTournamentBtn').classList.toggle('hidden', !info);
+  tNote.classList.toggle('hidden', !info);
+  if (info) tNote.textContent = 'Ja sērija vēl nav izšķirta, nākamā spēle sāksies pēc brīža.';
   modal.classList.remove('hidden');
 }
 
@@ -788,6 +803,15 @@ el('multiDeclineBtn').addEventListener('click', function () { socket.emit('multi
   hold.addEventListener('keyup', function (e) { if (e.key === ' ' || e.key === 'Enter') stop(); });
 })();
 el('multiGameOverCloseBtn').addEventListener('click', function () {
+  const wasGuest = !myUsername && multiMyId && /^Viesis-/.test(multiMyId) ? multiMyId : null;
+  socket.emit('multiLeaveRoom');
+  multiReturnToLobby();
+  // a guest's game: offer to register under the same name (client.js)
+  if (wasGuest && typeof offerGuestRegistration === 'function') offerGuestRegistration(wasGuest);
+});
+el('multiLeaveTournamentBtn').addEventListener('click', function () {
+  const info = multiLastState && multiLastState.tournamentInfo;
+  if (info) socket.emit('leaveTournamentMidway', { id: info.tournamentId });
   socket.emit('multiLeaveRoom');
   multiReturnToLobby();
 });

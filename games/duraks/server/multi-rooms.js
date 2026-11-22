@@ -37,6 +37,9 @@
 
 const { Game } = require('./games/duraks-multi');
 const { chooseMove } = require('./ai-multi');
+const challenges = require('./challenges');
+const { chooseChallengeMove, seededRng, hashSeed } = require('./challenge-ai');
+const CHALLENGE_BOT = 'Izaicinājums \u{1F916}';
 
 const MULTI_MOVE_TIMEOUT_MS = 60000;
 const MULTI_CLEANUP_MS = 5 * 60 * 1000;
@@ -48,7 +51,7 @@ const GUEST_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const multiRooms = new Map();
 
 function isBot(playerId) {
-  return BOT_NAMES.includes(playerId);
+  return BOT_NAMES.includes(playerId) || playerId === CHALLENGE_BOT;
 }
 
 function makeMultiRoomCode() {
@@ -122,7 +125,7 @@ function serializeOpenRoom(room) {
 
 function listOpenMultiRooms() {
   return Array.from(multiRooms.values())
-    .filter((r) => r.status === 'waiting')
+    .filter((r) => r.status === 'waiting' && !r.hidden)
     .map(serializeOpenRoom);
 }
 
@@ -145,7 +148,12 @@ function makeRoomPassword() {
   return Array.from({ length: 6 }, () => GUEST_CHARS[Math.floor(Math.random() * GUEST_CHARS.length)]).join('');
 }
 
-module.exports = function registerMultiHandlers(io, socket, { getUsername, users, world, canCreateRoom, cleanChat }) {
+// The functions that run a room (start it, drive the computer, record the result) are made inside
+// each connection's handler below but only use the server-wide things passed in, so the latest set
+// is kept here for rooms the server starts by itself (tournament games, see createTournamentRoom).
+let roomOps = null;
+
+module.exports = function registerMultiHandlers(io, socket, { getUsername, users, world, canCreateRoom, cleanChat, onTournamentResult, tournamentInfo }) {
   let multiJoinedCode = null;
   let multiGuestUsername = null;
 
@@ -269,7 +277,15 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
 
       const eloEntry = eloResult && eloResult[username];
 
+      if (room.challenge) {
+        const c = room.challenge;
+        const result = challenges.recordResult(username, c.date, c.level, outcome === 'won', c.moves);
+        const sock = io.sockets.sockets.get(h.socketId);
+        if (sock && result) sock.emit('challengeResult', { ...result, level: c.level, moves: c.moves, status: challenges.statusFor(username) });
+      }
+
       users.recordGameHistoryEntry(username, {
+        challenge: room.challenge ? { date: room.challenge.date, level: room.challenge.level } : undefined,
         mode: 'multi',
         totalPlayers: room.totalPlayers,
         deckSize: room.deckSize || 52,
@@ -289,6 +305,14 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     }
 
     broadcastMultiLeaderboards();
+
+    // A tournament game: the series score is kept by the tournament (games/duraks/server/index.js).
+    if (room.tournamentMatch && onTournamentResult && !isDraw) {
+      const winner = game.players.find((p) => p !== game.durakId) || null;
+      if (winner) {
+        try { onTournamentResult(room.tournamentMatch, winner, isBot(winner), room.code); } catch (err) { console.error('tournament result failed:', err); }
+      }
+    }
   }
 
   function broadcastMultiState(room) {
@@ -301,7 +325,8 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
       const sock = io.sockets.sockets.get(h.socketId);
       if (!sock) continue;
       const view = room.game.viewFor(h.username);
-      sock.emit('multiState', { ...view, names: namesFor(room), turnTimer });
+      const tInfo = room.tournamentMatch && tournamentInfo ? tournamentInfo(room.tournamentMatch) : null;
+      sock.emit('multiState', { ...view, names: namesFor(room), turnTimer, tournamentInfo: tInfo });
     }
   }
 
@@ -374,11 +399,19 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     }
     room.botTimer = setTimeout(() => {
       if (!multiRooms.has(room.code) || room.game.status !== 'active') return;
-      const action = chooseMove(room.game, botActor.playerId);
+      const action = room.challenge ? challengeMove(room, botActor.playerId) : chooseMove(room.game, botActor.playerId);
       applyAction(room, botActor.playerId, action);
       broadcastMultiState(room);
       driveBots(room);
     }, randomDelay());
+  }
+
+  // The challenge computer: the same moves by the player always get the same answers, because every
+  // decision's randomness comes from the day's deal, the level and the decision's number.
+  function challengeMove(room, botId) {
+    const c = room.challenge;
+    const rng = seededRng(hashSeed(`${c.seed}:${c.level}:${c.decisions++}`));
+    return chooseChallengeMove(room.game, botId, c.skill, rng);
   }
 
   function pauseCountFor(room) {
@@ -412,12 +445,13 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   function startMultiRoomGame(room) {
     room.status = 'active';
     room.startedAt = Date.now();
-    room.bots = BOT_NAMES.slice(0, room.aiCount);
+    room.bots = room.challenge ? [CHALLENGE_BOT] : BOT_NAMES.slice(0, room.aiCount);
     const seating = [...room.humans.map((h) => h.username), ...room.bots];
     room.game = new Game(seating, {
       deferAutoResolve: true,
       deckSize: room.deckSize || 52,
       allowTransfer: !!room.allowTransfer,
+      deck: room.challenge ? room.challenge.deck : undefined,
     });
 
     for (const h of room.humans) {
@@ -543,6 +577,68 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     }
   });
 
+  roomOps = { startMultiRoomGame, broadcastMultiState };
+
+  // ---- tournament games: the server made the room (createTournamentRoom); the player's page joins it ----
+  socket.on('joinMultiTournament', ({ code } = {}) => {
+    const username = getUsername();
+    const room = multiRooms.get(String(code || ''));
+    if (!username || !room || !room.tournamentMatch) return sendMultiError('Turnīra spēle nav atrasta');
+    const seat = room.humans.find((h) => h.username === username);
+    if (!seat) return sendMultiError('Tu neesi šīs turnīra spēles dalībnieks');
+    const prev = currentRoom();
+    if (prev && prev !== room) socket.leave(prev.code);
+    const moved = seat.socketId !== socket.id; // a reload or a new tab: tell this page about the game
+    seat.socketId = socket.id;
+    seat.connected = true;
+    multiJoinedCode = room.code;
+    socket.join(room.code);
+    socket.leave(MULTI_LOBBY_ROOM);
+    if (room.game) {
+      if (moved) socket.emit('multiGameStarted', { names: namesFor(room), code: room.code, you: username });
+      broadcastMultiState(room);
+    }
+  });
+
+  // ---- challenges ("Izaicinājumi") ----
+  socket.on('getChallenges', () => {
+    socket.emit('challengesData', challenges.statusFor(getUsername()));
+  });
+
+  socket.on('startChallenge', ({ level } = {}) => {
+    const username = getUsername();
+    if (!username) return sendMultiError('Izaicinājumi ir reģistrētiem spēlētājiem — ielogojies.');
+    if (userHasActiveRoom(username)) return sendMultiError('Tev jau ir aktīva istaba — vispirms to pamet vai atcel');
+    const start = challenges.startAttempt(username, String(level || ''));
+    if (start.error) return sendMultiError(start.error);
+    const code = makeMultiRoomCode();
+    const room = {
+      code,
+      status: 'waiting',
+      createdAt: Date.now(),
+      totalPlayers: 2,
+      aiCount: 1,
+      deckSize: 36,
+      ranked: false,
+      allowTransfer: false,
+      humanSlotsNeeded: 1,
+      creatorUsername: username,
+      isPrivate: true,
+      password: null,
+      humans: [],
+      bots: [],
+      game: null,
+      moveTimer: null,
+      botTimer: null,
+      cleanupTimer: null,
+      challenge: { date: start.date, level: start.level, seed: start.seed, skill: start.skill, deck: start.deck, attempt: start.attempt, decisions: 0, moves: 0 },
+    };
+    multiRooms.set(code, room);
+    joinRoomBookkeeping(room, username);
+    socket.emit('challengeStarted', { level: start.level, attempt: start.attempt, status: challenges.statusFor(username) });
+    startMultiRoomGame(room);
+  });
+
   socket.on('listMultiRooms', () => {
     socket.emit('multiRoomsData', listOpenMultiRooms());
   });
@@ -600,6 +696,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     if (!room) return;
     const res = room.game.attack(effectiveUsername(), cardId);
     if (res.error) return sendMultiError(res.error);
+    if (room.challenge) room.challenge.moves++;
     broadcastMultiState(room);
     driveBots(room);
   });
@@ -609,6 +706,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     if (!room) return;
     const res = room.game.defend(effectiveUsername(), cardId, slotIndex);
     if (res.error) return sendMultiError(res.error);
+    if (room.challenge) room.challenge.moves++;
     broadcastMultiState(room);
     driveBots(room);
   });
@@ -618,6 +716,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     if (!room) return;
     const res = room.game.transferCards(effectiveUsername(), cardId);
     if (res.error) return sendMultiError(res.error);
+    if (room.challenge) room.challenge.moves++;
     broadcastMultiState(room);
     driveBots(room);
   });
@@ -627,6 +726,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     if (!room) return;
     const res = room.game.declineThrowIn(effectiveUsername());
     if (res.error) return sendMultiError(res.error);
+    if (room.challenge) room.challenge.moves++;
     broadcastMultiState(room);
     driveBots(room);
   });
@@ -641,6 +741,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     }
     const res = room.game.takeCards(username);
     if (res.error) return sendMultiError(res.error);
+    if (room.challenge) room.challenge.moves++;
     broadcastMultiState(room);
     driveBots(room);
   });
@@ -712,6 +813,48 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     const room = currentRoom();
     if (room) leaveRoom(room, 'disconnect');
   });
+};
+
+/**
+ * A tournament game on the same round table as every other game (2 players: two people, or one person
+ * against the computer). Started straight away; each player's page then joins it with
+ * 'joinMultiTournament' (the server tells it to with 'tournamentGameStarting'). The result goes back
+ * to the tournament through onTournamentResult. Returns the room code, or null if no connection has
+ * set up the room functions yet.
+ */
+module.exports.createTournamentRoom = function createTournamentRoom({ humans, vsBot, deckSize, tournamentMatch }) {
+  if (!roomOps) return null;
+  const code = makeMultiRoomCode();
+  const room = {
+    code,
+    status: 'waiting',
+    hidden: true,
+    createdAt: Date.now(),
+    totalPlayers: 2,
+    aiCount: vsBot ? 1 : 0,
+    deckSize: deckSize === 36 ? 36 : 52,
+    ranked: false,
+    allowTransfer: false,
+    humanSlotsNeeded: humans.length,
+    creatorUsername: humans[0].username,
+    isPrivate: true,
+    password: null,
+    humans: humans.map((h) => ({ username: h.username, socketId: h.socketId, connected: true })),
+    bots: [],
+    game: null,
+    moveTimer: null,
+    botTimer: null,
+    cleanupTimer: null,
+    tournamentMatch,
+  };
+  multiRooms.set(code, room);
+  return code;
+};
+module.exports.startTournamentRoom = function startTournamentRoom(code) {
+  const room = multiRooms.get(code);
+  if (!room || !roomOps || room.game) return false;
+  roomOps.startMultiRoomGame(room);
+  return true;
 };
 
 // Games being played right now, for the front page's map (platform/world.js).

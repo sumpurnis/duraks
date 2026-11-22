@@ -22,6 +22,7 @@ const { chooseMove } = require('./ai');
 const tournaments = require('./tournament/store');
 const { generateBracket } = require('./tournament/bracket-generator');
 const registerMultiHandlers = require('./multi-rooms');
+const challenges = require('./challenges');
 const { createRateLimiter } = require('../../../platform/rate-limit');
 const { socketIp } = require('../../../platform/client-ip');
 
@@ -45,6 +46,8 @@ function mountRoutes(app) {
 
 /** Registers every Duraks socket event, timers and sweeps. `io` is the site's Socket.io server. */
 function attach(io) {
+// Daily challenge: prepare today's and tomorrow's deal in the background (CHALLENGES=0 turns it off).
+challenges.init({ users, prepare: process.env.CHALLENGES !== '0' });
 const MOVE_TIMEOUT_MS = 60000;
 const DISCONNECT_GRACE_MS = 30000;
 const ROOM_CLEANUP_MS = 5 * 60 * 1000;
@@ -60,6 +63,8 @@ const roomCreateLimiter = createRateLimiter({ max: 30, windowMs: 10 * 60 * 1000,
 const chatLimiter = createRateLimiter({ max: 8, windowMs: 10 * 1000, blockMs: 15 * 1000 });
 // Upper bound for a tournament: bot-filled tournaments are played out on the server.
 const MAX_TOURNAMENT_PARTICIPANTS = 64;
+// Pause between the games of a tournament series (the result stays on screen for a moment).
+const TOURNAMENT_NEXT_GAME_MS = Number(process.env.TOURNAMENT_NEXT_GAME_MS) || 3000;
 
   // In-memory rooms, keyed by 4-char code. Players are identified by *username*
   // (stable across reconnects/refreshes) — socketId is just where to reach them right now.
@@ -378,90 +383,50 @@ const MAX_TOURNAMENT_PARTICIPANTS = 64;
     return typeof playerId === 'string' && playerId.startsWith('Bots-');
   }
 
-  /** Creates a real Duraks room for `humanUsername` against the AI, tagged
-   *  with which tournament series it belongs to. Reuses the exact same AI
-   *  opponent as the normal "Spēlēt pret datoru" button — the bracket's
-   *  fabricated bot name is just bookkeeping for seeding/placement, the
-   *  actual opponent in-game is always the one AI. */
+  // Tournament games are played on the same round table as every other game (multi-rooms.js), so a
+  // guest, a registered player and a tournament player all see exactly the same thing.
+  const deckSizeFor = (t) => (t && /36/.test(String(t.gameId || '')) ? 36 : 52);
+
+  /** A tournament game for `humanUsername` against the computer (the bracket's bot name is only
+   *  bookkeeping for seeding/placement; in the game the opponent is the ordinary computer). */
   function startTournamentGameForHuman(humanUsername, tournamentId, matchId) {
     const socketId = userSockets.get(humanUsername);
     if (!socketId) return false; // human isn't currently connected — can't push them into a game
     const socket = io.sockets.sockets.get(socketId);
     if (!socket) return false;
     const t = tournaments.getTournament(tournamentId);
-    const gameId = (t && t.gameId) || gamesRegistry.DEFAULT_GAME_ID;
-
-    const code = makeRoomCode();
-    rooms.set(code, {
-      code,
-      createdAt: Date.now(),
-      players: [
-        { username: humanUsername, socketId: socket.id, connected: true },
-        { username: AI_ID, socketId: null, connected: false },
-      ],
-      game: null,
-      timer: null,
-      aiTimer: null,
-      turnToken: 0,
-      rematchVotes: {},
-      statsRecorded: false,
-      endReason: null,
-      vsAI: true,
-      gameId,
+    const code = registerMultiHandlers.createTournamentRoom({
+      humans: [{ username: humanUsername, socketId: socket.id }],
+      vsBot: true,
+      deckSize: deckSizeFor(t),
       tournamentMatch: { tournamentId, matchId },
     });
-    const room = rooms.get(code);
-    room.game = gamesRegistry.getGame(room.gameId).createEngine(room.players.map((p) => p.username));
-    room.startedAt = Date.now();
-    maybeTriggerAI(room); // in case the AI goes first
+    if (!code) return false;
     tournaments.markMatchInProgress(tournamentId, matchId);
-
-    // Tell the client which room to join — the client re-emits 'joinRoom',
-    // which is what actually sets joinedCode/playerId correctly (those are
-    // local to that connection's own closure, unreachable from here).
-    socket.emit('tournamentGameStarting', { code, vsBot: true });
+    // the page joins the table ('joinMultiTournament'); the game starts right away
+    socket.emit('tournamentGameStarting', { code, vsBot: true, multi: true });
+    registerMultiHandlers.startTournamentRoom(code);
     return true;
   }
 
-  /** Creates a real Duraks room between two humans for a tournament match,
-   *  pushing both into it at once. Both players must currently be connected
-   *  — this is the "auto-create when it's tournament time and both paired
-   *  players are online" behavior from the original spec, triggered here by
-   *  either player clicking "Sākt spēli" once their opponent is known. */
+  /** A tournament game between two people, both pushed into it at once (both must be online) —
+   *  triggered by either of them clicking "Sākt spēli" once their opponent is known. */
   function startTournamentGameForHumans(player1Username, player2Username, tournamentId, matchId) {
-    const socket1Id = userSockets.get(player1Username);
-    const socket2Id = userSockets.get(player2Username);
-    if (!socket1Id || !socket2Id) return false;
-    const socket1 = io.sockets.sockets.get(socket1Id);
-    const socket2 = io.sockets.sockets.get(socket2Id);
+    const socket1 = io.sockets.sockets.get(userSockets.get(player1Username));
+    const socket2 = io.sockets.sockets.get(userSockets.get(player2Username));
     if (!socket1 || !socket2) return false;
     const t = tournaments.getTournament(tournamentId);
-    const gameId = (t && t.gameId) || gamesRegistry.DEFAULT_GAME_ID;
-
-    const code = makeRoomCode();
-    rooms.set(code, {
-      code,
-      createdAt: Date.now(),
-      players: [
-        { username: player1Username, socketId: socket1.id, connected: true },
-        { username: player2Username, socketId: socket2.id, connected: true },
-      ],
-      game: null,
-      timer: null,
-      turnToken: 0,
-      rematchVotes: {},
-      statsRecorded: false,
-      endReason: null,
-      gameId,
+    const code = registerMultiHandlers.createTournamentRoom({
+      humans: [{ username: player1Username, socketId: socket1.id }, { username: player2Username, socketId: socket2.id }],
+      vsBot: false,
+      deckSize: deckSizeFor(t),
       tournamentMatch: { tournamentId, matchId },
     });
-    const room = rooms.get(code);
-    room.game = gamesRegistry.getGame(room.gameId).createEngine(room.players.map((p) => p.username));
-    room.startedAt = Date.now();
+    if (!code) return false;
     tournaments.markMatchInProgress(tournamentId, matchId);
-
-    socket1.emit('tournamentGameStarting', { code, vsBot: false });
-    socket2.emit('tournamentGameStarting', { code, vsBot: false });
+    socket1.emit('tournamentGameStarting', { code, vsBot: false, multi: true });
+    socket2.emit('tournamentGameStarting', { code, vsBot: false, multi: true });
+    registerMultiHandlers.startTournamentRoom(code);
     return true;
   }
 
@@ -469,7 +434,12 @@ const MAX_TOURNAMENT_PARTICIPANTS = 64;
    *  as part of a tournament series. No-ops instantly for ordinary games. */
   function handleTournamentGameResult(room, winnerUsername) {
     if (!room.tournamentMatch || !winnerUsername) return;
-    const { tournamentId, matchId } = room.tournamentMatch;
+    recordTournamentGame(room.tournamentMatch, winnerUsername, winnerUsername === AI_ID, room.code);
+  }
+
+  /** One finished game of a tournament series (from either table): score it, start the next game. */
+  function recordTournamentGame(tournamentMatch, winnerUsername, winnerIsBot, roomCode) {
+    const { tournamentId, matchId } = tournamentMatch;
 
     // The AI plays under AI_ID in-game, but the bracket bookkeeping uses
     // whichever fabricated bot name originally filled that slot — translate
@@ -477,13 +447,13 @@ const MAX_TOURNAMENT_PARTICIPANTS = 64;
     const t = tournaments.getTournament(tournamentId);
     const match = t && tournaments.findMatch(t, matchId);
     if (!match) return;
-    const seriesWinnerId = winnerUsername === AI_ID
+    const seriesWinnerId = winnerIsBot
       ? (isBotParticipant(match.player1) ? match.player1 : match.player2)
       : winnerUsername;
 
     let updated;
     try {
-      updated = tournaments.recordSeriesGameResult(tournamentId, matchId, seriesWinnerId, room.code);
+      updated = tournaments.recordSeriesGameResult(tournamentId, matchId, seriesWinnerId, roomCode);
     } catch (err) {
       console.error('Failed to record tournament series result:', err.message);
       return;
@@ -492,9 +462,20 @@ const MAX_TOURNAMENT_PARTICIPANTS = 64;
     io.to(LOBBY_ROOM).emit('tournamentUpdated', { id: tournamentId });
 
     if (!updated.seriesComplete) {
-      // Bo3/Bo5 auto-continue: immediately start the next game in the series.
-      const humanUsername = [match.player1, match.player2].find((p) => !isBotParticipant(p));
-      if (humanUsername) startTournamentGameForHuman(humanUsername, tournamentId, matchId);
+      // Bo3/Bo5 auto-continue: the next game of the series starts after a short pause (so the result
+      // stays readable). Two people play each other again (if one of them is offline, they start it
+      // with "Sākt spēli"); a person against a bracket bot plays the computer.
+      const humans = [match.player1, match.player2].filter((p) => !isBotParticipant(p));
+      setTimeout(() => {
+        const fresh = tournaments.getTournament(tournamentId);
+        const m = fresh && tournaments.findMatch(fresh, matchId);
+        if (!m || m.status === 'completed') return;
+        const started = humans.length === 2
+          ? startTournamentGameForHumans(match.player1, match.player2, tournamentId, matchId)
+          : humans.length === 1 && startTournamentGameForHuman(humans[0], tournamentId, matchId);
+        if (!started) tournaments.markMatchReady(tournamentId, matchId);
+        io.to(LOBBY_ROOM).emit('tournamentUpdated', { id: tournamentId });
+      }, TOURNAMENT_NEXT_GAME_MS);
     } else {
       autoStartReadyBotMatches(tournamentId);
     }
@@ -716,6 +697,9 @@ const MAX_TOURNAMENT_PARTICIPANTS = 64;
       getUsername: () => username,
       users,
       world,
+      // tournament games on the round table: the series score and the "1. kārta · 1–0" line
+      onTournamentResult: recordTournamentGame,
+      tournamentInfo: (tournamentMatch) => getTournamentInfoForRoom({ tournamentMatch }),
       canCreateRoom: () => roomCreateLimiter.check(socketIp(socket)).allowed,
       // table chat: rate limit per connection, 300 characters, rude words masked; null = drop it
       cleanChat: (text) => {
@@ -1392,4 +1376,4 @@ function renameUser(oldName, newName) {
   tournaments.renameUser(oldName, newName);
 }
 
-module.exports = { mountRoutes, attach, renameUser };
+module.exports = { mountRoutes, attach, renameUser, challenges };

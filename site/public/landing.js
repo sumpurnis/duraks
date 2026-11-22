@@ -74,7 +74,9 @@
     $('userAv').textContent = me ? me.charAt(0).toUpperCase() : '';
     $('knownName').textContent = k || '';
     listeners.forEach(function (fn) { try { fn(); } catch (e) { /* the map must never break the header */ } });
+    if (typeof checkChallenges === 'function' && lastAccount !== me) { lastAccount = me; checkChallenges(); }
   }
+  var lastAccount;
   window.UzsSite = {
     state: function () { return { me: me, known: me || known() || null }; },
     // the saved login, for the logged-in-only extended stats (null when not logged in)
@@ -312,6 +314,39 @@
     stripParams(['auth']);
     openModal(wanted);
   }
+
+  // ---------------------------------------------------------------- challenges
+  // A "!" on a game's button while it has a challenge this visitor hasn't tried yet today (and a short
+  // hint under the buttons). Checked on load and every 5 minutes; logged-in players send their login,
+  // which the server checks read-only.
+  function minutesText(ms) {
+    const m = Math.max(0, Math.floor(ms / 60000));
+    return m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ' min';
+  }
+  function checkChallenges() {
+    const headers = {};
+    const u = ls('get', USER_KEY), tk = ls('get', TOKEN_KEY);
+    if (u && tk) { headers['X-Uzs-User'] = encodeURIComponent(u); headers['X-Uzs-Token'] = tk; }
+    fetch('/api/challenges', { headers: headers, cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((d) => {
+        if (!d) return;
+        document.querySelectorAll('.gmark').forEach((m) => {
+          const g = d[m.dataset.game];
+          const on = !!(g && g.fresh);
+          m.classList.toggle('hidden', !on);
+          m.parentElement.setAttribute('aria-label', m.parentElement.textContent.replace('!', '').trim() + (on ? ' — pieejams jauns izaicinājums' : ''));
+        });
+        const dur = d.duraks;
+        const hint = document.getElementById('chHint');
+        if (hint) {
+          hint.classList.toggle('hidden', !(dur && dur.fresh));
+          if (dur) document.getElementById('chLeft').textContent = minutesText(dur.endsInMs);
+        }
+      });
+  }
+  setInterval(() => { if (!document.hidden) checkChallenges(); }, 5 * 60 * 1000);
 
   // ---------------------------------------------------------------- start
   me = ls('get', USER_KEY) && ls('get', TOKEN_KEY) ? ls('get', USER_KEY) : null;

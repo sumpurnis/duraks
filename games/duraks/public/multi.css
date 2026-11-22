@@ -444,3 +444,7 @@
   outline-offset: 6px;
   border-radius: 10px;
 }
+
+/* a tournament game: series line under the turn line */
+.multi-tournament-line { margin-top: 4px; font-size: 0.8rem; font-weight: 700; color: var(--gold-bright, #e2c374); }
+.multi-tournament-line.hidden { display: none; }

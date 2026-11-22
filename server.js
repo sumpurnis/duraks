@@ -246,6 +246,29 @@ function noteVisit(req) {
   const ttl = req.get('x-uzs-hidden') === '1' ? VISIT_TTL_HIDDEN_MS : VISIT_TTL_MS;
   world.touch(visit, name, req.ip || 'x', ttl); // one entry per tab: logging in or out just changes it
 }
+// GET /api/challenges — the "!" marks on the front page: is there a challenge this visitor hasn't
+// tried yet today? Per game (only Duraks has challenges so far). Same login headers as /api/world.
+app.get('/api/challenges', (req, res) => {
+  if (!worldLimiter.check(req.ip || 'x').allowed) return res.status(429).json({ error: 'slow down' });
+  let user = '';
+  try { user = decodeURIComponent(String(req.get('x-uzs-user') || '')).slice(0, 20); } catch { user = ''; }
+  const token = String(req.get('x-uzs-token') || '').slice(0, 200);
+  const name = user && token && users.checkSessionToken(user, token) ? users.canonicalName(user) : null;
+  res.set('Cache-Control', 'no-store');
+  res.json({ duraks: { fresh: duraks.challenges.isNewFor(name), endsInMs: duraks.challenges.msToMidnight() } });
+});
+
+// GET /api/challenges/admin — the admin's view: target, tuned strength and real win rate per level.
+app.get('/api/challenges/admin', (req, res) => {
+  let user = '';
+  try { user = decodeURIComponent(String(req.get('x-uzs-user') || '')).slice(0, 20); } catch { user = ''; }
+  const token = String(req.get('x-uzs-token') || '').slice(0, 200);
+  const admin = (process.env.ADMIN_USERNAME || 'zivs').toLowerCase();
+  if (!(user && token && users.checkSessionToken(user, token) && String(users.canonicalName(user)).toLowerCase() === admin)) return res.status(403).json({ error: 'admin only' });
+  res.set('Cache-Control', 'no-store');
+  res.json(duraks.challenges.adminReport());
+});
+
 app.get('/api/world', (req, res) => {
   if (!worldLimiter.check(req.ip || 'x').allowed) return res.status(429).json({ error: 'slow down' });
   noteVisit(req);

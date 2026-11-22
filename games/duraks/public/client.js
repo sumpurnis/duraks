@@ -571,9 +571,10 @@ el('statsPanel').addEventListener('click', (e) => {
 // multiplayer room creation modal (which covers plain 2-player rooms too,
 // via totalPlayers:2, aiCount:0), replacing the old direct createRoom call.
 
+// A guest's game against the computer is an ordinary round-table game (2 players, 1 computer), so it
+// looks exactly like a registered player's.
 el('playGuestBtn').addEventListener('click', () => {
-  vsAI = true;
-  socket.emit('playVsAIGuest');
+  socket.emit('createMultiRoom', { totalPlayers: 2, aiCount: 1, deckSize: 52, isPrivate: false, ranked: false, allowTransfer: false });
 });
 
 socket.on('guestPlayStarted', ({ username: name }) => {
@@ -1147,6 +1148,22 @@ el('profileModal').addEventListener('click', (e) => {
   if (e.target.id === 'profileModal') el('profileModal').classList.add('hidden');
 });
 
+// After a guest's game: offer to register under the same name (also used by multi-client.js).
+function offerGuestRegistration(name) {
+  if (myUsername || !name) return;
+  el('nameInput').value = name;
+  el('continueBtn').classList.add('hidden');
+  el('passwordFields').classList.remove('hidden');
+  authMode = 'register';
+  el('passwordLabel').textContent = 'Izvēlies paroli';
+  el('confirmField').classList.remove('hidden');
+  el('authBtn').textContent = 'Reģistrēties';
+  el('passwordInput').value = '';
+  el('confirmInput').value = '';
+  el('passwordInput').focus();
+  showToast(`Patika spēle? Reģistrējies ar vārdu "${name}", lai saglabātu savu statistiku!`);
+}
+
 // ================= Game over / rematch =================
 
 function showGameOver(state) {
@@ -1249,17 +1266,7 @@ socket.on('returnToLobby', () => {
   socket.emit('listOpenRooms');
 
   if (isGuestSession && guestUsername) {
-    el('nameInput').value = guestUsername;
-    el('continueBtn').classList.add('hidden');
-    el('passwordFields').classList.remove('hidden');
-    authMode = 'register';
-    el('passwordLabel').textContent = 'Izvēlies paroli';
-    el('confirmField').classList.remove('hidden');
-    el('authBtn').textContent = 'Reģistrēties';
-    el('passwordInput').value = '';
-    el('confirmInput').value = '';
-    el('passwordInput').focus();
-    showToast(`Patika spēle? Reģistrējies ar vārdu "${guestUsername}", lai saglabātu savu statistiku!`);
+    offerGuestRegistration(guestUsername);
     isGuestSession = false;
   } else {
     showToast('Atgriezies sākuma lapā');

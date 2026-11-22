@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Uzspēlēsim.lv — kāršu spēles internetā</title>
 <meta name="description" content="Duraks, Meļi un citas kāršu spēles internetā. Katram spēlētājam savs ciemats, kas aug ar katru spēli." />
-<link rel="stylesheet" href="landing.css?v=202611151156" />
+<link rel="stylesheet" href="landing.css?v=202611221800" />
 <link rel="stylesheet" href="duraks-profile.css?v=202611171300" />
 <link rel="stylesheet" href="/profile-window.css?v=202611171300" />
 </head>
@@ -39,9 +39,11 @@
 
   <div class="center gut">
     <div class="gbtns">
-      <a class="gbtn d" href="/duraks"><span class="suit" aria-hidden="true">♠</span>Spēlēt Duraku</a>
-      <a class="gbtn m" href="/meli/"><span class="suit" aria-hidden="true">♥</span>Spēlēt Meļus</a>
+      <a class="gbtn d" href="/duraks"><span class="suit" aria-hidden="true">♠</span>Spēlēt Duraku<span class="gmark hidden" data-game="duraks" aria-hidden="true">!</span></a>
+      <a class="gbtn m" href="/meli/"><span class="suit" aria-hidden="true">♥</span>Spēlēt Meļus<span class="gmark hidden" data-game="meli" aria-hidden="true">!</span></a>
     </div>
+    <!-- a challenge the visitor hasn't tried yet today (GET /api/challenges) -->
+    <a class="chhint hidden" id="chHint" href="/duraks"><b>Dienas izaicinājums</b> <span>viena izdale visiem · beidzas pēc <span id="chLeft"></span></span></a>
     <span class="live" aria-live="polite"><span class="dot"></span>Tagad spēlē <b id="liveN">0</b> · <span id="onlineN">0</span> tiešsaistē</span>
   </div>
 
@@ -144,7 +146,7 @@
 <div id="toast" class="toast hidden" role="status"></div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="landing.js?v=202611151156"></script>
+<script src="landing.js?v=202611221800"></script>
 <script src="/profile-window.js?v=202611171300" defer></script>
 <script src="player-stats.js?v=202611171300" defer></script>
 <script src="world-map.js?v=202611171215" defer></script>

@@ -80,6 +80,13 @@ function shuffle(deck) {
   return d;
 }
 
+function presetDeck(order, ranks) {
+  const want = makeDeck(ranks).map((c) => c.id).sort().join(',');
+  const deck = order.map((c) => ({ suit: c.suit, rank: c.rank, id: `${c.rank}-${c.suit}` }));
+  if (deck.map((c) => c.id).sort().join(',') !== want) throw new Error('preset deck does not match the deck size');
+  return deck;
+}
+
 class Game {
   constructor(playerIds, opts = {}) {
     if (playerIds.length < MIN_PLAYERS || playerIds.length > MAX_PLAYERS) {
@@ -118,7 +125,9 @@ class Game {
     this.rankValue = rankValueFor(this.ranks);
     this.hands = {};
     for (const p of this.players) this.hands[p] = [];
-    this.deck = shuffle(makeDeck(this.ranks));
+    // A preset deck order (the daily challenge: the same deal for everyone), top card first; the
+    // last card is the trump. Otherwise a fresh random shuffle.
+    this.deck = opts.deck ? presetDeck(opts.deck, this.ranks) : shuffle(makeDeck(this.ranks));
     this.discard = [];
     this.trumpCard = null;
     this.trumpSuit = null;
@@ -685,4 +694,4 @@ class Game {
   }
 }
 
-module.exports = { Game, RANK_VALUE, SUITS, RANKS, MAX_TABLE_SLOTS, MIN_PLAYERS, MAX_PLAYERS };
+module.exports = { Game, RANK_VALUE, SUITS, RANKS, RANKS_36, MAX_TABLE_SLOTS, MIN_PLAYERS, MAX_PLAYERS, makeDeck, ranksForDeckSize };

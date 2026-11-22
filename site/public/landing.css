@@ -255,3 +255,24 @@ p { margin: 0; }
   .dot, .ev { animation: none; }
   .btn, .gbtn, .gcard { transition: none; }
 }
+
+/* challenge mark on a game button, and the hint under the buttons */
+.gbtn { position: relative; }
+.gmark {
+  position: absolute; right: -11px; top: -11px; width: 30px; height: 30px; border-radius: 50%;
+  background: linear-gradient(180deg, #f1d58a, #c9a24b); border: 2px solid #2a2005; color: #2a2005;
+  display: flex; align-items: center; justify-content: center; font: 900 17px/1 system-ui, sans-serif;
+}
+.gmark::before {
+  content: ''; position: absolute; inset: -2px; border-radius: 50%; background: #e2c374; z-index: -1;
+  animation: gmarkPulse 1.6s ease-out infinite;
+}
+@keyframes gmarkPulse { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(2.1); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .gmark::before { animation: none; } }
+.gmark.hidden, .chhint.hidden { display: none; }
+.chhint {
+  display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 7px 14px; border-radius: 10px;
+  background: rgba(14,40,54,.9); border: 1px solid rgba(226,195,116,.6); color: #cfe0e8; font-size: 13.5px; text-decoration: none;
+}
+.chhint b { color: var(--gold-bright); }
+.chhint:hover { border-color: var(--gold-bright); }

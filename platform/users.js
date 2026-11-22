@@ -648,6 +648,27 @@ function getStats(username, game = DEFAULT_GAME) {
   return record && gameOk(game) ? publicStats(record, game) : null;
 }
 
+// ---------- rewards (challenges) ----------
+// Points and badges earned in challenges. A badge id is unique ("daily-hard:2026-11-22"), so the same
+// one is never given twice.
+function addReward(username, points, badgeId) {
+  const name = normalize(username);
+  const record = getRecord(name);
+  if (!record) return null;
+  const r = record.rewards && typeof record.rewards === 'object' ? record.rewards : { points: 0, badges: [] };
+  r.points = (Number(r.points) || 0) + (Number(points) || 0);
+  if (!Array.isArray(r.badges)) r.badges = [];
+  if (badgeId && !r.badges.includes(badgeId)) r.badges.push(badgeId);
+  record.rewards = r;
+  save();
+  return { points: r.points, badges: r.badges.length };
+}
+function getRewards(username) {
+  const record = getRecord(normalize(username));
+  const r = record && record.rewards ? record.rewards : null;
+  return { points: (r && Number(r.points)) || 0, badges: r && Array.isArray(r.badges) ? r.badges.slice() : [] };
+}
+
 /** Everything the profile window shows, for every game: { duraks: { stats, eloByPool, history }, meli: … }. */
 function getProfileGames(username, historyLimit = 50) {
   const name = normalize(username);
@@ -963,6 +984,8 @@ module.exports = {
   checkSessionToken,
   getProfileGames,
   GAMES,
+  addReward,
+  getRewards,
   createAccount,
   verifyLogin,
   createSessionToken,

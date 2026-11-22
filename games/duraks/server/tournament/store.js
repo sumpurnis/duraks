@@ -478,6 +478,16 @@ function markMatchInProgress(tournamentId, matchId) {
   persistTournaments();
 }
 
+/** A series game could not start (an opponent is offline): back to 'ready', so "Sākt spēli" works. */
+function markMatchReady(tournamentId, matchId) {
+  const t = getTournament(tournamentId);
+  if (!t || !t.bracket) return;
+  const match = findMatch(t, matchId);
+  if (!match || match.status === 'completed') return;
+  match.status = 'ready';
+  persistTournaments();
+}
+
 function recordSeriesGameResult(tournamentId, matchId, gameWinnerId, roomCode) {
   const t = getTournament(tournamentId);
   if (!t || !t.bracket) throw new Error('Tournament or bracket not found');
@@ -553,5 +563,6 @@ module.exports = {
   recordSeriesGameResult,
   autoResolveMatchRandomly,
   markMatchInProgress,
+  markMatchReady,
   withdrawFromTournament,
 };
