@@ -141,7 +141,10 @@ app.get('/', (req, res) => {
   }
   // The Activity starts at "/" (Discord adds frame_id, instance_id, platform…): its start page, served
   // right here — no redirect, so the page keeps Discord as its referrer (the SDK hand-shake needs that).
-  if (res.locals.discord && discord.hasLaunchParams(req.query)) {
+  // A request Discord's proxy signed counts too, even if the launch parameters didn't reach the server
+  // (the page itself reads them from its own address).
+  discord.diagnose(req, '/');
+  if (res.locals.discord && (discord.hasLaunchParams(req.query) || discord.verifyProxy(req.headers))) {
     return staticFast.sendPage(req, res, path.join(DISCORD_DIR, 'index.html'), '/', 'no-cache');
   }
   staticFast.sendPage(req, res, path.join(__dirname, 'site', 'public', 'landing.html'), '/');

@@ -166,6 +166,10 @@ test('server with Discord ON: only Discord pages may be framed by Discord', asyn
       assert.strictEqual(r.headers.get('x-frame-options'), null, u);
       assert.match(await r.text(), new RegExp(`/discord/client\\.js\\?v=[0-9a-f]+" data-game="${g}" data-client-id="${APP_ID}"`), u);
     }
+    // "/" signed by Discord but without the launch parameters: still the Activity start page
+    const rsr = await get(s.base + '/', signed(goodPayload()));
+    assert.strictEqual(rsr.headers.get('x-frame-options'), null);
+    assert.match(await rsr.text(), /\/discord\/shell\.js/);
     // signed request without launch parameters also counts
     const rs = await get(s.base + '/duraks', signed(goodPayload()));
     assert.strictEqual(rs.headers.get('x-frame-options'), null);

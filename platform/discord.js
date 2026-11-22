@@ -67,40 +67,50 @@ function decodeSignature(s) {
 const verified = new Map(); // `${sig}|${ts}|${payload}` -> { payload, until }
 const MAX_CACHE = 5000;
 
-/** The signed Discord payload of a request ({ user_id, channel_id, guild_id, … }), or null. */
-function verifyProxy(headers, now = Date.now()) {
-  if (!enabled || !publicKey) return null;
+/** The signature check with its reason: { payload } or { reason } (reasons go to the diagnostic log only). */
+function checkProxy(headers, now = Date.now()) {
+  if (!enabled) return { reason: 'off' };
+  if (!publicKey) return { reason: 'no public key configured' };
   const payloadB64 = header(headers, 'x-discord-proxy-payload');
   const sig = header(headers, 'x-signature-ed25519');
   const ts = header(headers, 'x-signature-timestamp');
-  if (!payloadB64 || !sig || !ts || payloadB64.length > 4096 || sig.length > 200 || ts.length > 20) return null;
+  if (!payloadB64 && !sig && !ts) return { reason: 'not sent' };
+  if (!payloadB64 || !sig || !ts) return { reason: 'incomplete headers' };
+  if (payloadB64.length > 4096 || sig.length > 200 || ts.length > 20) return { reason: 'headers too long' };
   const key = `${sig}|${ts}|${payloadB64}`;
   const hit = verified.get(key);
   if (hit) {
-    if (hit.until > now) return hit.payload;
+    if (hit.until > now) return { payload: hit.payload };
     verified.delete(key);
-    return null;
+    return { reason: 'expired' };
   }
   const bytes = Buffer.from(payloadB64, 'base64');
   const signature = decodeSignature(sig);
-  if (!bytes.length || !signature) return null;
+  if (!bytes.length) return { reason: 'empty payload' };
+  if (!signature) return { reason: 'signature format' };
   // the signature first, before any field is trusted
   let ok = false;
   try { ok = crypto.verify(null, bytes, publicKey, signature); } catch { ok = false; }
-  if (!ok) return null;
+  if (!ok) return { reason: 'signature does not match the public key' };
   let p;
-  try { p = JSON.parse(bytes.toString('utf8')); } catch { return null; }
-  if (!p || typeof p !== 'object') return null;
-  if (String(p.created_at) !== ts) return null;
+  try { p = JSON.parse(bytes.toString('utf8')); } catch { return { reason: 'payload not JSON' }; }
+  if (!p || typeof p !== 'object') return { reason: 'payload not an object' };
+  if (String(p.created_at) !== ts) return { reason: 'created_at differs from the timestamp header' };
   const toMs = (v) => { const n = Number(v); return Number.isFinite(n) ? (n < 1e12 ? n * 1000 : n) : NaN; };
   const created = toMs(p.created_at), expires = toMs(p.expires_at);
-  if (!Number.isFinite(created) || !Number.isFinite(expires)) return null;
-  if (created > now + 60 * 1000 || expires <= now) return null;
-  if (clientId && p.application_id !== undefined && String(p.application_id) !== clientId) return null;
-  if (p.user_id !== undefined && !/^\d{5,30}$/.test(String(p.user_id))) return null;
+  if (!Number.isFinite(created) || !Number.isFinite(expires)) return { reason: 'times not numbers' };
+  if (created > now + 60 * 1000) return { reason: 'created in the future' };
+  if (expires <= now) return { reason: 'expired' };
+  if (clientId && p.application_id !== undefined && String(p.application_id) !== clientId) return { reason: 'another application' };
+  if (p.user_id !== undefined && !/^\d{5,30}$/.test(String(p.user_id))) return { reason: 'bad user id' };
   if (verified.size >= MAX_CACHE) verified.clear();
   verified.set(key, { payload: p, until: expires });
-  return p;
+  return { payload: p };
+}
+
+/** The signed Discord payload of a request ({ user_id, channel_id, guild_id, … }), or null. */
+function verifyProxy(headers, now = Date.now()) {
+  return checkProxy(headers, now).payload || null;
 }
 
 /** Discord's launch parameters in a URL query (the Activity keeps them in every page address). */
@@ -115,6 +125,24 @@ function isDiscordRequest(req) {
   if (!enabled) return false;
   if (verifyProxy(req.headers)) return true;
   return !requireSignature && hasLaunchParams(req.query);
+}
+
+/**
+ * What a request brought that tells Discord apart, for the deploy log while setting up: which launch
+ * parameters arrived (names only), and whether a signature arrived and checked out (or why not).
+ * No values, no ids. Logged for the first few Activity page loads after each start.
+ */
+let diagnosed = 0;
+function diagnose(req, where) {
+  if (!enabled || diagnosed >= 20) return;
+  const q = req.query || {};
+  const keys = ['frame_id', 'instance_id', 'platform', 'channel_id', 'guild_id'].filter((k) => typeof q[k] === 'string' && q[k]);
+  const sent = !!(header(req.headers, 'x-discord-proxy-payload') || header(req.headers, 'x-signature-ed25519'));
+  if (!keys.length && !sent) return; // an ordinary website visit
+  const c = checkProxy(req.headers);
+  const signed = c.payload ? 'valid' : sent ? c.reason : 'not sent';
+  diagnosed++;
+  console.log(`Discord check ${where}: launch parameters [${keys.join(', ') || 'none'}]${hasLaunchParams(q) ? ' (complete)' : ''}, signature: ${signed}`);
 }
 
 /** Rate-limit / anti-abuse key for a signed Discord request ("discord:<user id>"), else null. */
@@ -192,6 +220,7 @@ module.exports = {
   PUBLIC_ORIGIN,
   verifyProxy,
   hasLaunchParams,
+  diagnose,
   isDiscordRequest,
   discordKey,
   lookupTables,
