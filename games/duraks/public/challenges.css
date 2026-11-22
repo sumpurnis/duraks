@@ -28,7 +28,6 @@
   background: #e2c374; color: #2a2005; font-size: 0.75rem; font-weight: 800; white-space: nowrap;
 }
 .ch-badge.hidden { display: none; }
-#authStep .ch-open-btn { margin-top: 8px; }
 
 .ch-card { width: min(420px, 92vw); max-width: 420px; }
 .ch-title { margin-bottom: 12px; }
@@ -81,3 +80,10 @@
 .ch-soon { align-self: center; padding: 4px 10px; border-radius: 999px; background: rgba(226, 195, 116, 0.18); color: #e2c374; font-size: 0.75rem; font-weight: 800; }
 .ch-over-note { margin: 4px 0 12px; padding: 10px 12px; border-radius: 10px; background: rgba(226, 195, 116, 0.14); border: 1px solid rgba(226, 195, 116, 0.45); font-size: 0.9rem; line-height: 1.4; }
 .ch-over-note.hidden { display: none; }
+
+/* the lobby's main buttons (Izveidot istabu / Izaicinājumi / Turnīri, and the guest ones) sit 8 px
+   apart — the same gap as the quick-room buttons below them */
+.lobby-actions { display: flex; flex-direction: column; gap: 8px; }
+.lobby-actions > .btn { margin: 0; }
+#playGuestBtn, #createRoomGuestBtn, #challengeOpenGuestBtn { margin-top: 0; margin-bottom: 8px; }
+#authStep .ch-open-btn { margin-top: 0; }
