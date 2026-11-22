@@ -29,7 +29,7 @@ const { socketIp } = require('../../../platform/client-ip');
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 /** The Duraks lobby page and its static files (/style.css, /client.js, /images/… are served from the site root as before). */
-function mountRoutes(app) {
+function mountRoutes(app, opts = {}) {
   // Express treats "/duraks" and "/duraks/" as the same route, but the page's relative asset URLs
   // (style.css, client.js…) only resolve correctly without the trailing slash.
   app.get('/duraks', (req, res) => {
@@ -39,9 +39,11 @@ function mountRoutes(app) {
     }
     // ?preview=1 is a view-only visit — not a real one.
     if (!('preview' in req.query)) users.recordPageVisit();
-    res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+    const file = path.join(PUBLIC_DIR, 'index.html');
+    if (opts.sendPage) opts.sendPage(req, res, file, '/duraks');
+    else res.sendFile(file);
   });
-  app.use(express.static(PUBLIC_DIR));
+  app.use(express.static(PUBLIC_DIR, opts.setHeaders ? { setHeaders: opts.setHeaders } : {}));
 }
 
 /** Registers every Duraks socket event, timers and sweeps. `io` is the site's Socket.io server. */
@@ -1376,4 +1378,4 @@ function renameUser(oldName, newName) {
   tournaments.renameUser(oldName, newName);
 }
 
-module.exports = { mountRoutes, attach, renameUser, challenges };
+module.exports = { mountRoutes, attach, renameUser, challenges, PUBLIC_DIR };

@@ -128,7 +128,7 @@
 .meli .pile .empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--muted); font-size: .9rem; padding: 8px; }
 .meli .back {
   position: absolute; width: calc(var(--card-w) * 1.5); height: calc(var(--card-h) * 1.5);
-  background: url('/images/trump-stack.png') center / 100% 100% no-repeat;
+  background: url('/images/trump-stack.webp') center / 100% 100% no-repeat;
   filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .55));
 }
 .meli .pile.has-claim { margin-bottom: 150px; }

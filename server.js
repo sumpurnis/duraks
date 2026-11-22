@@ -23,10 +23,14 @@ const feedback = require('./platform/feedback');
 const profanity = require('./platform/profanity');
 const { createRateLimiter } = require('./platform/rate-limit');
 const { TRUST_PROXY, socketIp } = require('./platform/client-ip');
+const { createStaticFast, sendJson } = require('./platform/static-fast');
 const duraks = require('./games/duraks/server');
 const { attachMeli, CLIENT_DIR: MELI_CLIENT_DIR } = require('./games/meli/server');
 
 const app = express();
+// Query strings are only ever flat strings (?v=, ?me=, ?q=&r=, ?return=): Node's built-in parser is
+// enough and avoids the qs library's known denial-of-service issues.
+app.set('query parser', 'simple');
 const server = http.createServer(app);
 // No message here needs more than a few KB (the longest is a 2000-character feedback post).
 const io = new Server(server, { maxHttpBufferSize: 32 * 1024 });
@@ -97,14 +101,25 @@ const cacheHeaders = (res) => {
 // Old Duraks links that carried a query string to "/" keep working: room invites and
 // password-reset e-mails point at "/?room=…" / "/?reset=…", so those are passed on to /duraks.
 const LEGACY_DURAKS_PARAMS = ['room', 'reset'];
+// Text files go out compressed, pages link their scripts/styles with ?v=<content hash> (cached for a
+// year), unchanged files answer 304. Same roots in the same order as the express.static mounts below,
+// which still serve everything else (images, Range requests).
+const staticFast = createStaticFast([
+  { prefix: '/', dir: duraks.PUBLIC_DIR, cacheControl: 'public, max-age=0' },
+  { prefix: '/meli', dir: MELI_CLIENT_DIR, cacheControl: 'no-cache' },
+  { prefix: '/', dir: path.join(__dirname, 'platform', 'public'), cacheControl: 'public, max-age=0' },
+  { prefix: '/', dir: path.join(__dirname, 'site', 'public'), cacheControl: 'public, max-age=0' },
+]);
+staticFast.warm();
 app.get('/', (req, res) => {
   if (LEGACY_DURAKS_PARAMS.some((k) => k in req.query)) {
     return res.redirect('/duraks' + req.originalUrl.slice(req.originalUrl.indexOf('?')));
   }
-  res.sendFile(path.join(__dirname, 'site', 'public', 'landing.html'));
+  staticFast.sendPage(req, res, path.join(__dirname, 'site', 'public', 'landing.html'), '/');
 });
-duraks.mountRoutes(app); // GET /duraks + Duraks' static files
-app.use('/meli', express.static(MELI_CLIENT_DIR, { index: 'index.html', setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
+app.use(staticFast.middleware);
+duraks.mountRoutes(app, { sendPage: staticFast.sendPage, setHeaders: cacheHeaders }); // GET /duraks + Duraks' static files
+app.use('/meli', express.static(MELI_CLIENT_DIR, { index: 'index.html', setHeaders: (res) => res.setHeader('Cache-Control', res.locals.immutable ? 'public, max-age=31536000, immutable' : 'no-cache') }));
 // Everything below is served from the site root, so every URL stays as it always was
 // (/board.html, /guest-nudge.js, /landing.js …).
 app.use(express.static(path.join(__dirname, 'platform', 'public'), { setHeaders: cacheHeaders }));
@@ -276,7 +291,7 @@ app.get('/api/world', (req, res) => {
   const q = Number(req.query.q), r = Number(req.query.r);
   const at = Number.isInteger(q) && Number.isInteger(r) && Math.abs(q) < 1000 && Math.abs(r) < 1000 && req.query.q !== undefined ? { q, r } : null;
   res.set('Cache-Control', 'no-store');
-  res.json(world.snapshot(me, at));
+  sendJson(req, res, world.snapshot(me, at)); // polled every 10 s: gzip it
 });
 
 // POST /api/player/full { name, me, token } — extended stats for logged-in players: the same as the

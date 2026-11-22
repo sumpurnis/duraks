@@ -702,7 +702,7 @@ function loadView() {
 function frame(ts) {
   const c = fx.getContext('2d'), fd = fx._dpr || 1;
   c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, fx.width, fx.height); c.setTransform(fd, 0, 0, fd, 0, 0);
-  if (!W || !fitted) { requestAnimationFrame(frame); return; }
+  if (!W || !fitted) { nextFrame(); return; }
   // smoke from villages whose owner is online (chimneys were found when the village was drawn)
   TOWNS.forEach((t) => {
     const e = townT.get(t.name);
@@ -796,7 +796,19 @@ function frame(ts) {
     c.fillStyle = '#2a2005'; c.textBaseline = 'alphabetic'; c.fillText(lbl, p[0], p[1]);
   }
   if (sel && townsBy.get(sel)) { const t = townsBy.get(sel), r = Math.max(3, fenceR(t)) + 0.8; c.setLineDash([6, 5]); poly(c, blob(P, t.x, t.y, r, 1, 36), null, '#e2c374', 2); c.setLineDash([]); }
-  requestAnimationFrame(frame);
+  nextFrame();
+}
+// The animation only runs while the map is on screen: scrolled away, it waits (nothing visible changes)
+// and picks up again where it stopped once the map is back in view.
+let heroInView = true, framePaused = false;
+function nextFrame() {
+  if (heroInView) requestAnimationFrame(frame); else framePaused = true;
+}
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver((entries) => {
+    heroInView = entries[entries.length - 1].isIntersecting;
+    if (heroInView && framePaused) { framePaused = false; requestAnimationFrame(frame); }
+  }).observe(hero);
 }
 
 /* ---------- moving around ---------- */
