@@ -8,6 +8,9 @@
 </head>
 <body class="dshell">
 <main id="picker" class="dpick">
+  <div class="dacct" aria-live="polite">
+    <span class="dacct-name">👤 <span id="acctName">Viesis</span></span>
+  </div>
   <div class="dlogo">Uzspēlē<span>sim</span></div>
   <h1>Ko spēlēsim?</h1>
   <div class="dgames">
@@ -22,8 +25,31 @@
       <span class="dsub" data-sub="meli">2–6 spēlētāji</span>
     </button>
   </div>
+  <button type="button" id="acctLogin" class="dbtn dlogin hidden">Ielogoties ar Discord</button>
   <p class="dnote">Šī kanāla galdu redz arī spēlētāji uzspelesim.lv — viņi var pievienoties ar galda kodu.</p>
+  <p id="dstatus" class="dstatus" aria-live="polite"></p>
 </main>
+<div id="authPanel" class="dpanel hidden" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+  <div class="dcard">
+    <h2 id="authTitle">Sveiks!</h2>
+    <p class="dintro">Šis Discord konts vēl nav piesaistīts uzspelesim.lv kontam.</p>
+    <button type="button" id="authLinkCurrent" class="dbtn primary hidden"></button>
+    <section class="dsec">
+      <h3>Jauns konts</h3>
+      <label class="dfield"><span>Lietotājvārds</span><input id="authNewName" maxlength="20" autocomplete="off" spellcheck="false" /></label>
+      <button type="button" id="authCreate" class="dbtn primary">Izveidot kontu</button>
+    </section>
+    <section class="dsec">
+      <h3>Man jau ir konts</h3>
+      <label class="dfield"><span>Lietotājvārds</span><input id="authUser" maxlength="20" autocomplete="username" spellcheck="false" /></label>
+      <label class="dfield"><span>Parole</span><input id="authPass" type="password" maxlength="200" autocomplete="current-password" /></label>
+      <button type="button" id="authLink" class="dbtn">Ielogoties un piesaistīt</button>
+      <p class="dsmall">Ienāc ar Google vai Facebook? Piesaisti Discord mājaslapā: uzspelesim.lv → Duraks → «e-pasts» pie sava vārda → «Piesaistīt Discord».</p>
+    </section>
+    <p id="authError" class="derr hidden" role="alert"></p>
+    <button type="button" id="authGuest" class="dlink">Spēlēt kā viesis</button>
+  </div>
+</div>
 <iframe id="gameFrame" class="dframe hidden" title="Spēle" allow="clipboard-write; web-share"></iframe>
 <script src="/discord/sdk.min.js"></script>
 <script src="/discord/shell.js"></script>
