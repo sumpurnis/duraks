@@ -24,6 +24,7 @@ const profanity = require('./platform/profanity');
 const { createRateLimiter } = require('./platform/rate-limit');
 const { TRUST_PROXY, socketIp } = require('./platform/client-ip');
 const { createStaticFast, sendJson } = require('./platform/static-fast');
+const discord = require('./platform/discord');
 const duraks = require('./games/duraks/server');
 const { attachMeli, CLIENT_DIR: MELI_CLIENT_DIR } = require('./games/meli/server');
 
@@ -76,11 +77,19 @@ const CSP = [
   "form-action 'self'",
   "object-src 'none'",
 ].join('; ');
+// Inside the Discord Activity (only with DISCORD_ACTIVITY=1, see platform/discord.js) a page may be shown
+// in Discord's frame — by Discord only; every other site still can't frame this one.
+const CSP_DISCORD = CSP.replace("frame-ancestors 'self'", 'frame-ancestors ' + discord.FRAME_ANCESTORS);
 app.use((req, res, next) => {
-  res.setHeader('Content-Security-Policy', CSP);
+  const inDiscord = discord.isDiscordRequest(req);
+  res.locals.discord = inDiscord;
+  res.setHeader('Content-Security-Policy', inDiscord ? CSP_DISCORD : CSP);
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  if (!inDiscord) res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'same-origin');
+  // Discord's proxy hides every address: a SIGNED Discord request is rate-limited by its Discord user.
+  const dk = inDiscord && discord.discordKey(req.headers);
+  if (dk) Object.defineProperty(req, 'ip', { value: dk, configurable: true });
   next();
 });
 // Files linked with ?v=<build> (the front page) never change under that exact URL: cache them for a year.
@@ -104,21 +113,47 @@ const LEGACY_DURAKS_PARAMS = ['room', 'reset'];
 // Text files go out compressed, pages link their scripts/styles with ?v=<content hash> (cached for a
 // year), unchanged files answer 304. Same roots in the same order as the express.static mounts below,
 // which still serve everything else (images, Range requests).
+// Discord Activity: its start page and helper scripts (/discord/…) exist only with DISCORD_ACTIVITY=1.
+const DISCORD_DIR = path.join(__dirname, 'platform', 'discord-public');
+const DISCORD_GAME_PAGES = new Map([[path.resolve(duraks.PUBLIC_DIR, 'index.html'), 'duraks'], [path.resolve(MELI_CLIENT_DIR, 'index.html'), 'meli']]);
+const attr = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+// A game page opened inside Discord also loads the Discord helper (one table per voice channel, links
+// that open outside Discord). Outside Discord the page is exactly as before.
+function discordInject(req, res, file) {
+  const game = res.locals.discord && DISCORD_GAME_PAGES.get(path.resolve(file));
+  if (!game) return '';
+  const c = discord.publicConfig();
+  return `<link rel="stylesheet" href="/discord/discord.css" />\n` +
+    `<script src="/discord/client.js" data-game="${game}" data-client-id="${attr(c.clientId)}" data-public-origin="${attr(c.publicOrigin)}" defer></script>`;
+}
 const staticFast = createStaticFast([
   { prefix: '/', dir: duraks.PUBLIC_DIR, cacheControl: 'public, max-age=0' },
   { prefix: '/meli', dir: MELI_CLIENT_DIR, cacheControl: 'no-cache' },
+  ...(discord.enabled ? [{ prefix: '/discord', dir: DISCORD_DIR, cacheControl: 'no-cache' }] : []),
   { prefix: '/', dir: path.join(__dirname, 'platform', 'public'), cacheControl: 'public, max-age=0' },
   { prefix: '/', dir: path.join(__dirname, 'site', 'public'), cacheControl: 'public, max-age=0' },
-]);
+], { inject: discordInject });
 staticFast.warm();
 app.get('/', (req, res) => {
   if (LEGACY_DURAKS_PARAMS.some((k) => k in req.query)) {
     return res.redirect('/duraks' + req.originalUrl.slice(req.originalUrl.indexOf('?')));
   }
+  // The Activity starts at "/" (Discord adds frame_id, instance_id, platform…): its start page, served
+  // right here — no redirect, so the page keeps Discord as its referrer (the SDK hand-shake needs that).
+  if (res.locals.discord && discord.hasLaunchParams(req.query)) {
+    return staticFast.sendPage(req, res, path.join(DISCORD_DIR, 'index.html'), '/', 'no-cache');
+  }
   staticFast.sendPage(req, res, path.join(__dirname, 'site', 'public', 'landing.html'), '/');
 });
 app.use(staticFast.middleware);
 duraks.mountRoutes(app, { sendPage: staticFast.sendPage, setHeaders: cacheHeaders }); // GET /duraks + Duraks' static files
+if (discord.enabled) {
+  app.get('/discord', (req, res) => {
+    const q = req.originalUrl.indexOf('?');
+    res.redirect('/discord/' + (q === -1 ? '' : req.originalUrl.slice(q)));
+  });
+  app.use('/discord', express.static(DISCORD_DIR, { index: 'index.html', setHeaders: (res) => res.setHeader('Cache-Control', res.locals.immutable ? 'public, max-age=31536000, immutable' : 'no-cache') }));
+}
 app.use('/meli', express.static(MELI_CLIENT_DIR, { index: 'index.html', setHeaders: (res) => res.setHeader('Cache-Control', res.locals.immutable ? 'public, max-age=31536000, immutable' : 'no-cache') }));
 // Everything below is served from the site root, so every URL stays as it always was
 // (/board.html, /guest-nudge.js, /landing.js …).
@@ -283,6 +318,48 @@ app.get('/api/challenges/admin', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json(duraks.challenges.adminReport());
 });
+
+// ---------- Discord Activity API (only with DISCORD_ACTIVITY=1) ----------
+// One table per Discord instance: whoever starts a table in the Activity binds it to the instance, the
+// others in the voice channel are offered that table. The table is an ordinary room with an ordinary
+// code, so players on the website can join it too.
+if (discord.enabled) {
+  const discordLimiter = createRateLimiter({ max: 60, windowMs: 60 * 1000, blockMs: 60 * 1000 });
+  const DISCORD_GAMES = ['duraks', 'meli'];
+  const tableOpen = (game, code) => {
+    if (game === 'duraks') return duraks.roomStatus(code) === 'waiting';
+    if (game === 'meli') { const r = meli.manager.rooms.get(code); return !!r && r.status === 'waiting' && !r.solo; }
+    return false;
+  };
+  // With DISCORD_REQUIRE_SIGNATURE=1 only requests signed by Discord's proxy get answers.
+  const allowed = (req) => !discord.requireSignature || !!discord.verifyProxy(req.headers);
+  app.get('/api/discord/config', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json(discord.publicConfig());
+  });
+  // For checking the setup from inside the Activity: does Discord's signature arrive and check out?
+  app.get('/api/discord/check', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const hasHeaders = !!req.get('x-discord-proxy-payload');
+    res.json({ signatureConfigured: discord.signatureConfigured, signatureSent: hasHeaders, signatureValid: !!discord.verifyProxy(req.headers), requireSignature: discord.requireSignature });
+  });
+  app.get('/api/discord/table', (req, res) => {
+    if (!discordLimiter.check(req.ip || 'x').allowed) return res.status(429).json({ error: 'slow down' });
+    if (!allowed(req)) return res.status(401).json({ error: 'discord only' });
+    res.set('Cache-Control', 'no-store');
+    res.json(discord.lookupTables(typeof req.query.instance === 'string' ? req.query.instance : '', DISCORD_GAMES, tableOpen));
+  });
+  app.post('/api/discord/table', express.json({ limit: '1kb' }), (req, res) => {
+    if (!discordLimiter.check(req.ip || 'x').allowed) return res.status(429).json({ error: 'slow down' });
+    if (!allowed(req)) return res.status(401).json({ error: 'discord only' });
+    const b = req.body || {};
+    const game = DISCORD_GAMES.includes(b.game) ? b.game : null;
+    if (!game) return res.status(400).json({ error: 'bad' });
+    res.set('Cache-Control', 'no-store');
+    res.json(discord.bindTable(typeof b.instance === 'string' ? b.instance : '', game, typeof b.code === 'string' ? b.code : '', tableOpen));
+  });
+  console.log(`Discord Activity: on (client id ${discord.publicConfig().clientId || 'NOT SET'}, signature check ${discord.signatureConfigured ? 'configured' : 'not configured'}${discord.requireSignature ? ', required' : ''})`);
+}
 
 app.get('/api/world', (req, res) => {
   if (!worldLimiter.check(req.ip || 'x').allowed) return res.status(429).json({ error: 'slow down' });

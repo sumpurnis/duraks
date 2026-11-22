@@ -8,6 +8,8 @@
 // and can be faked). Only trusted when running behind a proxy: on Railway (RAILWAY_* variables are
 // set) or when TRUST_PROXY=1. Locally the header is ignored, so nobody can fake an address there.
 
+const discord = require('./discord');
+
 const TRUST_PROXY =
   process.env.TRUST_PROXY === '1' ||
   (process.env.TRUST_PROXY !== '0' && !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_PROJECT_ID));
@@ -18,9 +20,16 @@ function lastForwarded(value) {
   return parts.length ? parts[parts.length - 1] : null;
 }
 
-/** Address of a Socket.io client (falls back to the socket id so a limiter key always exists). */
+/**
+ * Address of a Socket.io client (falls back to the socket id so a limiter key always exists).
+ * A player inside the Discord Activity arrives through Discord's proxy, which hides every address, so
+ * there a SIGNED Discord request is keyed by its Discord user id instead ("discord:<id>"); an unsigned
+ * or forged one keeps the address as usual. Off unless DISCORD_ACTIVITY=1 (see discord.js).
+ */
 function socketIp(socket) {
   const h = (socket && socket.handshake) || {};
+  const dk = discord.discordKey(h.headers);
+  if (dk) return dk;
   return lastForwarded(h.headers && h.headers['x-forwarded-for']) || h.address || (socket && socket.id) || 'unknown';
 }
 

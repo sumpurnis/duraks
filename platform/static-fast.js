@@ -2,11 +2,11 @@
 // Faster static files, with no extra packages. Sits in front of express.static and changes only how
 // the bytes travel, never what they are:
 //   * text files (js, css, html, svg, json…) go out brotli- or gzip-compressed when the browser accepts it
-//     (compressed once per file version and kept in memory);
+//     (compressed once per file version, in the background, and kept in memory);
 //   * in the HTML pages every local script / style / image link gets ?v=<content hash>, so the browser
 //     can keep those files for a year (see the ?v= rule in server.js) and a new deploy changes the URL;
 //   * ETag + 304, so an unchanged file is never sent twice.
-// Anything it does not handle (images, Range requests, a file not ready yet) falls through to
+// Anything it does not handle (images, Range requests) falls through to
 // express.static exactly as before.
 const fs = require('fs');
 const path = require('path');
@@ -20,14 +20,15 @@ const HTML = /\.html?$/i;
 /**
  * roots: [{ prefix: '/', dir, cacheControl: 'public, max-age=0' }, …] — in the same order as the
  * express.static mounts they shadow (the first root that has the file wins, as with express.static).
+ * inject(req, res, file) -> extra HTML put before </body> of that page for this request ('' = none).
  */
-function createStaticFast(roots) {
+function createStaticFast(roots, { inject = null } = {}) {
   const norm = roots.map((r) => ({
     prefix: r.prefix === '/' ? '' : r.prefix.replace(/\/$/, ''),
     dir: path.resolve(r.dir),
     cacheControl: r.cacheControl || 'public, max-age=0',
   }));
-  const cache = new Map(); // file -> { key, entry | pending }
+  const cache = new Map(); // file (+ extra markup) -> { key, entry }
 
   /** URL path ("/meli/app.js") -> { file, root } or null. Never leaves the root, never serves dotfiles. */
   function locate(urlPath) {
@@ -73,23 +74,25 @@ function createStaticFast(roots) {
     });
   }
 
-  function build(file, st, urlPath) {
+  // The file as sent: read now (pages get their ?v= links and any extra markup), compressed in the
+  // background — until that is done the uncompressed copy goes out.
+  function build(file, st, urlPath, extra) {
     let body = fs.readFileSync(file);
     const used = [];
-    if (HTML.test(file)) body = Buffer.from(versionLinks(body.toString('utf8'), urlPath, used), 'utf8');
+    if (HTML.test(file)) {
+      let html = body.toString('utf8');
+      if (extra) html = html.includes('</body>') ? html.replace('</body>', extra + '\n</body>') : html + extra;
+      body = Buffer.from(versionLinks(html, urlPath, used), 'utf8');
+    }
     const etag = '"' + crypto.createHash('sha1').update(body).digest('base64url').slice(0, 22) + '"';
     const entry = { identity: body, etag, br: null, gzip: null, mtime: st.mtime.toUTCString(), used };
-    if (body.length < MIN_COMPRESS) return Promise.resolve(entry);
-    const br = new Promise((ok) => zlib.brotliCompress(body, {
+    if (body.length < MIN_COMPRESS) return entry;
+    zlib.brotliCompress(body, {
       params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: body.length,
         [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT },
-    }, (err, out) => ok(err ? null : out)));
-    const gz = new Promise((ok) => zlib.gzip(body, { level: 9 }, (err, out) => ok(err ? null : out)));
-    return Promise.all([br, gz]).then(([b, g]) => {
-      if (b && b.length < body.length) entry.br = b;
-      if (g && g.length < body.length) entry.gzip = g;
-      return entry;
-    });
+    }, (err, out) => { if (!err && out.length < body.length) entry.br = out; });
+    zlib.gzip(body, { level: 9 }, (err, out) => { if (!err && out.length < body.length) entry.gzip = out; });
+    return entry;
   }
 
   // A page carries its linked files' hashes, so a changed script/style rebuilds the page.
@@ -99,20 +102,17 @@ function createStaticFast(roots) {
     });
   }
 
-  /** The prepared file, or null while it is still being prepared (that request is served the old way). */
-  function get(file, st, urlPath) {
+  /** The prepared file (null only if it can't be read: then the request is served the old way). */
+  function get(file, st, urlPath, extra = '') {
     const key = st.size + ':' + st.mtimeMs;
-    const c = cache.get(file);
-    if (c && c.key === key && c.entry && !linksChanged(c.entry)) return c.entry;
-    if (c && c.key === key && c.pending) return null;
-    const rec = { key, entry: null, pending: true };
-    cache.set(file, rec);
-    let built;
-    try { built = build(file, st, urlPath); } catch { cache.delete(file); return null; }
-    built.then((entry) => {
-      rec.entry = entry; rec.pending = false;
-    }, () => cache.delete(file));
-    return null;
+    const ck = extra ? file + '\0' + extra : file;
+    const c = cache.get(ck);
+    if (c && c.key === key && !linksChanged(c.entry)) return c.entry;
+    let entry;
+    try { entry = build(file, st, urlPath, extra); } catch { cache.delete(ck); return null; }
+    if (cache.size > 2000) cache.clear();
+    cache.set(ck, { key, entry });
+    return entry;
   }
 
   function pickEncoding(req, entry) {
@@ -148,7 +148,8 @@ function createStaticFast(roots) {
     if (!looksText) return next();
     const hit = locate(urlPath);
     if (!hit || !COMPRESSIBLE.test(hit.file)) return next();
-    const entry = get(hit.file, hit.st, urlPath);
+    const extra = inject && HTML.test(hit.file) ? inject(req, res, hit.file) || '' : '';
+    const entry = get(hit.file, hit.st, urlPath, extra);
     if (!entry) return next();
     send(req, res, entry, path.extname(hit.file), hit.root.cacheControl);
   }
@@ -157,7 +158,9 @@ function createStaticFast(roots) {
   function sendPage(req, res, file, pageUrl, cacheControl = 'public, max-age=0') {
     let st;
     try { st = fs.statSync(file); } catch { return res.sendStatus(404); }
-    const entry = get(path.resolve(file), st, pageUrl);
+    const abs = path.resolve(file);
+    const extra = inject ? inject(req, res, abs) || '' : '';
+    const entry = get(abs, st, pageUrl, extra);
     if (!entry) return res.sendFile(file);
     send(req, res, entry, '.html', cacheControl);
   }

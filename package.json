@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "check": "node tools/check-boundaries.js",
+    "test": "node --test platform/test/*.test.js",
     "anomaly-report": "node platform/tools/anomaly-report.js"
   },
   "dependencies": {

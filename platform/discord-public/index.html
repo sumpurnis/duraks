@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Uzspēlēsim.lv</title>
+<link rel="stylesheet" href="/discord/discord.css" />
+</head>
+<body class="dshell">
+<main id="picker" class="dpick">
+  <div class="dlogo">Uzspēlē<span>sim</span></div>
+  <h1>Ko spēlēsim?</h1>
+  <div class="dgames">
+    <button type="button" class="dgame d" data-game="duraks">
+      <span class="dsuit" aria-hidden="true">♠</span>
+      <span class="dname">Duraks</span>
+      <span class="dsub" data-sub="duraks">2–4 spēlētāji</span>
+    </button>
+    <button type="button" class="dgame m" data-game="meli">
+      <span class="dsuit" aria-hidden="true">♥</span>
+      <span class="dname">Meļi</span>
+      <span class="dsub" data-sub="meli">2–6 spēlētāji</span>
+    </button>
+  </div>
+  <p class="dnote">Šī kanāla galdu redz arī spēlētāji uzspelesim.lv — viņi var pievienoties ar galda kodu.</p>
+</main>
+<iframe id="gameFrame" class="dframe hidden" title="Spēle" allow="clipboard-write; web-share"></iframe>
+<script src="/discord/sdk.min.js"></script>
+<script src="/discord/shell.js"></script>
+</body>
+</html>

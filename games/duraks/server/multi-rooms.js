@@ -857,6 +857,13 @@ module.exports.startTournamentRoom = function startTournamentRoom(code) {
   return true;
 };
 
+/** 'waiting' | 'playing' | null — a room's state by code, for the Discord Activity's table lookup (read-only; tournament rooms are never shown). */
+module.exports.roomStatus = function roomStatus(code) {
+  const room = multiRooms.get(String(code || ''));
+  if (!room || room.hidden) return null;
+  return room.game ? 'playing' : room.status === 'waiting' ? 'waiting' : null;
+};
+
 // Games being played right now, for the front page's map (platform/world.js).
 module.exports.listActive = function listActive() {
   return Array.from(multiRooms.values())
