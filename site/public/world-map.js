@@ -760,29 +760,6 @@ function frame(ts) {
   smoke.forEach((s) => { s.up += 0.35; s.dx += 0.015; s.r += 0.05; s.a -= 0.005; });
   smoke = smoke.filter((s) => s.a > 0);
   smoke.forEach((s) => { const x = ox + s.dx * K, y = oy + s.dy * K - s.up; c.fillStyle = `rgba(236,240,242,${s.a})`; c.beginPath(); c.arc(x, y, s.r * K / 10, 0, 7); c.fill(); });
-  // level progress: a gold ring on the ground round each village (how far to the next level) and the
-  // level on a small coin at its front; ★ at the top level
-  TOWNS.forEach((t) => {
-    const pr = levelProgress(t);
-    const R = Math.max(3.2, fenceR(t)) + 0.9;
-    const arc = (f1, col, w) => {
-      const steps = Math.max(2, Math.ceil(64 * f1));
-      c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'round'; c.beginPath();
-      for (let i = 0; i <= steps; i++) {
-        const a = -Math.PI / 2 + (i / steps) * f1 * Math.PI * 2;
-        const p = P(t.x + Math.cos(a) * R, t.y + Math.sin(a) * R);
-        if (i) c.lineTo(p[0], p[1]); else c.moveTo(p[0], p[1]);
-      }
-      c.stroke(); c.lineCap = 'butt';
-    };
-    arc(1, 'rgba(14,40,54,.35)', 4);
-    if (pr.frac > 0) arc(pr.frac, '#e2c374', 4);
-    const p = P(t.x + R * 0.71, t.y + R * 0.71);
-    c.fillStyle = '#16303d'; c.strokeStyle = '#e2c374'; c.lineWidth = 1.6;
-    c.beginPath(); c.arc(p[0], p[1], 10, 0, 7); c.fill(); c.stroke();
-    c.fillStyle = '#e2c374'; c.font = '800 12px Georgia'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText(pr.max ? '★' : String(pr.L), p[0], p[1] + 0.5);
-  });
   // tournament bunting
   TOWNS.forEach((t) => {
     if (!t.tour) return;
@@ -862,6 +839,29 @@ function frame(ts) {
     c.fillStyle = '#2a2005'; c.textBaseline = 'alphabetic'; c.fillText(lbl, p[0], p[1]);
   }
   if (sel && townsBy.get(sel)) { const t = townsBy.get(sel), r = Math.max(3.2, fenceR(t)) + 1.6; c.setLineDash([6, 5]); poly(c, blob(P, t.x, t.y, r, 1, 36), null, '#e2c374', 2); c.setLineDash([]); }
+  // level progress (drawn last, over the dotted "Tavs ciemats" / selection contours): a gold ring round each village (how far to the next level) and the
+  // level on a small coin at its front; ★ at the top level
+  TOWNS.forEach((t) => {
+    const pr = levelProgress(t);
+    const R = Math.max(3.2, fenceR(t)) + 0.9;
+    const arc = (f1, col, w) => {
+      const steps = Math.max(2, Math.ceil(64 * f1));
+      c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'round'; c.beginPath();
+      for (let i = 0; i <= steps; i++) {
+        const a = -Math.PI / 2 + (i / steps) * f1 * Math.PI * 2;
+        const p = P(t.x + Math.cos(a) * R, t.y + Math.sin(a) * R);
+        if (i) c.lineTo(p[0], p[1]); else c.moveTo(p[0], p[1]);
+      }
+      c.stroke(); c.lineCap = 'butt';
+    };
+    arc(1, 'rgba(14,40,54,.35)', 4);
+    if (pr.frac > 0) arc(pr.frac, '#e2c374', 4);
+    const p = P(t.x + R * 0.71, t.y + R * 0.71);
+    c.fillStyle = '#16303d'; c.strokeStyle = '#e2c374'; c.lineWidth = 1.6;
+    c.beginPath(); c.arc(p[0], p[1], 10, 0, 7); c.fill(); c.stroke();
+    c.fillStyle = '#e2c374'; c.font = '800 12px Georgia'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(pr.max ? '★' : String(pr.L), p[0], p[1] + 0.5);
+  });
   nextFrame();
 }
 // The animation only runs while the map is on screen: scrolled away, it waits (nothing visible changes)
