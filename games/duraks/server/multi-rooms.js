@@ -35,6 +35,9 @@
  * unaffected by this - that path already worked this way.
  */
 
+const gameLog = require('../../../platform/game-log');
+const SUIT_SYM = { hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠' };
+const cardStr = (c) => (c ? `${c.rank}${SUIT_SYM[c.suit] || c.suit}` : '');
 const { Game } = require('./games/duraks-multi');
 const { chooseMove } = require('./ai-multi');
 const challenges = require('./challenges');
@@ -233,6 +236,16 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     const isDraw = !game.durakId && game.activePlayers.length === 0;
     const vsBots = room.bots.length > 0;
 
+    if (room.logId) {
+      gameLog.sync(room.logId, game.log);
+      gameLog.end(room.logId, {
+        status: endReason === 'normal' ? 'finished' : 'ended',
+        reason: endReason,
+        result: { durak: game.durakId || null, draw: isDraw, safeOrder: game.safeOrder.slice(), placements: placementOf },
+      });
+      room.logId = null;
+    }
+
     // Which independent ELO pool this table's result feeds — 2-player
     // tables update the 'oneVOne' rating, 3-4 player tables update
     // 'multi'; see the ELO_POOLS comment in users.js for why they're kept
@@ -316,6 +329,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   }
 
   function broadcastMultiState(room) {
+    if (room.logId) gameLog.sync(room.logId, room.game.log);
     // Arm first, so every client gets the same deadline the server enforces.
     armMultiMoveTimer(room);
     const turnTimer = room.moveDeadline
@@ -453,6 +467,17 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
       allowTransfer: !!room.allowTransfer,
       deck: room.challenge ? room.challenge.deck : undefined,
     });
+
+    // the admin's game log: who sat down, the deal, then every move (broadcastMultiState) and the end
+    try {
+      room.logId = gameLog.start({
+        game: 'duraks',
+        mode: room.challenge ? 'challenge' : room.tournamentMatch ? 'tournament' : room.ranked ? 'ranked' : 'casual',
+        players: seating.map((name) => ({ name, kind: room.bots.includes(name) ? 'bot' : users.usernameExists(name) ? 'user' : 'guest' })),
+        opts: { code: room.code, deck: room.deckSize || 52, seats: room.totalPlayers, transfer: !!room.allowTransfer, private: !!room.isPrivate, challenge: room.challenge ? room.challenge.level : undefined },
+        setup: { trump: cardStr(room.game.trumpCard), hands: Object.fromEntries(seating.map((n) => [n, (room.game.hands[n] || []).map(cardStr)])) },
+      });
+    } catch (err) { console.error('game log start failed:', err.message); }
 
     for (const h of room.humans) {
       const sock = io.sockets.sockets.get(h.socketId);
@@ -855,6 +880,13 @@ module.exports.startTournamentRoom = function startTournamentRoom(code) {
   if (!room || !roomOps || room.game) return false;
   roomOps.startMultiRoomGame(room);
   return true;
+};
+
+/** 'waiting' | 'playing' | null — a room's state by code, for the Discord Activity's table lookup (read-only; tournament rooms are never shown). */
+module.exports.roomStatus = function roomStatus(code) {
+  const room = multiRooms.get(String(code || ''));
+  if (!room || room.hidden) return null;
+  return room.game ? 'playing' : room.status === 'waiting' ? 'waiting' : null;
 };
 
 // Games being played right now, for the front page's map (platform/world.js).

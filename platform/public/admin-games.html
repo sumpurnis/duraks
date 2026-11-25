@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Spēļu žurnāls · Uzspēlēsim.lv admin</title>
+<link rel="stylesheet" href="/admin-games.css" />
+</head>
+<body>
+<header class="ag-head">
+  <div>
+    <h1>Spēļu žurnāls</h1>
+    <p id="agSummary" class="ag-muted">Ielādē…</p>
+  </div>
+  <form id="agFilters" class="ag-filters" role="search">
+    <label><span>Spēle</span>
+      <select id="fGame"><option value="">Visas</option><option value="duraks">Duraks</option><option value="meli">Meļi</option></select>
+    </label>
+    <label><span>Stāvoklis</span>
+      <select id="fStatus"><option value="">Visi</option><option value="live">Notiek</option><option value="finished">Pabeigta</option><option value="ended">Beidzās priekšlaikus</option><option value="interrupted">Pārtraukta</option></select>
+    </label>
+    <label><span>Spēlētājs</span><input id="fPlayer" type="search" maxlength="20" placeholder="vārds" autocomplete="off" /></label>
+    <button type="submit">Rādīt</button>
+  </form>
+</header>
+
+<p id="agError" class="ag-error" role="alert" hidden></p>
+
+<main class="ag-main">
+  <section class="ag-list" aria-label="Spēles">
+    <table>
+      <thead><tr><th>Sākums</th><th>Spēle</th><th>Spēlētāji</th><th>Stāvoklis</th><th>Ilgums</th><th>Gājieni</th><th>Rezultāts</th></tr></thead>
+      <tbody id="agRows"></tbody>
+    </table>
+    <button id="agMore" type="button" class="ag-more" hidden>Ielādēt vairāk</button>
+  </section>
+  <aside id="agDetail" class="ag-detail" aria-live="polite" hidden></aside>
+</main>
+
+<script src="/admin-games.js"></script>
+</body>
+</html>

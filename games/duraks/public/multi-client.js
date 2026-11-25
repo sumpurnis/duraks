@@ -323,6 +323,8 @@ socket.on('multiRoomWaiting', function (data) {
 
   // the table's own link, to post on Discord etc. (never with the password in it)
   el('multiShareLink').value = multiTableLink(data.code);
+  // for the Discord Activity helper (if loaded): this table belongs to the voice channel
+  document.dispatchEvent(new CustomEvent('uzs:table', { detail: { game: 'duraks', code: data.code, creator: !!data.isCreator } }));
   el('multiSharePrivateNote').classList.toggle('hidden', !data.isPrivate);
   el('multiShareBtn').classList.toggle('hidden', !navigator.share);
 
@@ -632,7 +634,18 @@ function multiRenderHand(state) {
 
     container.appendChild(div);
   });
+  multiFitHand();
 }
+
+// A big hand would reach under the deck: the deck moves to the right (platform/public/hand-fit.js).
+function multiFitHand() {
+  if (!window.UzsHandFit) return;
+  const hand = el('multiHandCards');
+  window.UzsHandFit.fit({ area: hand.parentNode, hand: hand, deck: hand.parentNode.querySelector('.deck-pile') });
+}
+window.addEventListener('resize', function () {
+  if (el('multiHandCards') && el('multiHandCards').children.length) multiFitHand();
+});
 
 function multiRenderActions(state) {
   const takeBtn = el('multiTakeBtn');
@@ -973,7 +986,8 @@ function multiAttachCardInteraction(cardEl, card, kind) {
 // joins that table straight away; anyone else is asked "play as a guest or log in". A private table
 // asks for its password, which the host sends separately — the link never carries it.
 function multiTableLink(code) {
-  return location.origin + '/duraks?table=' + encodeURIComponent(code);
+  // inside the Discord Activity the page runs on Discord's address: links point at the real site
+  return (window.UZS_SITE_ORIGIN || location.origin) + '/duraks?table=' + encodeURIComponent(code);
 }
 el('multiCopyLinkBtn').addEventListener('click', function () {
   const input = el('multiShareLink');

@@ -467,6 +467,60 @@ class RoomManager {
   // ------------------------------------------------------------------ game flow
 
   /** Start (or restart) with the seats that are taken; empty and departed seats are dropped. */
+  // ------------------------------------------------------------------ the admin's game log
+  // (cfg.gameLog from the host site: { start, move, end }; absent in the standalone server and tests)
+
+  logStart(room) {
+    const log = this.cfg.gameLog;
+    room.logId = null;
+    if (!log) return;
+    const cs = (c) => (c ? (c.rank || '') + c.suit : '');
+    try {
+      room.logId = log.start({
+        game: 'meli',
+        mode: room.ranked && !room.vsAI ? 'ranked' : 'casual',
+        players: room.seats.map((s) => ({ name: s.name, kind: s.ai ? 'bot' : s.account ? 'user' : 'guest' })),
+        opts: { code: room.code, deck: room.deck, seats: room.seats.length, announce: room.announce, private: !!room.private },
+        setup: { hands: Object.fromEntries(room.seats.map((s, i) => [s.name, (room.game.hands[i] || []).map(cs)])) },
+      });
+    } catch (err) { console.error('game log start failed:', err.message); }
+  }
+
+  logMove(room, text) {
+    if (room.logId && this.cfg.gameLog) this.cfg.gameLog.move(room.logId, text);
+  }
+
+  logResult(room, result) {
+    if (!room.logId || !result) return;
+    const g = room.game;
+    const name = (i) => (room.seats[i] ? room.seats[i].name : '?');
+    const cs = (c) => (c ? (c.rank || '') + c.suit : '');
+    if (result.type === 'played') {
+      const top = g.pile[g.pile.length - 1];
+      if (top) this.logMove(room, `${name(top.player)} noliek ${cs(top.card)} kā ${cs(top.claim)}`);
+    } else if (result.type === 'reveal' && result.reveal) {
+      const r = result.reveal;
+      if (r.final) this.logMove(room, `${name(r.accused)} noliek pēdējo kārti ${cs(r.actual)} kā ${cs(r.claim)}`);
+      else this.logMove(room, `${name(r.challenger)}: «Neticu!»`);
+      this.logMove(room, `${r.lie ? 'Meli' : 'Taisnība'} (${cs(r.actual)}) — ${name(r.loser)} paņem ${r.taken} ${r.taken === 1 ? 'kārti' : 'kārtis'}`);
+    }
+  }
+
+  logEnd(room, status, reason) {
+    if (!room.logId || !this.cfg.gameLog) return;
+    const g = room.game;
+    const id = room.logId;
+    room.logId = null;
+    const winner = g && g.winner !== null && g.winner !== undefined && room.seats[g.winner] ? room.seats[g.winner].name : null;
+    try {
+      this.cfg.gameLog.end(id, {
+        status,
+        reason,
+        result: { winner, cardsLeft: g ? Object.fromEntries(room.seats.map((s, i) => [s.name, (g.hands[i] || []).length])) : null, out: room.outDetail ? Object.fromEntries(Object.entries(room.outDetail).map(([i, d]) => [room.seats[i] ? room.seats[i].name : i, d])) : null },
+      });
+    } catch (err) { console.error('game log end failed:', err.message); }
+  }
+
   startGame(room) {
     const keep = room.seats.filter((s) => s && (s.ai || !s.left));
     room.seats = keep;
@@ -486,6 +540,7 @@ class RoomManager {
     room.status = 'playing';
     room.endDetail = null;
     room.outDetail = {};
+    this.logStart(room);
     room.rematch = new Set();
     clearTimeout(room.cleanupTimer);
     this.armTurn(room);
@@ -515,9 +570,11 @@ class RoomManager {
     clearTimeout(room.turnTimer);
     clearTimeout(room.aiTimer);
     room.turnDeadline = null;
+    this.logResult(room, result);
     if (room.game.phase === 'over') {
       room.status = 'over';
       room.endDetail = room.game.endReason === 'forfeit' ? room.endDetail || 'left' : 'empty-hand';
+      this.logEnd(room, room.endDetail === 'empty-hand' ? 'finished' : 'ended', room.endDetail);
       this.finished(room);
       this.scheduleCleanup(room);
     } else {
@@ -583,15 +640,29 @@ class RoomManager {
     room.turnDeadline = null;
     const r = room.game.forfeit(idx);
     room.outDetail[idx] = detail;
+    this.logMove(room, `${room.seats[idx] ? room.seats[idx].name : '?'} izstājas (${detail})`);
     if (r.over) {
       room.status = 'over';
       room.endDetail = detail;
+      this.logEnd(room, 'ended', detail);
       this.finished(room);
       this.scheduleCleanup(room);
     } else if (room.seats.every((s, i) => s.ai || room.game.out[i])) {
-      // only computers are left playing: nobody to play for, end it here
-      this.destroy(room);
-      return;
+      // Only computers are left playing: nobody to play for, so the game ends here — the computer with
+      // the fewest cards wins. (It used to close the room without a word: the player who gave up was
+      // left looking at a frozen table.) The player sees the usual end screen, the room closes later.
+      const g = room.game;
+      let best = -1;
+      g.hands.forEach((h, i) => { if (!g.out[i] && (best < 0 || h.length < g.hands[best].length)) best = i; });
+      g.phase = 'over';
+      g.winner = best;
+      g.endReason = 'forfeit';
+      g.turn = null;
+      room.status = 'over';
+      room.endDetail = detail;
+      this.logEnd(room, 'ended', detail);
+      this.finished(room);
+      this.scheduleCleanup(room);
     } else {
       this.armTurn(room);
     }
@@ -645,6 +716,8 @@ class RoomManager {
   }
 
   destroy(room) {
+    // a game still running when its room closes (e.g. only computers were left playing)
+    if (room.logId) this.logEnd(room, 'ended', room.status === 'playing' ? 'only-bots-left' : 'closed');
     clearTimeout(room.turnTimer);
     clearTimeout(room.aiTimer);
     clearTimeout(room.cleanupTimer);

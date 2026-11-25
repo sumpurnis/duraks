@@ -550,6 +550,15 @@ function render() {
 /* ---------- data from the server ---------- */
 let matches = [], aiGames = [], smoke = [], floats = [];
 let lastEvent = 0, firstLoad = true;
+// games needed for each village level (the server sends them; this copy is only the fallback)
+let LEVELS = [0, 1, 5, 12, 25, 45, 75, 120, 180, 260];
+/** Where a village stands between its level and the next: games done / needed, and the share for the ring. */
+function levelProgress(t) {
+  const L = Math.max(1, t.L || 1), n = t.n || 0;
+  const lo = LEVELS[L - 1] || 0, hi = LEVELS[L];
+  if (hi === undefined) return { L, n, max: true, frac: 1 };
+  return { L, n, max: false, done: Math.max(0, n - lo), need: hi - lo, frac: Math.max(0, Math.min(1, (n - lo) / (hi - lo))) };
+}
 const idx = (name) => TOWNS.findIndex((t) => t.name === name);
 const pkey = (a, b) => (a < b ? a + '\u0001' + b : b + '\u0001' + a);
 
@@ -561,19 +570,53 @@ function eventHtml(e) {
     case 'start': return both + ' sāka spēlēt ' + game;
     case 'startSolo': return n[0] + (e.vsBot ? ' spēlē ' + game + ' pret datoru' : ' sāka spēlēt ' + game);
     case 'finish': return both + ' nospēlēja ' + game;
+    case 'finishSolo': return n[0] + ' nospēlēja ' + game + (e.vsBot ? ' pret datoru' : '');
     case 'road': return 'Ceļš starp ' + n[0] + ' un ' + n[1] + ' kļuva par «' + (ROAD_NAMES[e.quality] || '') + '»';
     case 'level': return n[0] + ' ciemats izauga līdz <b>' + e.level + '.</b> līmenim';
     default: return null;
   }
 }
-function addEvent(html) {
+// Village news: bubbles on the left of the map, kept by the server (the newest of any age).
+// Computer: the 5 newest are always there, older ones fainter. Phone: hidden until "Parādīt notikumus"
+// (the choice is remembered on that phone); while open, the map's +/− and home buttons step aside.
+const FEED_SHOWN = 5;
+let historySig = '';
+let feedSeen = 0; // newest event id already on screen: only newer bubbles slide in
+let feedOpen = false;
+try { feedOpen = localStorage.getItem('uzs_feed_open') === '1'; } catch (e) { feedOpen = false; }
+let lastHistory = [];
+function ago(t) {
+  const m = Math.floor((Date.now() - t) / 60000);
+  if (m < 1) return 'tikko';
+  if (m < 60) return 'pirms ' + m + ' min';
+  const h = Math.floor(m / 60);
+  if (h < 24) return 'pirms ' + h + ' h';
+  const d = Math.floor(h / 24);
+  return d === 1 ? 'vakar' : 'pirms ' + d + ' dienām';
+}
+function renderHistory(list) {
+  lastHistory = list;
   const f = document.getElementById('feed');
-  const d = document.createElement('div');
-  d.className = 'ev'; d.innerHTML = html;
-  f.appendChild(d);
-  // a news line fades out after a while instead of staying on the map forever
-  setTimeout(() => { d.classList.add('gone'); setTimeout(() => d.remove(), 600); }, 90 * 1000);
-  while (f.children.length > 3) f.removeChild(f.firstChild);
+  if (!f) return;
+  const items = list.map((e) => ({ e, h: eventHtml(e) })).filter((x) => x.h).slice(-FEED_SHOWN); // oldest first: the newest sits at the bottom
+  const sig = JSON.stringify(items.map((x) => [x.e.id, ago(x.e.t)])) + feedOpen;
+  if (sig === historySig) return;
+  historySig = sig;
+  const firstFill = feedSeen === 0;
+  f.classList.toggle('open', feedOpen);
+  document.body.classList.toggle('feed-open', feedOpen);
+  f.innerHTML = '<button type="button" class="evtoggle" id="evToggle" aria-expanded="' + feedOpen + '">' + (feedOpen ? 'Paslēpt notikumus ▾' : 'Parādīt notikumus ▴') + '</button>' +
+    '<div class="evlist">' + items.map((x, i) =>
+      '<div class="ev age' + (items.length - 1 - i) + (!firstFill && x.e.id > feedSeen ? ' new' : '') + '"><span class="evt">' + x.h + '</span>' +
+      '<time datetime="' + new Date(x.e.t).toISOString() + '">' + ago(x.e.t) + '</time></div>').join('') + '</div>';
+  if (items.length) feedSeen = Math.max(feedSeen, items[items.length - 1].e.id);
+  f.hidden = !items.length;
+  document.getElementById('evToggle').onclick = () => {
+    feedOpen = !feedOpen;
+    try { localStorage.setItem('uzs_feed_open', feedOpen ? '1' : '0'); } catch (e) { /* not kept */ }
+    historySig = '';
+    renderHistory(lastHistory);
+  };
 }
 
 function apply(data) {
@@ -599,6 +642,8 @@ function apply(data) {
   }
   (data.pairs || []).forEach((p) => pairsBy.set(pkey(p.a, p.b), p.n));
   TOWNS = [...townsBy.values()];
+  if (Array.isArray(data.levels) && data.levels.length) LEVELS = data.levels;
+  if (data.history) renderHistory(data.history);
   MINE = data.me ? townsBy.get(data.me) || null : null;
   TOWNS.forEach((t) => { t.mine = !!MINE && t === MINE; });
   PLOT = VIEW === 'guest' && data.plot ? hexXY(data.plot) : null;
@@ -631,13 +676,11 @@ function apply(data) {
     return Object.assign(wasAi.get(g.id) || { id: g.id, g: g.g, t: Math.random() * 6.28 }, { i });
   }).filter(Boolean);
 
-  // ticker; finished games between two villages on screen get a "+1" over their road
+  // finished games between two villages on screen get a "+1" over their road (the news itself: renderHistory)
   const fresh = (data.events || []).filter((e) => e.id > lastEvent);
   // on opening the page only the last few minutes are news; older lines would read as "happening now"
   const recent = (e) => !e.t || Date.now() - e.t < 3 * 60 * 1000;
   (firstLoad ? fresh.filter(recent).slice(-3) : fresh).forEach((e) => {
-    const h = eventHtml(e);
-    if (h) addEvent(h);
     if (!firstLoad && e.type === 'finish') {
       const a = idx(e.names[0]), b = idx(e.names[1]);
       const road = roads.find((r) => (r.p.a === a && r.p.b === b) || (r.p.a === b && r.p.b === a));
@@ -717,6 +760,29 @@ function frame(ts) {
   smoke.forEach((s) => { s.up += 0.35; s.dx += 0.015; s.r += 0.05; s.a -= 0.005; });
   smoke = smoke.filter((s) => s.a > 0);
   smoke.forEach((s) => { const x = ox + s.dx * K, y = oy + s.dy * K - s.up; c.fillStyle = `rgba(236,240,242,${s.a})`; c.beginPath(); c.arc(x, y, s.r * K / 10, 0, 7); c.fill(); });
+  // level progress: a gold ring on the ground round each village (how far to the next level) and the
+  // level on a small coin at its front; ★ at the top level
+  TOWNS.forEach((t) => {
+    const pr = levelProgress(t);
+    const R = Math.max(3.2, fenceR(t)) + 0.9;
+    const arc = (f1, col, w) => {
+      const steps = Math.max(2, Math.ceil(64 * f1));
+      c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'round'; c.beginPath();
+      for (let i = 0; i <= steps; i++) {
+        const a = -Math.PI / 2 + (i / steps) * f1 * Math.PI * 2;
+        const p = P(t.x + Math.cos(a) * R, t.y + Math.sin(a) * R);
+        if (i) c.lineTo(p[0], p[1]); else c.moveTo(p[0], p[1]);
+      }
+      c.stroke(); c.lineCap = 'butt';
+    };
+    arc(1, 'rgba(14,40,54,.35)', 4);
+    if (pr.frac > 0) arc(pr.frac, '#e2c374', 4);
+    const p = P(t.x + R * 0.71, t.y + R * 0.71);
+    c.fillStyle = '#16303d'; c.strokeStyle = '#e2c374'; c.lineWidth = 1.6;
+    c.beginPath(); c.arc(p[0], p[1], 10, 0, 7); c.fill(); c.stroke();
+    c.fillStyle = '#e2c374'; c.font = '800 12px Georgia'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(pr.max ? '★' : String(pr.L), p[0], p[1] + 0.5);
+  });
   // tournament bunting
   TOWNS.forEach((t) => {
     if (!t.tour) return;
@@ -786,7 +852,7 @@ function frame(ts) {
   }
   // my own village: a gold ring once we know who this is
   if (VIEW !== 'guest' && MINE) {
-    const t = MINE, r = Math.max(3.2, fenceR(t)) + 1.1; // a hut has no fence: keep the label clear of it
+    const t = MINE, r = Math.max(3.2, fenceR(t)) + 1.8; // outside the level ring; a hut has no fence: keep the label clear of it
     c.setLineDash([3, 6]); poly(c, blob(P, t.x, t.y, r, 2, 40), null, 'rgba(226,195,116,.85)', 2); c.setLineDash([]);
     const p = P(t.x, t.y - r - 0.6);
     c.font = '700 12px -apple-system,Segoe UI,sans-serif'; c.textAlign = 'center';
@@ -795,7 +861,7 @@ function frame(ts) {
     c.fillStyle = 'rgba(226,195,116,.95)'; c.beginPath(); c.roundRect(p[0] - tw / 2, p[1] - 14, tw, 19, 9); c.fill();
     c.fillStyle = '#2a2005'; c.textBaseline = 'alphabetic'; c.fillText(lbl, p[0], p[1]);
   }
-  if (sel && townsBy.get(sel)) { const t = townsBy.get(sel), r = Math.max(3, fenceR(t)) + 0.8; c.setLineDash([6, 5]); poly(c, blob(P, t.x, t.y, r, 1, 36), null, '#e2c374', 2); c.setLineDash([]); }
+  if (sel && townsBy.get(sel)) { const t = townsBy.get(sel), r = Math.max(3.2, fenceR(t)) + 1.6; c.setLineDash([6, 5]); poly(c, blob(P, t.x, t.y, r, 1, 36), null, '#e2c374', 2); c.setLineDash([]); }
   nextFrame();
 }
 // The animation only runs while the map is on screen: scrolled away, it waits (nothing visible changes)
@@ -951,7 +1017,15 @@ function villageCard(t) {
   const status = (s) => (s.online ? (s.playing ? 'tagad spēlē' : 'tiešsaistē') : 'nav tiešsaistē');
   // this page doesn't keep a connection open, so the server can't see you here: you are online
   const meHere = t.mine && VIEW === 'in';
-  const head = (L, s) => '<h3><span class="lv">' + L + '</span>' + esc(t.name) + '</h3><p>' + status(meHere ? { online: true, playing: s.playing } : s) + (t.tour ? ' · rīko turnīru' : '') + '</p>';
+  // games to the next level, in one line, with a bar like the ring on the map
+  const progress = () => {
+    const pr = levelProgress(t);
+    const label = pr.max ? 'Maks. līmenis ★' : 'Līdz ' + (pr.L + 1) + '. līmenim';
+    const count = pr.max ? plural(pr.n, 'spēle', 'spēles') : pr.done + '/' + pr.need + ' spēles';
+    return '<div class="lvprog"><div class="lvtxt"><span>' + label + '</span><b>' + count + '</b></div>' +
+      '<div class="lvbar" role="progressbar" aria-label="' + label + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(pr.frac * 100) + '"><i style="width:' + Math.round(pr.frac * 100) + '%"></i></div></div>';
+  };
+  const head = (L, s) => '<h3><span class="lv">' + L + '</span>' + esc(t.name) + '</h3><p>' + status(meHere ? { online: true, playing: s.playing } : s) + (t.tour ? ' · rīko turnīru' : '') + '</p>' + progress();
   const playingNow = matches.some((m) => m.an === t.name || m.bn === t.name) || aiGames.some((g) => TOWNS[g.i] === t);
   let foot = '';
   if (t.mine && VIEW === 'known') foot = '<div class="row"><button type="button" class="gold" id="popLogin">Ielogoties</button></div>';

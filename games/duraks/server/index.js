@@ -25,6 +25,9 @@ const registerMultiHandlers = require('./multi-rooms');
 const challenges = require('./challenges');
 const { createRateLimiter } = require('../../../platform/rate-limit');
 const { socketIp } = require('../../../platform/client-ip');
+const gameLog = require('../../../platform/game-log');
+const SUIT_SYM = { hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠' };
+const cardStr = (c) => (c ? `${c.rank}${SUIT_SYM[c.suit] || c.suit}` : '');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -245,6 +248,11 @@ const TOURNAMENT_NEXT_GAME_MS = Number(process.env.TOURNAMENT_NEXT_GAME_MS) || 3
   // missing room.startedAt (shouldn't happen, but defensively handled) just
   // means that one entry is skipped by duration-based checks there.
   function recordTwoPlayerHistory(room, winnerId, durakId, draw, forfeit, endReason) {
+    if (room.logId) {
+      gameLog.sync(room.logId, room.game ? room.game.log : []);
+      gameLog.end(room.logId, { status: (endReason || 'normal') === 'normal' ? 'finished' : 'ended', reason: endReason || 'normal', result: { winner: winnerId || null, durak: durakId || null, draw: !!draw } });
+      room.logId = null;
+    }
     const usernames = room.players.map((p) => p.username).filter((u) => u !== AI_ID);
     world.recordGame('duraks', usernames, { vsBot: !!room.vsAI });
     const durationMs = room.startedAt ? Date.now() - room.startedAt : undefined;
@@ -350,9 +358,29 @@ const TOURNAMENT_NEXT_GAME_MS = Number(process.env.TOURNAMENT_NEXT_GAME_MS) || 3
     };
   }
 
+  // The admin's game log for the 1-on-1 tables: the first state of a new game opens its record,
+  // every later one adds the new moves, recordTwoPlayerHistory closes it.
+  function logTwoPlayerState(room) {
+    if (room.loggedGame !== room.game) {
+      room.loggedGame = room.game;
+      const ids = room.players.map((p) => p.username);
+      try {
+        room.logId = gameLog.start({
+          game: 'duraks',
+          mode: room.tournamentMatch ? 'tournament' : 'casual',
+          players: ids.map((name) => ({ name, kind: name === AI_ID ? 'bot' : users.usernameExists(name) ? 'user' : 'guest' })),
+          opts: { code: room.code, deck: room.game.deck ? room.game.deck.length + Object.values(room.game.hands).reduce((n, h) => n + h.length, 0) : undefined, seats: 2, oneVOne: true },
+          setup: { trump: cardStr(room.game.trumpCard), hands: Object.fromEntries(ids.map((n) => [n, (room.game.hands[n] || []).map(cardStr)])) },
+        });
+      } catch (err) { console.error('game log start failed:', err.message); }
+    }
+    if (room.logId) gameLog.sync(room.logId, room.game.log);
+  }
+
   function broadcastState(code) {
     const room = rooms.get(code);
     if (!room || !room.game) return;
+    logTwoPlayerState(room);
     const names = namesFor(room);
     const tournamentInfo = getTournamentInfoForRoom(room);
     // Arm first, so every client gets the same deadline the server enforces.
@@ -1378,4 +1406,4 @@ function renameUser(oldName, newName) {
   tournaments.renameUser(oldName, newName);
 }
 
-module.exports = { mountRoutes, attach, renameUser, challenges, PUBLIC_DIR };
+module.exports = { mountRoutes, attach, renameUser, challenges, PUBLIC_DIR, roomStatus: registerMultiHandlers.roomStatus };

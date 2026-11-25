@@ -26,6 +26,7 @@ const { TRUST_PROXY, socketIp } = require('./platform/client-ip');
 const { createStaticFast, sendJson } = require('./platform/static-fast');
 const discord = require('./platform/discord');
 const discordAuth = require('./platform/discord-auth');
+const gameLog = require('./platform/game-log');
 const duraks = require('./games/duraks/server');
 const { attachMeli, CLIENT_DIR: MELI_CLIENT_DIR } = require('./games/meli/server');
 
@@ -230,6 +231,8 @@ function recordMeliResult(r) {
 
 const meli = attachMeli(io, {
   statsFile: path.join(DATA_DIR, 'meli-stats.json'),
+  // every game into the admin's game log (platform/game-log.js)
+  cfg: { gameLog },
   // The front page's map: finished games wear roads and grow villages; connected players smoke.
   onResult: (r) => {
     const names = [r.winner, ...(r.losers || [r.loser])].filter((s) => s && !s.ai && s.account).map((s) => s.name);
@@ -312,15 +315,41 @@ app.get('/api/challenges', (req, res) => {
   res.json({ duraks: { fresh: duraks.challenges.isNewFor(name), endsInMs: duraks.challenges.msToMidnight() } });
 });
 
-// GET /api/challenges/admin — the admin's view: target, tuned strength and real win rate per level.
-app.get('/api/challenges/admin', (req, res) => {
+// Is this request from the admin's logged-in account? (X-Uzs-User + X-Uzs-Token, as the pages send them)
+function isAdminRequest(req) {
   let user = '';
   try { user = decodeURIComponent(String(req.get('x-uzs-user') || '')).slice(0, 20); } catch { user = ''; }
   const token = String(req.get('x-uzs-token') || '').slice(0, 200);
   const admin = (process.env.ADMIN_USERNAME || 'zivs').toLowerCase();
-  if (!(user && token && users.checkSessionToken(user, token) && String(users.canonicalName(user)).toLowerCase() === admin)) return res.status(403).json({ error: 'admin only' });
+  return !!(user && token && users.checkSessionToken(user, token) && String(users.canonicalName(user)).toLowerCase() === admin);
+}
+const adminLimiter = createRateLimiter({ max: 120, windowMs: 60 * 1000, blockMs: 60 * 1000 });
+
+// GET /api/challenges/admin — the admin's view: target, tuned strength and real win rate per level.
+app.get('/api/challenges/admin', (req, res) => {
+  if (!isAdminRequest(req)) return res.status(403).json({ error: 'admin only' });
   res.set('Cache-Control', 'no-store');
   res.json(duraks.challenges.adminReport());
+});
+
+// The admin's game log (platform/game-log.js; the page is /admin-games.html): every game, newest first,
+// and one game in full (players, the deal, every move, how it ended).
+app.get('/api/admin/games', (req, res) => {
+  if (!adminLimiter.check(req.ip || 'x').allowed) return res.status(429).json({ error: 'slow down' });
+  if (!isAdminRequest(req)) return res.status(403).json({ error: 'admin only' });
+  const q = (k, max) => (typeof req.query[k] === 'string' ? req.query[k].slice(0, max) : '');
+  const game = ['duraks', 'meli'].includes(q('game', 10)) ? q('game', 10) : '';
+  const status = ['live', 'finished', 'ended', 'interrupted'].includes(q('status', 12)) ? q('status', 12) : '';
+  res.set('Cache-Control', 'no-store');
+  sendJson(req, res, gameLog.list({ game, status, player: q('player', 20), before: q('before', 60), limit: Number(q('limit', 4)) || 50 }));
+});
+app.get('/api/admin/games/:id', (req, res) => {
+  if (!adminLimiter.check(req.ip || 'x').allowed) return res.status(429).json({ error: 'slow down' });
+  if (!isAdminRequest(req)) return res.status(403).json({ error: 'admin only' });
+  const g = gameLog.get(String(req.params.id).slice(0, 60));
+  if (!g) return res.status(404).json({ error: 'not found' });
+  res.set('Cache-Control', 'no-store');
+  sendJson(req, res, g);
 });
 
 // ---------- Discord Activity API (only with DISCORD_ACTIVITY=1) ----------

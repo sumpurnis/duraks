@@ -73,7 +73,7 @@
       </div>
 
       <div id="playStep" class="hidden">
-        <p class="playing-as">Spēlē kā <strong id="currentUsername"></strong> · <a href="#" id="switchUserLink">mainīt</a> · <a href="#" id="emailSettingsLink">e-pasts</a><span id="adminEmailWrap" class="hidden"> · <a href="#" id="adminEmailLink">admin: e-pasts spēlētājam</a></span></p>
+        <p class="playing-as">Spēlē kā <strong id="currentUsername"></strong> · <a href="#" id="switchUserLink">mainīt</a> · <a href="#" id="emailSettingsLink">e-pasts</a><span id="adminEmailWrap" class="hidden"> · <a href="#" id="adminEmailLink">admin: e-pasts spēlētājam</a> · <a href="/admin-games.html" target="_blank" rel="noopener">admin: spēļu žurnāls</a></span></p>
 
         <div class="lobby-actions">
           <button id="createBtn" class="btn btn-primary">Izveidot istabu</button>
@@ -536,6 +536,11 @@
         <input id="emailSettingsInput" type="email" placeholder="tavs@epasts.lv" autocomplete="email" />
       </label>
       <p id="emailSettingsLinked" class="muted small hidden"></p>
+      <div id="discordLinkRow" class="discord-link-row hidden">
+        <p id="discordLinkStatus" class="muted small"></p>
+        <button id="discordLinkBtn" class="btn btn-secondary hidden" type="button">Piesaistīt Discord</button>
+        <button id="discordUnlinkBtn" class="btn btn-secondary hidden" type="button">Atsaistīt Discord</button>
+      </div>
       <p id="emailSettingsStatus" class="muted small hidden"></p>
       <div class="rematch-choice-row">
         <button id="emailSettingsSaveBtn" class="btn btn-primary">Saglabāt</button>
@@ -652,6 +657,7 @@
   <script src="/socket.io/socket.io.min.js"></script>
   <script src="svg-cards.js"></script>
   <script src="/profile-window.js"></script>
+  <script src="/hand-fit.js"></script>
   <script src="client.js"></script>
   <script src="tournament-client.js"></script>
   <script src="multi-client.js"></script>

@@ -338,6 +338,7 @@ class Game {
       return { error: 'Nav tava kārta lemt par piemešanu' };
     }
     this.throwInDeclined.add(playerId);
+    this.log.push(`${playerId} nepiemet`);
     this.throwInPointer = (this.throwInPointer + 1) % this.throwInRotation.length;
     this._autoSkipThrowIns();
     if (this.pendingTake) return this._maybeResolveTake() || { ok: true };
@@ -550,6 +551,7 @@ class Game {
       for (const slot of this.table) {
         this.discard.push(slot.attack, slot.defend);
       }
+      this.log.push(`${defenderId} nosita — bita`); // the log only (the admin's game log); rules unchanged
     }
     this.table = [];
 

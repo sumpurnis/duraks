@@ -36,7 +36,7 @@ const EVENT_MAX_AGE_MS = 10 * 60 * 1000;
 
 // ------------------------------------------------------------------ storage
 function blank() {
-  return { slots: {}, next: 0, games: {}, pairs: {}, seeded: {} };
+  return { slots: {}, next: 0, games: {}, pairs: {}, seeded: {}, history: [] };
 }
 function load() {
   return { ...blank(), ...persist.loadJson(FILE, blank, 'world.json') };
@@ -111,11 +111,21 @@ function seedGames(game, counts) {
 }
 
 // ------------------------------------------------------------------ events
+// `events`: the live ticker (memory, the last few minutes). `data.history`: the same news kept in
+// world.json, so the front page's "Notikumi ciematos" list survives restarts (HISTORY_KEEP newest).
+const HISTORY_KEEP = 30;
+const HISTORY_SHOWN = 10;
+if (!Array.isArray(data.history)) data.history = [];
 let events = [];
-let eventId = 0;
+// ids keep growing across restarts, so an open page doesn't take new news for old
+let eventId = data.history.reduce((m, e) => Math.max(m, e.id || 0), 0);
 function addEvent(e) {
-  events.push({ id: ++eventId, t: Date.now(), ...e });
+  const ev = { id: ++eventId, t: Date.now(), ...e };
+  events.push(ev);
   if (events.length > MAX_EVENTS) events = events.slice(-MAX_EVENTS);
+  data.history.push(ev);
+  if (data.history.length > HISTORY_KEEP) data.history = data.history.slice(-HISTORY_KEEP);
+  saveSoon();
 }
 
 const pairKey = (a, b) => (a < b ? a + '\u0001' + b : b + '\u0001' + a);
@@ -138,11 +148,13 @@ function recordGame(game, names, { vsBot = false } = {}) {
       const key = pairKey(real[i], real[j]);
       const before = quality(has(data.pairs, key) ? data.pairs[key] : 0);
       data.pairs[key] = (has(data.pairs, key) ? data.pairs[key] : 0) + 1;
-      addEvent({ type: 'finish', game: k, names: [real[i], real[j]] });
+      if (real.length === 2) addEvent({ type: 'finish', game: k, names: [real[i], real[j]] });
       const after = quality(data.pairs[key]);
       if (after > before) addEvent({ type: 'road', names: [real[i], real[j]], quality: after });
     }
   }
+  // a table of 3+: one line with everyone (not one per pair of players)
+  if (real.length > 2) addEvent({ type: 'finish', game: k, names: real.slice(0, 6) });
   if (real.length === 1) addEvent({ type: 'finishSolo', game: k, names: real, vsBot: !!vsBot });
   saveSoon();
 }
@@ -324,6 +336,10 @@ function buildSnapshot(me, at) {
     counts: { playing, online: online.size + guestsPlaying + guestVisitors(), tables },
     // only recent news: the ticker must not keep showing a game that started an hour ago
     events: events.filter((e) => Date.now() - e.t < EVENT_MAX_AGE_MS).slice(-12),
+    // the newest village news of any age, for the list under the map (deleted accounts left out)
+    history: data.history.filter((e) => (e.names || []).every((n) => users.usernameExists(n))).slice(-HISTORY_SHOWN),
+    // games needed for each village level, for the progress ring round each village
+    levels: LEVELS,
   };
 }
 
@@ -339,6 +355,7 @@ function renameName(oldName, newName) {
     data.pairs[pairKey(a === oldName ? newName : a, b === oldName ? newName : b)] = n;
   }
   for (const e of events) if (e.names) e.names = e.names.map((x) => (x === oldName ? newName : x));
+  for (const e of data.history) if (e.names) e.names = e.names.map((x) => (x === oldName ? newName : x));
   snapCache.clear();
   saveSoon();
 }

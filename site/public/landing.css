@@ -86,7 +86,17 @@ p { margin: 0; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: #4cc38a; animation: ping 1.8s infinite; }
 @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(76,195,138,.6); } 70% { box-shadow: 0 0 0 8px rgba(76,195,138,0); } 100% { box-shadow: 0 0 0 0 rgba(76,195,138,0); } }
 .feed { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(var(--cards-h) + 28px); z-index: 3; display: flex; flex-direction: column; gap: 6px; max-width: min(360px, calc(100% - 32px)); }
-.ev { background: rgba(14,40,54,.82); color: var(--room-fg); border-radius: 10px; padding: 6px 10px; font-size: 13px; border: 1px solid rgba(255,255,255,.12); animation: evIn .4s ease-out; }
+.ev { background: rgba(14,40,54,.82); color: var(--room-fg); border-radius: 10px; padding: 6px 10px; font-size: 13px; border: 1px solid rgba(255,255,255,.12); display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ev.new { animation: evIn .4s ease-out; }
+.ev time { flex: none; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.feed { align-items: flex-start; }
+.feed[hidden] { display: none; }
+.feed .evlist { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+/* the newest is at the bottom; older ones fainter */
+.ev.age1 { opacity: .88; } .ev.age2 { opacity: .74; } .ev.age3 { opacity: .6; } .ev.age4 { opacity: .46; }
+/* the phone's "Parādīt / Paslēpt notikumus" button (computers always show the news) */
+.evtoggle { display: none; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--gold-bright); background: rgba(14,40,54,.88); border: 1px solid rgba(226,195,116,.55); border-radius: 99px; padding: 7px 14px; min-height: 36px; cursor: pointer; }
+.evtoggle:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 .ev b { color: var(--gold-bright); }
 .ev.gone { opacity: 0; transform: translateY(4px); transition: opacity .5s ease, transform .5s ease; }
 @keyframes evIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -99,6 +109,15 @@ p { margin: 0; }
 .cardpop button.gold, .cardpop a.b.gold { background: linear-gradient(180deg, #e2c374, #c9a24b); color: #2a2005; }
 .hint { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(var(--cards-h) + 28px); z-index: 3; background: rgba(14,40,54,.7); color: var(--muted); border-radius: 99px; padding: 5px 12px; font-size: 12px; }
 .cardpop.below { transform: translate(-50%, 0); }
+/* the page section below the map is also called .below: keep its layout off the card */
+.cardpop.below { max-width: none; margin: 0; padding: 12px; display: block; gap: 0; }
+/* level progress in the village card */
+.cardpop .lvprog { margin: 8px 0 2px; padding: 8px 10px; border-radius: 10px; background: rgba(226,195,116,.1); border: 1px solid rgba(226,195,116,.3); }
+.cardpop .lvtxt { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; margin-bottom: 6px; }
+.cardpop .lvtxt span, .cardpop .lvtxt b { white-space: nowrap; }
+.cardpop .lvtxt b { color: var(--gold-bright); }
+.cardpop .lvbar { height: 8px; border-radius: 5px; background: rgba(255,255,255,.14); overflow: hidden; }
+.cardpop .lvbar i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #c9a24b, #e2c374); }
 .cardpop .loading { font-style: italic; }
 .pstats { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 10px 0 0; font-size: 13px; }
 .pstats dt { color: var(--muted); }
@@ -116,7 +135,11 @@ p { margin: 0; }
   .feed { max-width: calc(100% - 120px); }
   .tbtn.alt { display: none; }
   .tbtn { padding: 7px 10px; }
-  .feed .ev:not(:last-child) { display: none; }
+  .evtoggle { display: inline-block; }
+  .feed:not(.open) .evlist { display: none; }
+  .feed.open { z-index: 20; max-width: calc(100% - 32px); }
+  .feed.open .evlist { order: -1; }
+  body.feed-open .zoom, body.feed-open #mapHome { visibility: hidden; }
   .hero { min-height: 580px; height: 100vh; height: 100svh; } /* the cards stay on the first screen */
   /* phones: the two cards side by side, short */
   .hero .hero-cards { grid-template-columns: 1fr 1fr; gap: 10px; bottom: 12px; }
@@ -147,6 +170,7 @@ p { margin: 0; }
 .note h3 { font-size: 16px; }
 .note p { color: var(--muted-fg); font-size: 14px; margin-top: 4px; }
 .guest-note { color: var(--muted-fg); font-size: 14px; margin-top: 14px; }
+
 
 /* ---------- Footer ---------- */
 .site-footer { border-top: 1px solid var(--line); background: var(--felt-dark); }

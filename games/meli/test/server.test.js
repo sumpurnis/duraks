@@ -472,3 +472,40 @@ test('ranked: guests cannot host it; the finished game reports seats, places dat
     assert.equal(typeof r.seats[0].cards, 'number');
   });
 });
+
+test('game log hook: start with players and the deal, every move, the end with the winner', async () => {
+  const recs = { start: null, moves: [], end: null };
+  const gameLog = {
+    start: (info) => { recs.start = info; return 'g1'; },
+    move: (id, text) => { assert.equal(id, 'g1'); recs.moves.push(text); },
+    end: (id, info) => { assert.equal(id, 'g1'); recs.end = info; },
+  };
+  await withApp({ gameLog }, async ({ client }) => {
+    const s = client();
+    s.emit('room:create', { name: 'Logger', vsAI: true, handSize: 8 });
+    await once(s, 'room:joined');
+    await until(s, (v) => v.phase === 'play');
+    await playOut([s]);
+  });
+  assert.equal(recs.start.game, 'meli');
+  assert.deepEqual(recs.start.players.map((p) => p.kind), ['guest', 'bot']);
+  assert.equal(Object.keys(recs.start.setup.hands).length, 2);
+  assert.ok(recs.moves.some((m) => / noliek .+ kā /.test(m)), recs.moves.slice(0, 3).join(' | '));
+  assert.equal(recs.end.status, 'finished');
+  assert.ok(['Logger', 'Dators'].some((n) => String(recs.end.result.winner).startsWith(n)));
+});
+
+test('surrender vs 2+ computers: the game ends (a computer wins) instead of freezing; rematch works', async () => {
+  await withApp({}, async ({ client }) => {
+    const s = client();
+    s.emit('room:create', { name: 'Quitter', totalPlayers: 3, aiCount: 2, deck: 'half' });
+    await once(s, 'room:joined');
+    await until(s, (v) => v.phase === 'play');
+    s.emit('surrender');
+    await until(s, (v) => v.phase === 'over');
+    assert.notEqual(s.last.winner, 0);
+    assert.equal(s.last.room.endDetail, 'surrender');
+    s.emit('rematch');
+    await until(s, (v) => v.phase === 'play' && !v.out[0]);
+  });
+});
