@@ -17,6 +17,19 @@
 }
 .back-home:hover { background: rgba(201, 162, 75, 0.18); }
 #lobby { position: relative; }
+/* Phone: a small floating bubble in the top-left corner, over the page — it sits on the edge of the
+   lobby's frame (it used to take its own place in the layout: beside the column in Duraks, above it
+   in Meļi). */
 @media (max-width: 640px) {
-  .back-home { position: static; margin: 10px auto 0; align-self: flex-start; }
+  .back-home {
+    position: absolute;
+    top: max(10px, env(safe-area-inset-top, 0px));
+    left: max(10px, env(safe-area-inset-left, 0px));
+    z-index: 30;
+    min-height: 36px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    background: rgba(14, 40, 54, 0.88);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
 }
