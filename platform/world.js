@@ -131,11 +131,17 @@ function addEvent(e) {
 const pairKey = (a, b) => (a < b ? a + '\u0001' + b : b + '\u0001' + a);
 const quality = (n) => (n >= 100 ? 3 : n >= 25 ? 2 : n >= 5 ? 1 : 0);
 
-/** A finished game. `names` are every human seat; guests are ignored. */
-function recordGame(game, names, { vsBot = false } = {}) {
+/**
+ * A finished game. `names` are every human seat; guests are ignored.
+ * winner / host / hostPlace (optional) go into the news line: who won, and where the player who made the
+ * table finished ("🏆 Ilze 🏠 Anna · 3. vieta"). They may be guests or computers: shown as text only.
+ */
+function recordGame(game, names, { vsBot = false, winner = null, host = null, hostPlace = null } = {}) {
   const k = GAMES[game];
   if (!k) return;
   const real = [...new Set((names || []).filter((n) => n && users.usernameExists(n)))];
+  const str = (v) => (typeof v === 'string' && v ? v.slice(0, 40) : null);
+  const res = str(winner) ? { winner: str(winner), host: str(host), hostPlace: Number.isInteger(hostPlace) && hostPlace > 0 ? hostPlace : null } : {};
   for (const n of real) {
     slotOf(n);
     const g = has(data.games, n) ? data.games[n] : (data.games[n] = { d: 0, m: 0 });
@@ -148,14 +154,14 @@ function recordGame(game, names, { vsBot = false } = {}) {
       const key = pairKey(real[i], real[j]);
       const before = quality(has(data.pairs, key) ? data.pairs[key] : 0);
       data.pairs[key] = (has(data.pairs, key) ? data.pairs[key] : 0) + 1;
-      if (real.length === 2) addEvent({ type: 'finish', game: k, names: [real[i], real[j]] });
+      if (real.length === 2) addEvent({ type: 'finish', game: k, names: [real[i], real[j]], ...res });
       const after = quality(data.pairs[key]);
       if (after > before) addEvent({ type: 'road', names: [real[i], real[j]], quality: after });
     }
   }
   // a table of 3+: one line with everyone (not one per pair of players)
-  if (real.length > 2) addEvent({ type: 'finish', game: k, names: real.slice(0, 6) });
-  if (real.length === 1) addEvent({ type: 'finishSolo', game: k, names: real, vsBot: !!vsBot });
+  if (real.length > 2) addEvent({ type: 'finish', game: k, names: real.slice(0, 6), ...res });
+  if (real.length === 1) addEvent({ type: 'finishSolo', game: k, names: real, vsBot: !!vsBot, ...res });
   saveSoon();
 }
 
@@ -355,7 +361,11 @@ function renameName(oldName, newName) {
     data.pairs[pairKey(a === oldName ? newName : a, b === oldName ? newName : b)] = n;
   }
   for (const e of events) if (e.names) e.names = e.names.map((x) => (x === oldName ? newName : x));
-  for (const e of data.history) if (e.names) e.names = e.names.map((x) => (x === oldName ? newName : x));
+  for (const e of data.history) {
+    if (e.names) e.names = e.names.map((x) => (x === oldName ? newName : x));
+    if (e.winner === oldName) e.winner = newName;
+    if (e.host === oldName) e.host = newName;
+  }
   snapCache.clear();
   saveSoon();
 }

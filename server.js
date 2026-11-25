@@ -236,7 +236,11 @@ const meli = attachMeli(io, {
   // The front page's map: finished games wear roads and grow villages; connected players smoke.
   onResult: (r) => {
     const names = [r.winner, ...(r.losers || [r.loser])].filter((s) => s && !s.ai && s.account).map((s) => s.name);
-    world.recordGame('meli', names, { vsBot: !!r.vsAI });
+    // the news line: the winner, and where the table's host finished
+    const seats = Array.isArray(r.seats) ? r.seats : [];
+    const place = seats.length ? meliPlacements(seats) : new Map();
+    const hostIdx = seats.findIndex((s) => s.name === r.host);
+    world.recordGame('meli', names, { vsBot: !!r.vsAI, winner: r.winner && r.winner.name, host: hostIdx >= 0 ? r.host : null, hostPlace: hostIdx >= 0 ? place.get(hostIdx) : null });
     recordMeliResult(r);
   },
   onPresence: (name, id, on) => (on ? world.seen(name, 'meli:' + id) : world.gone('meli:' + id)),

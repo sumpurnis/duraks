@@ -562,6 +562,13 @@ function levelProgress(t) {
 const idx = (name) => TOWNS.findIndex((t) => t.name === name);
 const pkey = (a, b) => (a < b ? a + '\u0001' + b : b + '\u0001' + a);
 
+// "🏆 Ilze 🏠 Anna · 3. vieta": the winner, then where the table's creator finished (not when they won)
+function result(e) {
+  if (!e.winner) return '';
+  const w = ' <span class="evw">🏆 ' + esc(e.winner) + '</span>';
+  if (!e.host || e.host === e.winner || !e.hostPlace) return w;
+  return w + ' <span class="evh">🏠 ' + esc(e.host) + ' · ' + e.hostPlace + '. vieta</span>';
+}
 function eventHtml(e) {
   const n = (e.names || []).map((x) => '<b>' + esc(x) + '</b>');
   const both = n.length > 2 ? n.slice(0, -1).join(', ') + ' un ' + n[n.length - 1] : n.join(' un ');
@@ -569,8 +576,8 @@ function eventHtml(e) {
   switch (e.type) {
     case 'start': return both + ' sāka spēlēt ' + game;
     case 'startSolo': return n[0] + (e.vsBot ? ' spēlē ' + game + ' pret datoru' : ' sāka spēlēt ' + game);
-    case 'finish': return both + ' nospēlēja ' + game;
-    case 'finishSolo': return n[0] + ' nospēlēja ' + game + (e.vsBot ? ' pret datoru' : '');
+    case 'finish': return both + ' nospēlēja ' + game + result(e);
+    case 'finishSolo': return n[0] + ' nospēlēja ' + game + (e.vsBot ? ' pret datoru' : '') + result(e);
     case 'road': return 'Ceļš starp ' + n[0] + ' un ' + n[1] + ' kļuva par «' + (ROAD_NAMES[e.quality] || '') + '»';
     case 'level': return n[0] + ' ciemats izauga līdz <b>' + e.level + '.</b> līmenim';
     default: return null;

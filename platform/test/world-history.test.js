@@ -39,6 +39,16 @@ test('news is kept across restarts, newest 10, one line per table of 3+', () => 
     assert.ok(second.length > first.history.length);
     assert.strictEqual(second[second.length - 1].type, 'finishSolo');
     assert.ok(second[second.length - 1].id > first.history[first.history.length - 1].id);
+    // the winner and the host's place ride along on finished games
+    const fourth = run(dir, `
+      world.recordGame('duraks', ['Anna', 'Bob', 'Ilze'], { winner: 'Ilze', host: 'Anna', hostPlace: 3 });
+      world.recordGame('meli', ['Bob'], { vsBot: true, winner: 'Dators 1', host: 'Bob', hostPlace: 2 });
+      world.recordGame('meli', ['Ilze'], { vsBot: true, winner: 'Ilze', host: 'Ilze', hostPlace: 1, }); 
+      return world.snapshot('Anna').history.slice(-3);
+    `);
+    assert.deepStrictEqual([fourth[0].winner, fourth[0].host, fourth[0].hostPlace], ['Ilze', 'Anna', 3]);
+    assert.deepStrictEqual([fourth[1].type, fourth[1].winner, fourth[1].hostPlace], ['finishSolo', 'Dators 1', 2]);
+    assert.strictEqual(fourth[2].winner, 'Ilze');
     // only the newest 10 are sent
     const third = run(dir, `
       for (let i = 0; i < 20; i++) world.recordGame('duraks', ['Anna', 'Bob']);

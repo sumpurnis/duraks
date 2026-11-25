@@ -273,7 +273,10 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     }
 
     // The front page's map: road wear between the players, village growth.
-    if (world) world.recordGame('duraks', room.humans.map((h) => h.username), { vsBot: vsBots });
+    // the news line: who won (the first one safe) and where the table's creator finished
+    const firstSafe = isDraw ? null : (game.safeOrder[0] || game.players.find((p) => p !== game.durakId) || null);
+    const host = room.creatorUsername && placementOf[room.creatorUsername] ? room.creatorUsername : null;
+    if (world) world.recordGame('duraks', room.humans.map((h) => h.username), { vsBot: vsBots, winner: firstSafe, host, hostPlace: host ? placementOf[host] : null });
 
     for (const h of room.humans) {
       const username = h.username;

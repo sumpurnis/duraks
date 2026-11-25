@@ -254,7 +254,8 @@ const TOURNAMENT_NEXT_GAME_MS = Number(process.env.TOURNAMENT_NEXT_GAME_MS) || 3
       room.logId = null;
     }
     const usernames = room.players.map((p) => p.username).filter((u) => u !== AI_ID);
-    world.recordGame('duraks', usernames, { vsBot: !!room.vsAI });
+    const host = room.players[0] ? room.players[0].username : null;
+    world.recordGame('duraks', usernames, { vsBot: !!room.vsAI, winner: draw ? null : winnerId, host, hostPlace: host && !draw ? (host === winnerId ? 1 : 2) : null });
     const durationMs = room.startedAt ? Date.now() - room.startedAt : undefined;
     for (const username of usernames) {
       let outcome;

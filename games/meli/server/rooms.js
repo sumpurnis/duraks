@@ -598,6 +598,7 @@ class RoomManager {
       winner: room.seats[w],
       losers: room.seats.filter((_, i) => i !== w),
       vsAI: room.vsAI,
+      host: room.seats[room.host] ? room.seats[room.host].name : null,
       ranked: room.ranked && !room.vsAI,
       players: room.seats.length,
       deck: room.deck,
