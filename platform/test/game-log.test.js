@@ -115,7 +115,8 @@ test('the API answers the admin only', async () => {
     // the page itself is a plain static file (it shows nothing without the admin's login)
     assert.strictEqual((await fetch(base + '/admin-games.html')).status, 200);
   } finally {
-    child.kill();
-    fs.rmSync(dir, { recursive: true, force: true });
+    // let the server finish writing before its folder goes
+    await new Promise((resolve) => { if (child.exitCode !== null) return resolve(); child.once('exit', resolve); child.kill(); });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });

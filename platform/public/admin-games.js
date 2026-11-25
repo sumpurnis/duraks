@@ -91,7 +91,7 @@
     api('/api/admin/games/' + encodeURIComponent(id)).then((g) => {
       const box = $('agDetail');
       const o = g.opts || {};
-      const optBits = [o.code && `galds ${esc(o.code)}`, o.deck && `${esc(o.deck)} kārtis`, o.seats && `${esc(o.seats)} vietas`, o.transfer && 'ar padošanu', o.private && 'privāts', o.announce === 'suit' && 'tikai masts', o.challenge && `izaicinājums: ${esc(o.challenge)}`].filter(Boolean).join(' · ');
+      const optBits = [o.code && `galds ${esc(o.code)}`, o.deck && `${esc(o.deck)} kārtis`, o.seats && `${esc(o.seats)} vietas`, o.transfer && 'ar padošanu', o.private && 'privāts', o.announce === 'suit' && 'tikai masts', o.challenge && `izaicinājums: ${esc(o.challenge)}`, typeof o.adaptive === 'number' && `datora pielāgošanās: ${o.adaptive > 0 ? '+' : ''}${esc(o.adaptive)}`].filter(Boolean).join(' · ');
       const setup = g.setup || {};
       const hands = setup.hands ? Object.entries(setup.hands).map(([n, h]) => `<dt>${esc(n)}</dt><dd class="hand">${esc(h.join(' '))}</dd>`).join('') : '';
       const ms = g.endedAt ? g.endedAt - g.at : NaN;

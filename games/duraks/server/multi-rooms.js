@@ -42,6 +42,7 @@ const { Game } = require('./games/duraks-multi');
 const { chooseMove } = require('./ai-multi');
 const challenges = require('./challenges');
 const { chooseChallengeMove, seededRng, hashSeed } = require('./challenge-ai');
+const adaptive = require('./adaptive-ai');
 const CHALLENGE_BOT = 'Izaicinājums \u{1F916}';
 
 const MULTI_MOVE_TIMEOUT_MS = 60000;
@@ -236,6 +237,13 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     const isDraw = !game.durakId && game.activePlayers.length === 0;
     const vsBots = room.bots.length > 0;
 
+    if (room.adaptive) {
+      const a = room.adaptive;
+      try {
+        adaptive.recordGame(a.host, { durak: game.durakId === a.host, draw: isDraw, totalPlayers: room.totalPlayers, counts: a.counts });
+      } catch (err) { console.error('adaptive record failed:', err.message); }
+    }
+
     if (room.logId) {
       gameLog.sync(room.logId, game.log);
       gameLog.end(room.logId, {
@@ -404,7 +412,10 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
 
     if (room.game.isTakeResolvable()) {
       broadcastMultiState(room);
-      resolveWithPause(room, pauseCountFor(room), () => room.game.tryResolveTake());
+      resolveWithPause(room, pauseCountFor(room), () => {
+        adaptive.noteTake(room.adaptive, room.game); // everyone sees which cards are picked up
+        room.game.tryResolveTake();
+      });
       return;
     }
 
@@ -416,7 +427,11 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     }
     room.botTimer = setTimeout(() => {
       if (!multiRooms.has(room.code) || room.game.status !== 'active') return;
-      const action = room.challenge ? challengeMove(room, botActor.playerId) : chooseMove(room.game, botActor.playerId);
+      const action = room.challenge
+        ? challengeMove(room, botActor.playerId)
+        : room.adaptive
+          ? adaptive.chooseAdaptiveMove(room.adaptive, room.game, botActor.playerId)
+          : chooseMove(room.game, botActor.playerId);
       applyAction(room, botActor.playerId, action);
       broadcastMultiState(room);
       driveBots(room);
@@ -463,6 +478,13 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
     room.status = 'active';
     room.startedAt = Date.now();
     room.bots = room.challenge ? [CHALLENGE_BOT] : BOT_NAMES.slice(0, room.aiCount);
+    // One account holder alone against computers, at a casual table: the computers slowly adapt
+    // to them (adaptive-ai.js). Everyone else gets the ordinary computer, exactly as before.
+    room.adaptive = null;
+    if (!room.challenge && !room.tournamentMatch && !room.ranked && room.bots.length > 0 && room.humans.length === 1
+        && room.creatorUsername && room.humans[0].username === room.creatorUsername && users.usernameExists(room.creatorUsername)) {
+      try { room.adaptive = adaptive.startGame(room.creatorUsername); } catch (err) { console.error('adaptive start failed:', err.message); }
+    }
     const seating = [...room.humans.map((h) => h.username), ...room.bots];
     room.game = new Game(seating, {
       deferAutoResolve: true,
@@ -477,7 +499,7 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
         game: 'duraks',
         mode: room.challenge ? 'challenge' : room.tournamentMatch ? 'tournament' : room.ranked ? 'ranked' : 'casual',
         players: seating.map((name) => ({ name, kind: room.bots.includes(name) ? 'bot' : users.usernameExists(name) ? 'user' : 'guest' })),
-        opts: { code: room.code, deck: room.deckSize || 52, seats: room.totalPlayers, transfer: !!room.allowTransfer, private: !!room.isPrivate, challenge: room.challenge ? room.challenge.level : undefined },
+        opts: { code: room.code, deck: room.deckSize || 52, seats: room.totalPlayers, transfer: !!room.allowTransfer, private: !!room.isPrivate, challenge: room.challenge ? room.challenge.level : undefined, adaptive: room.adaptive ? room.adaptive.strength : undefined },
         setup: { trump: cardStr(room.game.trumpCard), hands: Object.fromEntries(seating.map((n) => [n, (room.game.hands[n] || []).map(cardStr)])) },
       });
     } catch (err) { console.error('game log start failed:', err.message); }
@@ -722,8 +744,10 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   socket.on('multiAttack', ({ cardId }) => {
     const room = activeRoom();
     if (!room) return;
+    const seen = adaptive.observe(room.adaptive, room.game, effectiveUsername(), 'attack');
     const res = room.game.attack(effectiveUsername(), cardId);
     if (res.error) return sendMultiError(res.error);
+    adaptive.count(room.adaptive, seen);
     if (room.challenge) room.challenge.moves++;
     broadcastMultiState(room);
     driveBots(room);
@@ -732,8 +756,10 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   socket.on('multiDefend', ({ cardId, slotIndex }) => {
     const room = activeRoom();
     if (!room) return;
+    const seen = adaptive.observe(room.adaptive, room.game, effectiveUsername(), 'defend');
     const res = room.game.defend(effectiveUsername(), cardId, slotIndex);
     if (res.error) return sendMultiError(res.error);
+    adaptive.count(room.adaptive, seen);
     if (room.challenge) room.challenge.moves++;
     broadcastMultiState(room);
     driveBots(room);
@@ -742,8 +768,10 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   socket.on('multiTransferCards', ({ cardId }) => {
     const room = activeRoom();
     if (!room) return;
+    const seen = adaptive.observe(room.adaptive, room.game, effectiveUsername(), 'transfer');
     const res = room.game.transferCards(effectiveUsername(), cardId);
     if (res.error) return sendMultiError(res.error);
+    adaptive.count(room.adaptive, seen);
     if (room.challenge) room.challenge.moves++;
     broadcastMultiState(room);
     driveBots(room);
@@ -752,8 +780,10 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
   socket.on('multiDeclineThrowIn', () => {
     const room = activeRoom();
     if (!room) return;
+    const seen = adaptive.observe(room.adaptive, room.game, effectiveUsername(), 'declineThrowIn');
     const res = room.game.declineThrowIn(effectiveUsername());
     if (res.error) return sendMultiError(res.error);
+    adaptive.count(room.adaptive, seen);
     if (room.challenge) room.challenge.moves++;
     broadcastMultiState(room);
     driveBots(room);
@@ -767,8 +797,10 @@ module.exports = function registerMultiHandlers(io, socket, { getUsername, users
       room.avoidableTakes = room.avoidableTakes || {};
       room.avoidableTakes[username] = (room.avoidableTakes[username] || 0) + 1;
     }
+    const seen = adaptive.observe(room.adaptive, room.game, username, 'take');
     const res = room.game.takeCards(username);
     if (res.error) return sendMultiError(res.error);
+    adaptive.count(room.adaptive, seen);
     if (room.challenge) room.challenge.moves++;
     broadcastMultiState(room);
     driveBots(room);
